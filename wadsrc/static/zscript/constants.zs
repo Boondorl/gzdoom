@@ -70,6 +70,7 @@ enum ECustomBulletAttackFlags
 	CBAF_PUFFTARGET = 32,
 	CBAF_PUFFMASTER = 64,
 	CBAF_PUFFTRACER = 128,
+	CBAF_LINEATTACKZ = 256
 };
 
 // Flags for A_GunFlash
@@ -90,6 +91,7 @@ enum EFireBulletsFlags
 	FBF_PUFFTARGET = 64,
 	FBF_PUFFMASTER = 128,
 	FBF_PUFFTRACER = 256,
+	FBF_LINEATTACKZ = 512
 };
 
 // Flags for A_SpawnItemEx

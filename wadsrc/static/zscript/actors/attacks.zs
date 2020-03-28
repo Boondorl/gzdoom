@@ -50,25 +50,30 @@ extend class Actor
 
 		if (range == 0)
 			range = MISSILERANGE;
-
-		int i;
+		
 		double bangle;
-		double bslope = 0.;
-		int laflags = (flags & CBAF_NORANDOMPUFFZ)? LAF_NORANDOMPUFFZ : 0;
+		double bslope;
+		int laflags = (flags & CBAF_NORANDOMPUFFZ) ? LAF_NORANDOMPUFFZ : 0;
 
-		if (ref != NULL || (flags & CBAF_AIMFACING))
+		if (ref || (flags & CBAF_AIMFACING))
 		{
 			if (!(flags & CBAF_AIMFACING))
-			{
 				A_Face(ref);
-			}
-			bangle = self.Angle;
+			
+			bangle = angle;
 
-			if (!(flags & CBAF_NOPITCH)) bslope = AimLineAttack (bangle, MISSILERANGE);
-			if (pufftype == null) pufftype = 'BulletPuff';
+			if (!(flags & CBAF_NOPITCH))
+				bslope = AimLineAttack(bangle, MISSILERANGE);
+			
+			if (!pufftype)
+				pufftype = 'BulletPuff';
+			
+			double heightOfs = Spawnheight;
+			if (missile && (flags & CBAF_LINEATTACKZ))
+				heightOfs = height/2 + 8 - GetDefaultByType(missile).height/2;
 
 			A_StartSound(AttackSound, CHAN_WEAPON);
-			for (i = 0; i < numbullets; i++)
+			for (int i = 0; i < numbullets; ++i)
 			{
 				double pangle = bangle;
 				double slope = bslope;
@@ -90,26 +95,26 @@ extend class Actor
 					damage *= random[cwbullet](1, 3);
 
 				let puff = LineAttack(pangle, range, slope, damage, 'Hitscan', pufftype, laflags);
-				if (missile != null && pufftype != null)
+				if (missile)
 				{
-					double ang = pangle - 90;
-					let ofs = AngleToVector(ang, Spawnofs_xy);
-					let pos = self.pos;
+					let ofs = AngleToVector(angle-90, Spawnofs_xy);
+					let old = pos;
 					SetXYZ(Vec3Offset(ofs.x, ofs.y, 0.));
-					let proj = SpawnMissileAngleZSpeed(Pos.Z + GetBobOffset() + Spawnheight, missile, self.Angle, 0, GetDefaultByType(missile).Speed, self, false);
-					SetXYZ(pos);
+					let proj = SpawnMissileAngleZSpeed(pos.Z + GetBobOffset() + heightOfs, missile, pangle, 0, GetDefaultByType(missile).speed, self, false);
+					SetXYZ(old);
 					
 					if (proj)
 					{
-						bool temp = (puff == null);
-						if (!puff)
-						{
-							puff = LineAttack(pangle, range, slope, 0, 'Hitscan', pufftype, laflags | LAF_NOINTERACT);
-						}
-						if (puff)
-						{			
-							AimBulletMissile(proj, puff, flags, temp, true);
-						}
+						proj.pitch = slope;
+						if (!proj.bFloorHugger && !proj.bCeilingHugger)
+							proj.Vel3DFromAngle(proj.speed, proj.angle, proj.pitch);
+							
+						if (flags & CBAF_PUFFTARGET)
+							proj.target = puff;
+						if (flags & CBAF_PUFFMASTER)
+							proj.master = puff;
+						if (flags & CBAF_PUFFTRACER)
+							proj.tracer = puff;
 					}
 				}
 			}

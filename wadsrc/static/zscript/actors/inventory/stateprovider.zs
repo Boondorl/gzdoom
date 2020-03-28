@@ -77,38 +77,42 @@ class StateProvider : Inventory
 	//
 	//---------------------------------------------------------------------------
 
-	action void A_FireBullets(double spread_xy, double spread_z, int numbullets, int damageperbullet, class<Actor> pufftype = "BulletPuff", int flags = 1, double range = 0, class<Actor> missile = null, double Spawnheight = 32, double Spawnofs_xy = 0)
+	action void A_FireBullets(double spread_xy, double spread_z, int numbullets, int damageperbullet, class<Actor> pufftype = "BulletPuff", int flags = FBF_USEAMMO, double range = 0, class<Actor> missile = null, double Spawnheight = 32, double Spawnofs_xy = 0)
 	{
-		let player = player;
-		if (!player) return;
+		if (!player)
+			return;
+		
+		let weap = player.ReadyWeapon;
 
-		let pawn = PlayerPawn(self);
-		let weapon = player.ReadyWeapon;
-
-		int i;
 		double bangle;
-		double bslope = 0.;
-		int laflags = (flags & FBF_NORANDOMPUFFZ)? LAF_NORANDOMPUFFZ : 0;
+		double bslope;
+		int laflags = (flags & FBF_NORANDOMPUFFZ) ? LAF_NORANDOMPUFFZ : 0;
 
-		if ((flags & FBF_USEAMMO) && weapon &&  stateinfo != null && stateinfo.mStateType == STATE_Psprite)
+		if ((flags & FBF_USEAMMO) && weap && stateInfo && stateInfo.mStateType == STATE_Psprite)
 		{
-			if (!weapon.DepleteAmmo(weapon.bAltFire, true))
+			if (!weap.DepleteAmmo(weap.bAltFire, true))
 				return;	// out of ammo
 		}
 		
-		if (range == 0)	range = PLAYERMISSILERANGE;
+		if (range == 0)
+			range = PLAYERMISSILERANGE;
 
-		if (!(flags & FBF_NOFLASH)) pawn.PlayAttacking2 ();
+		if (!(flags & FBF_NOFLASH))
+			player.mo.PlayAttacking2();
+		
+		bangle = angle;
+		if (!(flags & FBF_NOPITCH))
+			bslope = BulletSlope();
 
-		if (!(flags & FBF_NOPITCH)) bslope = BulletSlope();
-		bangle = Angle;
+		if (!pufftype)
+			pufftype = 'BulletPuff';
 
-		if (pufftype == NULL) pufftype = 'BulletPuff';
-
-		if (weapon != NULL)
-		{
-			A_StartSound(weapon.AttackSound, CHAN_WEAPON);
-		}
+		if (weap)
+			A_StartSound(weap.AttackSound, CHAN_WEAPON);
+		
+		double heightOfs = Spawnheight;
+		if (missile && (flags & FBF_LINEATTACKZ))
+			heightOfs = 4 * player.crouchFactor - GetDefaultByType(missile).height/2;
 
 		if ((numbullets == 1 && !player.refire) || numbullets == 0)
 		{
@@ -119,20 +123,22 @@ class StateProvider : Inventory
 
 			let puff = LineAttack(bangle, range, bslope, damage, 'Hitscan', pufftype, laflags);
 
-			if (missile != null)
+			if (missile)
 			{
-				bool temp = false;
-				double ang = Angle - 90;
-				Vector2 ofs = AngleToVector(ang, Spawnofs_xy);
-				Actor proj = SpawnPlayerMissile(missile, bangle, ofs.X, ofs.Y, Spawnheight);
+				Vector2 ofs = AngleToVector(angle-90, Spawnofs_xy);
+				Actor proj = SpawnPlayerMissile(missile, bangle, ofs.x, ofs.y, heightOfs, noautoaim: true);
 				if (proj)
 				{
-					if (!puff)
-					{
-						temp = true;
-						puff = LineAttack(bangle, range, bslope, 0, 'Hitscan', pufftype, laflags | LAF_NOINTERACT);
-					}
-					AimBulletMissile(proj, puff, flags, temp, false);
+					proj.pitch = bslope;
+					if (!proj.bFloorHugger && !proj.bCeilingHugger)
+						proj.Vel3DFromAngle(proj.speed, proj.angle, proj.pitch);
+						
+					if (flags & FBF_PUFFTARGET)
+						proj.target = puff;
+					if (flags & FBF_PUFFMASTER)
+						proj.master = puff;
+					if (flags & FBF_PUFFTRACER)
+						proj.tracer = puff;
 				}
 			}
 		}
@@ -140,7 +146,8 @@ class StateProvider : Inventory
 		{
 			if (numbullets < 0)
 				numbullets = 1;
-			for (i = 0; i < numbullets; i++)
+			
+			for (int i = 0; i < numbullets; ++i)
 			{
 				double pangle = bangle;
 				double slope = bslope;
@@ -163,20 +170,22 @@ class StateProvider : Inventory
 
 				let puff = LineAttack(pangle, range, slope, damage, 'Hitscan', pufftype, laflags);
 
-				if (missile != null)
+				if (missile)
 				{
-					bool temp = false;
-					double ang = Angle - 90;
-					Vector2 ofs = AngleToVector(ang, Spawnofs_xy);
-					Actor proj = SpawnPlayerMissile(missile, bangle, ofs.X, ofs.Y, Spawnheight);
+					Vector2 ofs = AngleToVector(angle-90, Spawnofs_xy);
+					Actor proj = SpawnPlayerMissile(missile, pangle, ofs.x, ofs.y, heightOfs, noautoaim: true);
 					if (proj)
 					{
-						if (!puff)
-						{
-							temp = true;
-							puff = LineAttack(bangle, range, bslope, 0, 'Hitscan', pufftype, laflags | LAF_NOINTERACT);
-						}
-						AimBulletMissile(proj, puff, flags, temp, false);
+						proj.pitch = slope;
+						if (!proj.bFloorHugger && !proj.bCeilingHugger)
+							proj.Vel3DFromAngle(proj.speed, proj.angle, proj.pitch);
+							
+						if (flags & FBF_PUFFTARGET)
+							proj.target = puff;
+						if (flags & FBF_PUFFMASTER)
+							proj.master = puff;
+						if (flags & FBF_PUFFTRACER)
+							proj.tracer = puff;
 					}
 				}
 			}
