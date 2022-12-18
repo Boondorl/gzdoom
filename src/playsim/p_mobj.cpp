@@ -407,6 +407,7 @@ void AActor::PostSerialize()
 		}
 	}
 	ClearInterpolation();
+	ClearFOVInterpolation();
 	UpdateWaterLevel(false);
 }
 
@@ -4585,6 +4586,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// set subsector and/or block links
 	actor->LinkToWorld (nullptr, SpawningMapThing);
 	actor->ClearInterpolation();
+	actor->ClearFOVInterpolation();
 
 	actor->dropoffz = actor->floorz = actor->Sector->floorplane.ZatPoint(pos);
 	actor->ceilingz = actor->Sector->ceilingplane.ZatPoint(pos);
