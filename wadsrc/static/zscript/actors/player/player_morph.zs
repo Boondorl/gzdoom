@@ -120,7 +120,7 @@ extend class PlayerPawn
 		if (player.morphTics)
 		{ // Player is already a beast
 			if ((GetClass() == spawntype) && bCanSuperMorph
-				&& (player.morphTics < (((duration) ? duration : DEFMORPHTICS) - TICRATE))
+				&& (player.morphTics < (((duration) ? duration : 40 * GameTicRate) - GameTicRate))
 				&& FindInventory('PowerWeaponLevel2', true) == null)
 			{ // Make a super chicken
 				GiveInventoryType ('PowerWeaponLevel2');
@@ -192,7 +192,7 @@ extend class PlayerPawn
 		bUnmorphed = true;
 		bInvisible = true;
 		
-		p.morphTics = (duration) ? duration : DEFMORPHTICS;
+		p.morphTics = (duration) ? duration : 40 * GameTicRate;
 
 		// [MH] Used by SBARINFO to speed up face drawing
 		p.MorphedPlayerClass = spawntype;
@@ -261,7 +261,7 @@ extend class PlayerPawn
 		{ // Didn't fit
 			altmo.bSolid = false;
 			bSolid = true;
-			player.morphTics = 2*TICRATE;
+			player.morphTics = 2*GameTicRate;
 			return false;
 		}
 
@@ -565,7 +565,7 @@ class MorphedMonster : Actor
 			unmorphed.bSolid = false;
 			bSolid = true;
 			bTouchy = save;
-			UnmorphTime = level.time + 5*TICRATE; // Next try in 5 seconds
+			UnmorphTime = level.time + 5*GameTicRate; // Next try in 5 seconds
 			return false;
 		}
 		PreUnmorph(unmorphed, false);

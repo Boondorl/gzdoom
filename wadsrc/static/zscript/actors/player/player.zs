@@ -13,8 +13,6 @@ struct UserCmd native
 class PlayerPawn : Actor
 {
 	const CROUCHSPEED = (1./12);
-	// [RH] # of ticks to complete a turn180
-	const TURN180_TICKS = ((TICRATE / 4) + 1);
 	// 16 pixels of bob
 	const MAXBOB = 16.;
 	
@@ -251,7 +249,7 @@ class PlayerPawn : Actor
 		if (sv_respawnprotect && (deathmatch || alwaysapplydmflags))
 		{
 			let invul = Powerup(Spawn("PowerInvulnerable"));
-			invul.EffectTics = 3 * TICRATE;
+			invul.EffectTics = 3 * GameTicRate;
 			invul.BlendColor = 0;			// don't mess with the view
 			invul.bUndroppable = true;		// Don't drop self
 			if (!invul.CallTryPickup(self))
@@ -598,7 +596,7 @@ class PlayerPawn : Actor
 		{
 			if (player.health > 0)
 			{
-				angle = Level.maptime / (120 * TICRATE / 35.) * 360.;
+				angle = Level.maptime / 120. * 360.;
 				bob = player.GetStillBob() * sin(angle);
 			}
 			else
@@ -608,7 +606,7 @@ class PlayerPawn : Actor
 		}
 		else
 		{
-			angle = Level.maptime / (20 * TICRATE / 35.) * 360.;
+			angle = Level.maptime / 20. * 360.;
 			bob = player.bob * sin(angle) * (waterlevel > 1 ? 0.25f : 0.5f);
 		}
 
@@ -1250,7 +1248,7 @@ class PlayerPawn : Actor
 		if (player.turnticks)
 		{
 			player.turnticks--;
-			Angle += (180. / TURN180_TICKS);
+			Angle += (180. / ((GameTicRate/4) + 1));
 		}
 		else
 		{
@@ -1296,8 +1294,8 @@ class PlayerPawn : Actor
 				bobfactor *= player.crouchfactor;
 			}
 
-			forwardmove = fm * movefactor * (35 / TICRATE);
-			sidemove = sm * movefactor * (35 / TICRATE);
+			forwardmove = fm * movefactor;
+			sidemove = sm * movefactor;
 
 			if (forwardmove)
 			{
@@ -1403,7 +1401,7 @@ class PlayerPawn : Actor
 			}
 			else if (level.IsJumpingAllowed() && player.onground && player.jumpTics == 0)
 			{
-				double jumpvelz = JumpZ * 35 / TICRATE;
+				double jumpvelz = JumpZ;
 				double jumpfac = 0;
 
 				// [BC] If the player has the high jump power, double his jump velocity.
@@ -1486,7 +1484,7 @@ class PlayerPawn : Actor
 		// [RH] Check for fast turn around
 		if (player.cmd.buttons & BT_TURN180 && !(player.oldbuttons & BT_TURN180))
 		{
-			player.turnticks = TURN180_TICKS;
+			player.turnticks = (GameTicRate / 4) + 1;
 		}
 
 		// Handle movement
@@ -1558,7 +1556,7 @@ class PlayerPawn : Actor
 		{
 			let player = self.player;
 			int maxhealth = GetMaxHealth(true);
-			if ((Level.maptime % TICRATE) == 0 && player.health > maxhealth)
+			if ((Level.maptime % GameTicRate) == 0 && player.health > maxhealth)
 			{
 				if (player.health - 5 < maxhealth)
 					player.health = maxhealth;
@@ -1588,7 +1586,7 @@ class PlayerPawn : Actor
 			}
 			else if (player.air_finished <= Level.maptime && !(Level.maptime & 31))
 			{
-				DamageMobj(NULL, NULL, 2 + ((Level.maptime - player.air_finished) / TICRATE), 'Drowning');
+				DamageMobj(NULL, NULL, 2 + ((Level.maptime - player.air_finished) / GameTicRate), 'Drowning');
 			}
 		}
 	}
@@ -1666,7 +1664,7 @@ class PlayerPawn : Actor
 				player.hazardcount--;
 				if (player.hazardinterval <= 0)
 					player.hazardinterval = 32; // repair invalid hazardinterval
-				if (!(Level.maptime % player.hazardinterval) && player.hazardcount > 16*TICRATE)
+				if (!(Level.maptime % player.hazardinterval) && player.hazardcount > 16*GameTicRate)
 					player.mo.DamageMobj (NULL, NULL, 5, player.hazardtype);
 			}
 			player.mo.CheckPoison();
@@ -2364,7 +2362,7 @@ class PlayerPawn : Actor
 		for (int i = 0; i < 2; i++)
 		{
 			// Bob the weapon based on movement speed. ([SP] And user's bob speed setting)
-			double angle = (BobSpeed * player.GetWBobSpeed() * 35 /	TICRATE*(Level.maptime - 1 + i)) * (360. / 8192.);
+			double angle = (BobSpeed * player.GetWBobSpeed() * (Level.maptime - 1 + i)) * (360. / 8192.);
 
 			// [RH] Smooth transitions between bobbing and not-bobbing frames.
 			// This also fixes the bug where you can "stick" a weapon off-center by

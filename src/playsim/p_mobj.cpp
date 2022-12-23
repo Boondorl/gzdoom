@@ -1472,7 +1472,7 @@ void P_ExplodeMissile (AActor *mo, line_t *line, AActor *target, bool onsky, FNa
 
 		if (mo->flags4 & MF4_RANDOMIZE)
 		{
-			mo->tics -= (pr_explodemissile() & 3) * TICRATE / 35;
+			mo->tics -= (pr_explodemissile() & 3);
 			if (mo->tics < 1)
 				mo->tics = 1;
 		}

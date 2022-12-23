@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <string.h>
 
+extern int GameTicRate;
+
 //
 // Global parameters/defines.
 //
@@ -58,7 +60,8 @@ typedef enum
 #endif
 
 // State updates, number of tics / second.
-constexpr int TICRATE = 35;
+constexpr int DEFAULT_TICRATE = 35;
+#define TICRATE GameTicRate
 
 // Global constants that were defines.
 enum

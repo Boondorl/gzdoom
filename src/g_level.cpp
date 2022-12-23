@@ -1776,7 +1776,7 @@ void FLevelLocals::Init()
 	P_InitParticles(this);
 	P_ClearParticles(this);
 	
-	gravity = sv_gravity * 35/TICRATE;
+	gravity = sv_gravity;
 	aircontrol = sv_aircontrol;
 	AirControlChanged();
 	teamdamage = ::teamdamage;
@@ -1809,7 +1809,7 @@ void FLevelLocals::Init()
 	WallHorizLight = info->WallHorizLight*2;
 	if (info->gravity != 0.f)
 	{
-		gravity = info->gravity * 35/TICRATE;
+		gravity = info->gravity;
 	}
 	if (info->aircontrol != 0.f)
 	{

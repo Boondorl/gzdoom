@@ -66,8 +66,6 @@ class PhoenixRod : Weapon
 
 class PhoenixRodPowered : PhoenixRod
 {
-	const FLAME_THROWER_TICS = (10*TICRATE);
-	
 	private int FlameCount;		// for flamethrower duration
 	
 	Default
@@ -113,7 +111,7 @@ class PhoenixRodPowered : PhoenixRod
 			PhoenixRodPowered flamethrower = PhoenixRodPowered(player.ReadyWeapon);
 			if (flamethrower != null)
 			{
-				flamethrower.FlameCount = FLAME_THROWER_TICS;
+				flamethrower.FlameCount = 10 * GameTicRate;
 			}
 		}
 	}

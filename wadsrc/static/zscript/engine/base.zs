@@ -710,7 +710,7 @@ struct SystemTime
 
 class Object native
 {
-	const TICRATE = 35;
+	const DEFAULT_TICRATE = 35;
 	native bool bDestroyed;
 
 	// These must be defined in some class, so that the compiler can find them. Object is just fine, as long as they are private to external code.
