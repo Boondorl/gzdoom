@@ -1391,7 +1391,7 @@ nodetype *RestoreNodeList(AActor *act, nodetype *head, nodetype *linktype::*othe
 	return head;
 }
 
-void P_PredictPlayer (player_t *player)
+void P_PredictPlayer (player_t *player, bool alreadyTicked)
 {
 	int maxtic;
 
@@ -1468,9 +1468,11 @@ void P_PredictPlayer (player_t *player)
 		if (!NoInterpolateOld)
 			R_RebuildViewInterpolation(player);
 
+		// This always has to be called so the mouse doesn't feel awful when playing online
 		player->cmd = localcmds[i % LOCALCMDTICS];
-		P_PlayerThink (player);
-		player->mo->Tick ();
+		P_PlayerThink(player);
+		if (!alreadyTicked)
+			player->mo->Tick();
 
 		if (CanLerp && PredictionLast.gametic > 0 && i == PredictionLast.gametic && !NoInterpolateOld)
 		{

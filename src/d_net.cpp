@@ -1994,7 +1994,7 @@ void TryRunTics (void)
 			NetUpdate ();	// check for new console commands
 			TicStabilityEnd();
 		}
-		P_PredictPlayer(&players[consoleplayer]);
+		P_PredictPlayer(&players[consoleplayer], true);
 		S_UpdateSounds (players[consoleplayer].camera);	// move positional sounds
 	}
 	else
