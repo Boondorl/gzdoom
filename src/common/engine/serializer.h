@@ -247,6 +247,7 @@ FSerializer &Serialize(FSerializer &arc, const char *key, NumericValue &sid, Num
 FSerializer &Serialize(FSerializer &arc, const char *key, struct ModelOverride &mo, struct ModelOverride *def);
 FSerializer &Serialize(FSerializer &arc, const char *key, struct AnimOverride &ao, struct AnimOverride *def);
 FSerializer& Serialize(FSerializer& arc, const char* key, FTranslationID& value, FTranslationID* defval);
+FSerializer& Serialize(FSerializer& arc, const char* key, TMap<FName, FString>& value, TMap<FName, FString>* defval);
 
 void SerializeFunctionPointer(FSerializer &arc, const char *key, FunctionPointerValue *&p);
 

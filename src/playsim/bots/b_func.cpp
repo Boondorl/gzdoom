@@ -32,570 +32,260 @@
 **---------------------------------------------------------------------------
 **
 */
-/*******************************
-* B_spawn.c                    *
-* Description:                 *
-* various procedures that the  *
-* bot need to work             *
-*******************************/
 
-#include <stdlib.h>
-
-#include "doomtype.h"
-#include "doomdef.h"
-#include "doomstat.h"
-#include "p_local.h"
-#include "p_maputl.h"
 #include "b_bot.h"
-#include "g_game.h"
-#include "d_event.h"
-#include "d_player.h"
-#include "p_spec.h"
-#include "p_checkposition.h"
-#include "actorinlines.h"
+#include "p_linetracedata.h"
 
-static FRandom pr_botdofire ("BotDoFire");
+int P_GetRealMaxHealth(AActor* actor, int max);
 
-
-//Checks TRUE reachability from bot to a looker.
-bool DBot::Reachable (AActor *rtarget)
+// Check to see if the bot is capable of picking up a given item.
+bool DBot::IsValidItem(AActor* item) const
 {
-	if (player->mo == rtarget)
+	// Not something that can be picked up.
+	if (item == nullptr || !item->IsKindOf(NAME_Inventory) || !(item->flags & MF_SPECIAL))
 		return false;
 
-	if ((rtarget->Sector->ceilingplane.ZatPoint (rtarget) -
-		 rtarget->Sector->floorplane.ZatPoint (rtarget))
-		< player->mo->Height) //Where rtarget is, player->mo can't be.
-		return false;
-
-	sector_t *last_s = player->mo->Sector;
-	double last_z = last_s->floorplane.ZatPoint (player->mo);
-	double estimated_dist = player->mo->Distance2D(rtarget);
-	bool reachable = true;
-
-	FPathTraverse it(Level, player->mo->X()+player->mo->Vel.X, player->mo->Y()+player->mo->Vel.Y, rtarget->X(), rtarget->Y(), PT_ADDLINES|PT_ADDTHINGS);
-	intercept_t *in;
-	while ((in = it.Next()))
+	constexpr int bIsHealth = 1 << 22;
+	if (item->IsKindOf(NAME_Weapon))
 	{
-		double hitx, hity;
-		double frac;
-		line_t *line;
-		AActor *thing;
-		double dist;
-		sector_t *s;
-
-		frac = in->frac - 4 /MAX_TRAVERSE_DIST;
-		dist = frac * MAX_TRAVERSE_DIST;
-
-		hitx = it.Trace().x + player->mo->Vel.X * frac;
-		hity = it.Trace().y + player->mo->Vel.Y * frac;
-
-		if (in->isaline)
+		auto heldWeapon = _player->mo->FindInventory(item->GetClass());
+		if (heldWeapon != nullptr)
 		{
-			line = in->d.line;
+			if ((!alwaysapplydmflags && !deathmatch) || (dmflags & DF_WEAPONS_STAY))
+				return false;
 
-			if (!(line->flags & ML_TWOSIDED) || (line->flags & (ML_BLOCKING|ML_BLOCKEVERYTHING|ML_BLOCK_PLAYERS)))
+			auto ammo1 = heldWeapon->PointerVar<AActor>(NAME_Ammo1);
+			auto ammo2 = heldWeapon->PointerVar<AActor>(NAME_Ammo2);
+			if ((ammo1 == nullptr || ammo1->IntVar(NAME_Amount) >= ammo1->IntVar(NAME_MaxAmount)) &&
+				(ammo2 == nullptr || ammo2->IntVar(NAME_Amount) >= ammo2->IntVar(NAME_MaxAmount)))
 			{
-				return false; //Cannot continue.
-			}
-			else
-			{
-				//Determine if going to use backsector/frontsector.
-				s = (line->backsector == last_s) ? line->frontsector : line->backsector;
-				double ceilingheight = s->ceilingplane.ZatPoint (hitx, hity);
-				double floorheight = s->floorplane.ZatPoint (hitx, hity);
-
-				if (!Level->BotInfo.IsDangerous (s) &&		//Any nukage/lava?
-					(floorheight <= (last_z+MAXMOVEHEIGHT)
-					&& ((ceilingheight == floorheight && line->special)
-						|| (ceilingheight - floorheight) >= player->mo->Height))) //Does it fit?
-				{
-					last_z = floorheight;
-					last_s = s;
-					continue;
-				}
-				else
-				{
-					return false;
-				}
+				return false;
 			}
 		}
-
-		if (dist > estimated_dist)
-		{
-			return true;
-		}
-
-		thing = in->d.thing;
-		if (thing == player->mo) //Can't reach self in this case.
-			continue;
-		if (thing == rtarget && (rtarget->Sector->floorplane.ZatPoint (rtarget) <= (last_z+MAXMOVEHEIGHT)))
-		{
-			return true;
-		}
-
-		reachable = false;
 	}
-	return reachable;
+	else if (item->IsKindOf(NAME_Ammo))
+	{
+		// Boon TODO: Check this
+		AActor* heldAmmo = nullptr;
+		PClassActor* parent = nullptr;
+		IFVIRTUALPTRNAME(item, NAME_Ammo, GetParentAmmo)
+		{
+			VMValue params = { item };
+			VMReturn ret = { (void**)parent };
+
+			VMCall(func, &params, 1, &ret, 1);
+		}
+
+		if (parent != nullptr)
+			heldAmmo = _player->mo->FindInventory(parent);
+
+		if (heldAmmo != nullptr && heldAmmo->IntVar(NAME_Amount) >= heldAmmo->IntVar(NAME_MaxAmount))
+			return false;
+	}
+	else if (item->IntVar(NAME_ItemFlags) & bIsHealth) // Boon TODO: Make sure this works
+	{
+		// Unfortunately this has to be checked manually since Megaspheres are horribly set up.
+		auto testItem = item->GetClass()->TypeName == NAME_Megasphere
+			? GetDefaultByName(NAME_MegasphereHealth)
+			: item;
+
+		if (testItem != nullptr)
+		{
+			const int maxHealth = P_GetRealMaxHealth(_player->mo, testItem->IntVar(NAME_MaxAmount));
+			if (_player->health >= maxHealth)
+				return false;
+		}
+	}
+
+	return true;
 }
 
-//doesnt check LOS, checks visibility with a set view angle.
-//B_Checksight checks LOS (straight line)
-//----------------------------------------------------------------------
-//Check if mo1 has free line to mo2
-//and if mo2 is within mo1 viewangle (vangle) given with normal degrees.
-//if these conditions are true, the function returns true.
-//GOOD TO KNOW is that the player's view angle
-//in doom is 90 degrees infront.
-bool DBot::Check_LOS (AActor *to, DAngle vangle)
+// Simple check to see if a given Actor is within view of the bot.
+bool DBot::IsActorInView(AActor *mo, const DAngle &fov) const
 {
-	if (!P_CheckSight (player->mo, to, SF_SEEPASTBLOCKEVERYTHING))
-		return false; // out of sight
-	if (vangle >= DAngle::fromDeg(360.))
-		return true;
-	if (vangle == nullAngle)
-		return false; //Looker seems to be blind.
-
-	return absangle(player->mo->AngleTo(to), player->mo->Angles.Yaw) <= (vangle/2);
+	return mo != nullptr && fov > nullAngle
+			&& (fov >= DAngle360 || absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= fov * 0.5)
+			&& P_CheckSight(_player->mo, mo, SF_SEEPASTBLOCKEVERYTHING);
 }
 
-//-------------------------------------
-//Bot_Dofire()
-//-------------------------------------
-//The bot will check if it's time to fire
-//and do so if that is the case.
-void DBot::Dofire (ticcmd_t *cmd)
+// Aim the bots pitch towards the Actor.
+void DBot::PitchTowardsActor(AActor* target) const
 {
-	bool no_fire; //used to prevent bot from pumping rockets into nearby walls.
-	int aiming_penalty=0; //For shooting at shading target, if screen is red, MAKEME: When screen red.
-	int aiming_value; //The final aiming value.
-	double Dist;
-	DAngle an;
-	DAngle m;
-	double fm;
+	_player->mo->Angles.Pitch = target != nullptr ? _player->mo->Vec3To(target).Pitch() : nullAngle;
+}
 
-	if (!enemy || !(enemy->flags & MF_SHOOTABLE) || enemy->health <= 0)
+// Sets the bot's FriendPlayer value to the player index it wants to stick with.
+void DBot::FindPartner() const
+{
+	// Check if current partner is still alive.
+	unsigned int newFriend = _player->mo->FriendPlayer;
+	if (newFriend > 0u && (newFriend > MAXPLAYERS || Level->Players[newFriend - 1u]->health <= 0))
+		newFriend = 0u;
+
+	if (newFriend)
 		return;
 
-	if (player->ReadyWeapon == NULL)
-		return;
-
-	if (player->damagecount > (unsigned)skill.isp)
+	double closest = std::numeric_limits<double>::infinity();
+	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
-		first_shot = true;
-		return;
-	}
-
-	//Reaction skill thing.
-	if (first_shot &&
-		!(GetBotInfo(player->ReadyWeapon).flags & BIF_BOT_REACTION_SKILL_THING))
-	{
-		t_react = (100-skill.reaction+1)/((pr_botdofire()%3)+3);
-	}
-	first_shot = false;
-	if (t_react)
-		return;
-
-	//MAKEME: Decrease the rocket suicides even more.
-
-	no_fire = true;
-	//Distance to enemy.
-	Dist = player->mo->Distance2D(enemy, player->mo->Vel.X - enemy->Vel.X, player->mo->Vel.Y - enemy->Vel.Y);
-
-	//FIRE EACH TYPE OF WEAPON DIFFERENT: Here should all the different weapons go.
-	if (GetBotInfo(player->ReadyWeapon).MoveCombatDist == 0)
-	{
-		//*4 is for atmosphere,  the chainsaws sounding and all..
-		no_fire = (Dist > DEFMELEERANGE*4);
-	}
-	else if (GetBotInfo(player->ReadyWeapon).flags & BIF_BOT_BFG)
-	{
-		//MAKEME: This should be smarter.
-		if ((pr_botdofire()%200)<=skill.reaction)
-			if(Check_LOS(enemy, DAngle::fromDeg(SHOOTFOV)))
-				no_fire = false;
-	}
-	else if (GetBotInfo(player->ReadyWeapon).projectileType != NULL)
-	{
-		if (GetBotInfo(player->ReadyWeapon).flags & BIF_BOT_EXPLOSIVE)
+		AActor *client = Level->Players[i]->mo;
+		if (Level->PlayerInGame(i)
+			&& _player->mo != client
+			&& Level->Players[i]->health > 0
+			&& (!deathmatch || ((_player->health / 2) <= Level->Players[i]->health && _player->mo->IsTeammate(client))))
 		{
-			//Special rules for RL
-			an = FireRox (enemy, cmd);
-			if(an != nullAngle)
+			double dist = _player->mo->Distance3DSquared(client);
+			if (dist < closest && P_CheckSight(_player->mo, client, SF_IGNOREVISIBILITY))
 			{
-				Angle = an;
-				//have to be somewhat precise. to avoid suicide.
-				if (absangle(an, player->mo->Angles.Yaw) < DAngle::fromDeg(12.))
-				{
-					t_rocket = 9;
-					no_fire = false;
-				}
-			}
-		}
-		// prediction aiming
-		Dist = player->mo->Distance2D(enemy);
-		fm = Dist / GetDefaultByType (GetBotInfo(player->ReadyWeapon).projectileType)->Speed;
-		Level->BotInfo.SetBodyAt(Level, enemy->Pos() + enemy->Vel.XY() * fm * 2, 1);
-		Angle = player->mo->AngleTo(Level->BotInfo.body1);
-		if (Check_LOS (enemy, DAngle::fromDeg(SHOOTFOV)))
-			no_fire = false;
-	}
-	else
-	{
-		//Other weapons, mostly instant hit stuff.
-		Angle = player->mo->AngleTo(enemy);
-		aiming_penalty = 0;
-		if (enemy->flags & MF_SHADOW)
-			aiming_penalty += (pr_botdofire()%25)+10;
-		if (enemy->Sector->lightlevel<WHATS_DARK/* && !(player->powers & PW_INFRARED)*/)
-			aiming_penalty += pr_botdofire()%40;//Dark
-		if (player->damagecount)
-			aiming_penalty += player->damagecount; //Blood in face makes it hard to aim
-		aiming_value = skill.aiming - aiming_penalty;
-		if (aiming_value <= 0)
-			aiming_value = 1;
-		m = DAngle::fromDeg(((SHOOTFOV/2)-(aiming_value*SHOOTFOV/200))); //Higher skill is more accurate
-		if (m <= nullAngle)
-			m = DAngle::fromDeg(1.); //Prevents lock.
-
-		if (m != nullAngle)
-		{
-			if (increase)
-				Angle += m;
-			else
-				Angle -= m;
-		}
-
-		if (absangle(Angle, player->mo->Angles.Yaw) < DAngle::fromDeg(4.))
-		{
-			increase = !increase;
-		}
-
-		if (Check_LOS (enemy, DAngle::fromDeg(SHOOTFOV/2)))
-			no_fire = false;
-	}
-	if (!no_fire) //If going to fire weapon
-	{
-		cmd->ucmd.buttons |= BT_ATTACK;
-	}
-	//Prevents bot from jerking, when firing automatic things with low skill.
-}
-
-bool FCajunMaster::IsLeader (player_t *player)
-{
-	for (int count = 0; count < MAXPLAYERS; count++)
-	{
-		if (players[count].Bot != NULL
-			&& players[count].Bot->mate == player->mo)
-		{
-			return true;
-		}
-	}
-
-	return false;
-}
-
-extern int BotWTG;
-
-void FCajunMaster::BotTick(AActor *mo)
-{
-	BotSupportCycles.Clock();
-	m_Thinking = true;
-	for (int i = 0; i < MAXPLAYERS; i++)
-	{
-		if (!playeringame[i] || players[i].Bot == NULL)
-			continue;
-
-		if (mo->flags3 & MF3_ISMONSTER)
-		{
-			if (mo->health > 0
-				&& !players[i].Bot->enemy
-				&& mo->player ? !mo->IsTeammate(players[i].mo) : true
-				&& mo->Distance2D(players[i].mo) < MAX_MONSTER_TARGET_DIST
-				&& P_CheckSight(players[i].mo, mo, SF_SEEPASTBLOCKEVERYTHING))
-			{ //Probably a monster, so go kill it.
-				players[i].Bot->enemy = mo;
-			}
-		}
-		else if (mo->flags & MF_SPECIAL)
-		{ //Item pickup time
-		  //clock (BotWTG);
-			players[i].Bot->WhatToGet(mo);
-			//unclock (BotWTG);
-			BotWTG++;
-		}
-		else if (mo->flags & MF_MISSILE)
-		{
-			if (!players[i].Bot->missile && (mo->flags3 & MF3_WARNBOT))
-			{ //warn for incoming missiles.
-				if (mo->target != players[i].mo && players[i].Bot->Check_LOS(mo, DAngle::fromDeg(90.)))
-					players[i].Bot->missile = mo;
-			}
-		}
-	}
-	m_Thinking = false;
-	BotSupportCycles.Unclock();
-}
-
-//This function is called every
-//tick (for each bot) to set
-//the mate (teammate coop mate).
-AActor *DBot::Choose_Mate ()
-{
-	int count;
-	double closest_dist, test;
-	AActor *target;
-
-	//is mate alive?
-	if (mate)
-	{
-		if (mate->health <= 0)
-			mate = nullptr;
-		else
-			last_mate = mate;
-	}
-	if (mate) //Still is..
-		return mate;
-
-	//Check old_mates status.
-	if (last_mate)
-		if (last_mate->health <= 0)
-			last_mate = nullptr;
-
-	target = NULL;
-	closest_dist = FLT_MAX;
-
-	//Check for player friends
-	for (count = 0; count < MAXPLAYERS; count++)
-	{
-		player_t *client = &players[count];
-
-		if (playeringame[count]
-			&& client->mo
-			&& player->mo != client->mo
-			&& (player->mo->IsTeammate (client->mo) || !deathmatch)
-			&& client->mo->health > 0
-			&& ((player->mo->health/2) <= client->mo->health || !deathmatch)
-			&& !Level->BotInfo.IsLeader(client)) //taken?
-		{
-			if (P_CheckSight (player->mo, client->mo, SF_IGNOREVISIBILITY))
-			{
-				test = client->mo->Distance2D(player->mo);
-
-				if (test < closest_dist)
-				{
-					closest_dist = test;
-					target = client->mo;
-				}
+				closest = dist;
+				newFriend = i + 1u;
 			}
 		}
 	}
 
-/*
-	//Make a introducing to mate.
-	if(target && target!=last_mate)
-	{
-		if((P_Random()%(200*Level->BotInfo.botnum))<3)
-		{
-			chat = c_teamup;
-			if(target->bot)
-					strcpy(c_target, botsingame[target->bot_id]);
-						else if(target->player)
-					strcpy(c_target, player_names[target->play_id]);
-		}
-	}
-*/
-
-	return target;
-
+	_player->mo->FriendPlayer = newFriend;
 }
 
-//MAKEME: Make this a smart decision
-AActor *DBot::Find_enemy ()
+// Attempts to set the bot's target. If not in deathmatch mode, tries to get a monster within 20 blockmap units.
+void DBot::FindEnemy(const DAngle &fov) const
 {
-	int count;
-	double closest_dist, temp; //To target.
-	AActor *target;
-	DAngle vangle;
-
+	const DAngle viewFov = fov <= nullAngle ? DAngle360 : fov;
 	if (!deathmatch)
-	{ // [RH] Take advantage of the Heretic/Hexen code to be a little smarter
-		return P_RoughMonsterSearch (player->mo, 20);
+	{
+		_player->mo->target = P_RoughMonsterSearch(_player->mo, 20, false, false, viewFov.Degrees() * 0.5);
+		return;
 	}
 
-	//Note: It's hard to ambush a bot who is not alone
-	if (allround || mate)
-		vangle = DAngle::fromDeg(360.);
+	constexpr double DarknessRange = 320.0 * 320.0; // Bots can see roughly 10m in front of them in darkness
+	constexpr int DarknessThreshold = 50;
+
+	AActor *target = nullptr;
+	double closest = std::numeric_limits<double>::infinity();
+	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
+	{
+		AActor *client = Level->Players[i]->mo;
+		if (Level->PlayerInGame(i)
+			&& _player->mo != client
+			&& Level->Players[i]->health > 0
+			&& !_player->mo->IsTeammate(client))
+		{
+			double dist = _player->mo->Distance3DSquared(client);
+			if (dist < closest
+				&& (dist <= DarknessRange || client->Sector->GetLightLevel() >= DarknessThreshold)
+				&& IsActorInView(client, viewFov))
+			{
+				closest = dist;
+				target = client;
+			}
+		}
+	}
+
+	_player->mo->target = target;
+}
+
+// Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
+// of the Actor type is intentionally kept lazy since more robust solutions can be written from
+// ZScript.
+bool DBot::CheckMissileTrajectory(const DVector3 &dest, const double minDistance, const double maxDistance) const
+{
+	if (_player->ReadyWeapon == nullptr)
+		return false;
+
+	const PClass* missileType = nullptr;
+	const auto& weapInfo = DBotManager::BotWeaponInfo.CheckKey(_player->ReadyWeapon->GetClass()->TypeName);
+	if (weapInfo != nullptr)
+		missileType = PClass::FindClass(weapInfo->GetString("ProjectileType"));
+
+	// Don't use this with hitscan weapons.
+	if (missileType == nullptr)
+		return false;
+
+	// Don't bother testing against missiles that don't move.
+	auto def = GetDefaultByType(missileType);
+	if (def->Speed < EQUAL_EPSILON)
+		return false;
+
+	const DVector3 origin = _player->mo->PosAtZ(_player->mo->Center() - _player->mo->Floorclip + _player->mo->AttackOffset());
+	const DVector3 dir = dest - origin + Level->Displacements.getOffset(Level->PointInSector(dest.XY())->PortalGroup, _player->mo->Sector->PortalGroup);
+	const double dist = dir.Length();
+	if (minDistance >= EQUAL_EPSILON && dist <= minDistance)
+		return false;
+	if (dist <= def->radius * 2.0)
+		return true;
+
+	// The trajectory check here fires off a series of five line traces in a cross pattern:
+	// * One from the center.
+	// * Two from the furthest extents left/right of the center.
+	// * One from the bottom/front center.
+	// * One from the top/back center.
+	
+	const DAngle yaw = dir.Angle();
+	const double range = maxDistance >= EQUAL_EPSILON && dist > maxDistance ? maxDistance : dist;
+	const DAngle pitch = dir.Pitch();
+	constexpr int Flags = TRF_ABSPOSITION | TRF_THRUHITSCAN | TRF_SOLIDACTORS;
+	const double middle = def->Height * 0.5;
+
+	FLineTraceData data = {};
+	DVector3 pos = origin.plusZ(middle);
+	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	{
+		return false;
+	}
+
+	// Get the radius accounting for the AABB's shape.
+	const DVector2 cs = yaw.ToVector();
+	const double radius = fabs(def->radius * cs.X) + fabs(def->radius * cs.Y);
+	const DVector2 offset = cs * radius;
+
+	pos = origin + DVector3(offset.Y, -offset.X, middle);
+	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	{
+		return false;
+	}
+
+	pos = origin + DVector3(-offset.Y, offset.X, middle);
+	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	{
+		return false;
+	}
+
+	// If the bot is aiming far enough up/down, go forward and backward instead of top and bottom.
+	constexpr double PitchLimit = 60.0;
+	if (fabs(pitch.Degrees()) <= PitchLimit)
+	{
+		pos = origin;
+		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		{
+			return false;
+		}
+
+		pos = origin.plusZ(def->Height);
+		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		{
+			return false;
+		}
+	}
 	else
-		vangle = DAngle::fromDeg(ENEMY_SCAN_FOV);
-	allround = false;
-
-	target = NULL;
-	closest_dist = FLT_MAX;
-
-	for (count = 0; count < MAXPLAYERS; count++)
 	{
-		player_t *client = &players[count];
-		if (playeringame[count]
-			&& !player->mo->IsTeammate (client->mo)
-			&& client->mo->health > 0
-			&& player->mo != client->mo)
+		pos = origin + DVector3(offset.X, offset.Y, middle);
+		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 		{
-			if (Check_LOS (client->mo, vangle)) //Here's a strange one, when bot is standing still, the P_CheckSight within Check_LOS almost always returns false. tought it should be the same checksight as below but.. (below works) something must be fuckin wierd screded up. 
-			//if(P_CheckSight(player->mo, players[count].mo))
-			{
-				temp = client->mo->Distance2D(player->mo);
+			return false;
+		}
 
-				//Too dark?
-				if (temp > DARK_DIST &&
-					client->mo->Sector->lightlevel < WHATS_DARK /*&&
-					player->Powers & PW_INFRARED*/)
-					continue;
-
-				if (temp < closest_dist)
-				{
-					closest_dist = temp;
-					target = client->mo;
-				}
-			}
+		pos = origin + DVector3(-offset.X, -offset.Y, middle);
+		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		{
+			return false;
 		}
 	}
 
-	return target;
-}
-
-
-
-//Creates a temporary mobj (invisible) at the given location.
-void FCajunMaster::SetBodyAt (FLevelLocals *Level, const DVector3 &pos, int hostnum)
-{
-	if (hostnum == 1)
-	{
-		if (body1)
-		{
-			body1->SetOrigin (pos, false);
-		}
-		else
-		{
-			body1 = Spawn (Level, "CajunBodyNode", pos, NO_REPLACE);
-		}
-	}
-	else if (hostnum == 2)
-	{
-		if (body2)
-		{
-			body2->SetOrigin (pos, false);
-		}
-		else
-		{
-			body2 = Spawn (Level, "CajunBodyNode", pos, NO_REPLACE);
-		}
-	}
-}
-
-//------------------------------------------
-//    FireRox()
-//
-//Returns NULL if shouldn't fire
-//else an angle (in degrees) are given
-//This function assumes actor->player->angle
-//has been set an is the main aiming angle.
-
-
-//Emulates missile travel. Returns distance travelled.
-double FCajunMaster::FakeFire (AActor *source, AActor *dest, ticcmd_t *cmd)
-{
-	AActor *th = Spawn (source->Level, "CajunTrace", source->PosPlusZ(4*8.), NO_REPLACE);
-	
-	th->target = source;		// where it came from
-
-
-	th->Vel = source->Vec3To(dest).Resized(th->Speed);
-
-	double dist = 0;
-
-	while (dist < SAFE_SELF_MISDIST)
-	{
-		dist += th->Speed;
-		th->Move(th->Vel);
-		if (!CleanAhead (th, th->X(), th->Y(), cmd))
-			break;
-	}
-	th->Destroy ();
-	return dist;
-}
-
-DAngle DBot::FireRox (AActor *enemy, ticcmd_t *cmd)
-{
-	double dist;
-	AActor *actor;
-	double m;
-
-	Level->BotInfo.SetBodyAt(Level, player->mo->PosPlusZ(player->mo->Height / 2) + player->mo->Vel.XY() * 5, 2);
-
-	actor = Level->BotInfo.body2;
-
-	dist = actor->Distance2D (enemy);
-	if (dist < SAFE_SELF_MISDIST)
-		return nullAngle;
-	//Predict.
-	m = ((dist+1) / GetDefaultByName("Rocket")->Speed);
-
-	Level->BotInfo.SetBodyAt(Level, DVector3((enemy->Pos().XY() + enemy->Vel * (m + 2)), ONFLOORZ), 1);
-	
-	//try the predicted location
-	if (P_CheckSight (actor, Level->BotInfo.body1, SF_IGNOREVISIBILITY)) //See the predicted location, so give a test missile
-	{
-		FCheckPosition tm;
-		if (Level->BotInfo.SafeCheckPosition (player->mo, actor->X(), actor->Y(), tm))
-		{
-			if (Level->BotInfo.FakeFire (actor, Level->BotInfo.body1, cmd) >= SAFE_SELF_MISDIST)
-			{
-				return actor->AngleTo(Level->BotInfo.body1);
-			}
-		}
-	}
-	//Try fire straight.
-	if (P_CheckSight (actor, enemy, 0))
-	{
-		if (Level->BotInfo.FakeFire (player->mo, enemy, cmd) >= SAFE_SELF_MISDIST)
-		{
-			return player->mo->AngleTo(enemy);
-		}
-	}
-	return nullAngle;
-}
-
-// [RH] We absolutely do not want to pick things up here. The bot code is
-// executed apart from all the other simulation code, so we don't want it
-// creating side-effects during gameplay.
-bool FCajunMaster::SafeCheckPosition (AActor *actor, double x, double y, FCheckPosition &tm)
-{
-	ActorFlags savedFlags = actor->flags;
-	actor->flags &= ~MF_PICKUP;
-	bool res = P_CheckPosition (actor, DVector2(x, y), tm);
-	actor->flags = savedFlags;
-	return res;
-}
-
-void FCajunMaster::StartTravel ()
-{
-	for (int i = 0; i < MAXPLAYERS; ++i)
-	{
-		if (players[i].Bot != NULL)
-		{
-			players[i].Bot->ChangeStatNum (STAT_TRAVELLING);
-		}
-	}
-}
-
-void FCajunMaster::FinishTravel ()
-{
-	for (int i = 0; i < MAXPLAYERS; ++i)
-	{
-		if (players[i].Bot != NULL)
-		{
-			players[i].Bot->ChangeStatNum (STAT_BOT);
-		}
-	}
+	return true;
 }

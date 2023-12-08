@@ -102,12 +102,6 @@ void P_TouchSpecialThing (AActor *special, AActor *toucher)
 	if (toucher->health <= 0)
 		return;
 
-	//Added by MC: Finished with this destination.
-	if (toucher->player != NULL && toucher->player->Bot != NULL && special == toucher->player->Bot->dest)
-	{
-		toucher->player->Bot->prev = toucher->player->Bot->dest;
-		toucher->player->Bot->dest = nullptr;
-	}
 	special->CallTouch (toucher);
 }
 
@@ -595,28 +589,6 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 		// [RH] Force a delay between death and respawn
 		player->respawn_time = Level->time + TICRATE;
 
-		//Added by MC: Respawn bots
-		if (Level->BotInfo.botnum && !demoplayback)
-		{
-			if (player->Bot != NULL)
-				player->Bot->t_respawn = (pr_botrespawn()%15)+((Level->BotInfo.botnum-1)*2)+TICRATE+1;
-
-			//Added by MC: Discard enemies.
-			for (int i = 0; i < MAXPLAYERS; i++)
-			{
-				DBot *Bot = Level->Players[i]->Bot;
-				if (Bot != nullptr && this == Bot->enemy)
-				{
-					if (Bot->dest == Bot->enemy)
-						Bot->dest = nullptr;
-					Bot->enemy = nullptr;
-				}
-			}
-
-			player->spreecount = 0;
-			player->multicount = 0;
-		}
-
 		// count environment kills against you
 		if (!source)
 		{
@@ -642,6 +614,16 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 		// [GRB] Clear extralight. When you killed yourself with weapon that
 		// called A_Light1/2 before it called A_Light0, extraligh remained.
 		player->extralight = 0;
+
+		// Let the bot know its player just died.
+		if (player->Bot != nullptr)
+		{
+			IFVIRTUALPTR(player->Bot, DBot, BotDied)
+			{
+				VMValue params[] = { (DObject*)player->Bot, source, inflictor, dmgflags, MeansOfDeath.GetIndex() };
+				VMCall(func, params, 5, nullptr, 0);
+			}
+		}
 	}
 
 	// [RH] If this is the unmorphed version of another monster, destroy this
@@ -1284,11 +1266,6 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 		if ((player->cheats & (CF_GODMODE2 | CF_BUDDHA2)) || (player->mo->flags5 & MF5_NODAMAGE))
 		{
 			flags &= ~DMG_FORCED;
-		}
-		//Added by MC: Lets bots look allround for enemies if they survive an ambush.
-		if (player->Bot != NULL)
-		{
-			player->Bot->allround = true;
 		}
 
 		// end of game hell hack

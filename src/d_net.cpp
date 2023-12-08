@@ -707,7 +707,7 @@ void PlayerIsGone (int netnode, int netconsole)
 		// Pick a new network arbitrator
 		for (int i = 0; i < MAXPLAYERS; i++)
 		{
-			if (i != netconsole && playeringame[i] && players[i].Bot == NULL)
+			if (i != netconsole && playeringame[i] && players[i].Bot == nullptr)
 			{
 				Net_Arbitrator = i;
 				players[i].settings_controller = true;
@@ -1080,7 +1080,7 @@ void NetUpdate (void)
 		{
 			for (j = 0; j < MAXPLAYERS; j++)
 			{
-				if (playeringame[j] && players[j].Bot == NULL)
+				if (playeringame[j] && players[j].Bot == nullptr)
 				{
 					count++;
 				}
@@ -1219,7 +1219,7 @@ void NetUpdate (void)
 				{
 					for (l = 1, j = 0; j < MAXPLAYERS; j++)
 					{
-						if (playeringame[j] && players[j].Bot == NULL && j != playerfornode[i] && j != consoleplayer)
+						if (playeringame[j] && players[j].Bot == nullptr && j != playerfornode[i] && j != consoleplayer)
 						{
 							playerbytes[l++] = j;
 							netbuffer[k++] = j;
@@ -2279,12 +2279,15 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 		break;
 
 	case DEM_ADDBOT:
-		primaryLevel->BotInfo.TryAddBot (primaryLevel, stream, player);
+		DBotManager::TryAddBot(primaryLevel, ReadByte(stream), ReadStringConst(stream));
 		break;
 
 	case DEM_KILLBOTS:
-		primaryLevel->BotInfo.RemoveAllBots (primaryLevel, true);
-		Printf ("Removed all bots\n");
+		DBotManager::RemoveAllBots(primaryLevel);
+		break;
+
+	case DEM_KILLBOT:
+		DBotManager::RemoveBot(primaryLevel, ReadByte(stream));
 		break;
 
 	case DEM_CENTERVIEW:
@@ -2957,7 +2960,7 @@ static void Network_Controller (int playernum, bool add)
 		return;
 	}
 
-	if (players[playernum].Bot != NULL)
+	if (players[playernum].Bot != nullptr)
 	{
 		Printf ("Bots cannot be added to the controller list.\n");
 		return;

@@ -637,12 +637,6 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 	automapactive = false;
 	viewactive = true;
 
-	//Added by MC: Initialize bots.
-	if (!deathmatch)
-	{
-		primaryLevel->BotInfo.Init ();
-	}
-
 	if (bTitleLevel)
 	{
 		gamestate = GS_TITLELEVEL;
@@ -788,8 +782,6 @@ void FLevelLocals::ChangeLevel(const char *levelname, int position, int inflags,
 	}
 	changeflags = inflags;
 
-	BotInfo.End();	//Added by MC:
-
 	// [RH] Give scripts a chance to do something
 	unloading = true;
 	Behaviors.StartTypedScripts (SCRIPT_Unloading, NULL, false, 0, true);
@@ -834,7 +826,7 @@ void FLevelLocals::ChangeLevel(const char *levelname, int position, int inflags,
 					player->mo->special1 = 0;
 				}
 				// ]]
-				DoReborn(i, false);
+				DoReborn(i);
 			}
 		}
 	}
@@ -1447,15 +1439,6 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 
 	P_SetupLevel (this, position, newGame);
 
-
-
-
-	//Added by MC: Initialize bots.
-	if (deathmatch)
-	{
-		BotInfo.Init ();
-	}
-
 	if (timingdemo)
 	{
 		static bool firstTime = true;
@@ -1530,6 +1513,8 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 	{
 		I_Error("no start for player %d found.", pnumerr);
 	}
+
+	DBotManager::SpawnNamedBots(this);
 }
 
 
@@ -1542,14 +1527,6 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 void FLevelLocals::WorldDone (void) 
 {
 	gameaction = ga_worlddone; 
-
-
-	//Added by mc
-	if (deathmatch)
-	{
-		BotInfo.RemoveAllBots(this, consoleplayer != Net_Arbitrator);
-	}
-
 }
  
 DEFINE_ACTION_FUNCTION(FLevelLocals, WorldDone)
@@ -1583,25 +1560,30 @@ void G_DoWorldDone (void)
 //
 // G_StartTravel
 //
-// Moves players (and eventually their inventory) to a different statnum,
+// Moves players and their inventory to a different statnum,
 // so they will not be destroyed when switching levels. This only applies
-// to real players, not voodoo dolls.
+// to real players and bots, not voodoo dolls.
 //
 //==========================================================================
 
 void FLevelLocals::StartTravel ()
 {
-	if (deathmatch)
-		return;
-
 	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
-		if (playeringame[i])
+		if (PlayerInGame(i))
 		{
+			// This always needs to travel since it has nothing to do with the body.
+			if (Players[i]->Bot != nullptr)
+				Players[i]->Bot->ChangeStatNum(STAT_TRAVELLING);
+
+			// Always recreate the player's body in deathmatch.
+			if (deathmatch)
+				continue;
+
 			AActor *pawn = Players[i]->mo;
 			AActor *inv;
 			Players[i]->camera = nullptr;
-
+			
 			// Only living players travel. Dead ones get a new body on the new level.
 			if (Players[i]->health > 0)
 			{
@@ -1621,8 +1603,6 @@ void FLevelLocals::StartTravel ()
 			}
 		}
 	}
-
-	BotInfo.StartTravel ();
 }
 
 //==========================================================================
@@ -1753,7 +1733,11 @@ int FLevelLocals::FinishTravel ()
 		pawns[pawnsnum++] = pawn;
 	}
 
-	BotInfo.FinishTravel ();
+	// Make sure to restore bots as well.
+	DBot* bot = nullptr;
+	auto botIt = GetThinkerIterator<DBot>(NAME_None, STAT_TRAVELLING);
+	while ((bot = botIt.Next()) != nullptr)
+		bot->ChangeStatNum(DBot::DEFAULT_STAT);
 
 	// make sure that, after travelling has completed, no travelling thinkers are left.
 	// Since this list is excluded from regular thinker cleaning, anything that may survive through here
@@ -2269,9 +2253,6 @@ void FLevelLocals::Mark()
 	GC::Mark(automap);
 	GC::Mark(interpolator.Head);
 	GC::Mark(SequenceListHead);
-	GC::Mark(BotInfo.firstthing);
-	GC::Mark(BotInfo.body1);
-	GC::Mark(BotInfo.body2);
 	if (localEventManager)
 	{
 		GC::Mark(localEventManager->FirstEventHandler);

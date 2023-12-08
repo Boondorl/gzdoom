@@ -180,7 +180,7 @@ inline bool AActor::isFrozen() const
 		auto state = Level->isFrozen();
 		if (state)
 		{
-			if (player == nullptr || player->Bot != nullptr) return true;
+			if (player == nullptr) return true;
 
 			// This is the only place in the entire game where the two freeze flags need different treatment.
 			// The time freezer flag also freezes other players, the global setting does not.

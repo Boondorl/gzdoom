@@ -238,6 +238,21 @@ CCMD (anubis)
 	Net_WriteByte (CHT_ANUBIS);
 }
 
+CCMD (freeze)
+{
+	if (CheckCheatmode())
+		return;
+
+	if (consoleplayer != Net_Arbitrator)
+	{
+		Printf("Only the net arbitrator can use freeze mode\n");
+		return;
+	}
+
+	Net_WriteByte(DEM_GENERICCHEAT);
+	Net_WriteByte(CHT_FREEZE);
+}
+
 // [GRB]
 CCMD (resurrect)
 {

@@ -876,7 +876,7 @@ sightcounts[0]++;
 		(t2->flags8 & MF8_MINVISIBLE) ||
 		!t2->RenderStyle.IsVisible(t2->Alpha)))
 	{ // small chance of an attack being made anyway
-		if ((t1->Level->BotInfo.m_Thinking ? pr_botchecksight() : pr_checksight()) > 50)
+		if (pr_checksight() > 50)
 		{
 			res = false;
 			goto done;

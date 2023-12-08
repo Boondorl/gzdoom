@@ -1513,6 +1513,42 @@ template<> FSerializer &Serialize(FSerializer &arc, const char *key, FFont *&fon
 
 }
 
+// Boon TODO: I think this is right?
+FSerializer& Serialize(FSerializer& arc, const char* key, TMap<FName, FString>& value, TMap<FName, FString>* defval)
+{
+	if (arc.isWriting())
+	{
+		if (value.CountUsed())
+		{
+			arc.BeginObject(key);
+
+			TMap<FName, FString>::ConstPair* pair = nullptr;
+			TMap<FName, FString>::ConstIterator it{ value };
+			while (it.NextPair(pair))
+				arc(pair->Key.GetChars(), pair->Value);
+
+			arc.EndObject();
+		}
+	}
+	else
+	{
+		if (arc.BeginObject(key))
+		{
+			const char* key = nullptr;
+			while ((key = arc.GetKey()) != nullptr)
+				value[key] = arc.r->mKeyValue->GetString();
+
+			arc.EndObject();
+		}
+		else if (defval != nullptr)
+		{
+			value = *defval;
+		}
+	}
+
+	return arc;
+}
+
 //==========================================================================
 //
 // Dictionary

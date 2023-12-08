@@ -251,7 +251,7 @@ public:
 	// g_Game
 	void PlayerReborn (int player);
 	bool CheckSpot (int playernum, FPlayerStart *mthing);
-	void DoReborn (int playernum, bool freshbot);
+	void DoReborn (int playernum);
 	void QueueBody (AActor *body);
 	double PlayersRangeFromSpot (FPlayerStart *spot);
 	FPlayerStart *SelectFarthestDeathmatchSpot (size_t selections);
@@ -515,7 +515,6 @@ public:
 	TArray<FStrifeDialogueNode *> StrifeDialogues;
 	FDialogueIDMap DialogueRoots;
 	FDialogueMap ClassRoots;
-	FCajunMaster BotInfo;
 
 	int ii_compatflags = 0;
 	int ii_compatflags2 = 0;

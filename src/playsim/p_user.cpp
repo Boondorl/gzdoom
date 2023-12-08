@@ -1232,6 +1232,9 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckUse)
 
 void P_PlayerThink (player_t *player)
 {
+	if (player->Bot != nullptr)
+		player->Bot->CallBotThink();
+
 	ticcmd_t *cmd = &player->cmd;
 
 	if (player->mo == NULL)
@@ -1242,12 +1245,6 @@ void P_PlayerThink (player_t *player)
 	if (player->SubtitleCounter > 0)
 	{
 		player->SubtitleCounter--;
-	}
-
-	// Bots do not think in freeze mode.
-	if (player->mo->Level->isFrozen() && player->Bot != nullptr)
-	{
-		return;
 	}
 
 	if (debugfile && !(player->cheats & CF_PREDICTING))

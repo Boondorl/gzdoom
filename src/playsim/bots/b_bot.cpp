@@ -32,284 +32,114 @@
 **---------------------------------------------------------------------------
 **
 */
-// Cajun bot
-//
-// [RH] Moved console commands out of d_netcmd.c (in Cajun source), because
-// they don't really belong there.
 
-#include "c_cvars.h"
-#include "c_dispatch.h"
 #include "b_bot.h"
-#include "g_game.h"
-#include "p_local.h"
-#include "cmdlib.h"
-#include "teaminfo.h"
-#include "d_net.h"
 #include "serializer_doom.h"
-#include "serialize_obj.h"
-#include "d_player.h"
-#include "filesystem.h"
-#include "vm.h"
-#include "g_levellocals.h"
-#include "d_main.h"
+#include "gi.h"
 
-IMPLEMENT_CLASS(DBot, false, true)
+IMPLEMENT_CLASS(DBot, false, false)
 
-IMPLEMENT_POINTERS_START(DBot)
-	IMPLEMENT_POINTER(dest)
-	IMPLEMENT_POINTER(prev)
-	IMPLEMENT_POINTER(enemy)
-	IMPLEMENT_POINTER(missile)
-	IMPLEMENT_POINTER(mate)
-	IMPLEMENT_POINTER(last_mate)
-IMPLEMENT_POINTERS_END
-
-DEFINE_FIELD(DBot, dest)
-
+// For Thinkers the default constructor isn't called at all, so these need to be initialized here.
 void DBot::Construct()
 {
-	Clear ();
+	_player = nullptr;
+	_botID = NAME_None;
+	Properties = {};
 }
 
-void DBot::Clear ()
+// This has to be cleared manually since the destructor never gets called on Thinkers.
+void DBot::OnDestroy()
 {
-	player = nullptr;
-	Angle = nullAngle;
-	dest = nullptr;
-	prev = nullptr;
-	enemy = nullptr;
-	missile = nullptr;
-	mate = nullptr;
-	last_mate = nullptr;
-	memset(&skill, 0, sizeof(skill));
-	t_active = 0;
-	t_respawn = 0;
-	t_strafe = 0;
-	t_react = 0;
-	t_fight = 0;
-	t_roam = 0;
-	t_rocket = 0;
-	first_shot = true;
-	sleft = false;
-	allround = false;
-	increase = false;
-	old = { 0, 0 };
+	Super::OnDestroy();
+
+	Properties.Clear();
 }
 
-FSerializer &Serialize(FSerializer &arc, const char *key, botskill_t &skill, botskill_t *def)
-{
-	if (arc.BeginObject(key))
-	{
-		arc("aiming", skill.aiming)
-			("perfection", skill.perfection)
-			("reaction", skill.reaction)
-			("isp", skill.isp)
-			.EndObject();
-	}
-	return arc;
-}
-
+// Player is serialized via player slot. Bots always refresh their player struct on load so saving it is not needed.
+// If a player currently occupies its desired slot, its player pointer will be null and an attempt
+// will be made to see if a new slot exists for it to be moved to.
 void DBot::Serialize(FSerializer &arc)
 {
-	Super::Serialize (arc);
+	Super::Serialize(arc);
 
-	arc("player", player)
-		("angle", Angle)
-		("dest", dest)
-		("prev", prev)
-		("enemy", enemy)
-		("missile", missile)
-		("mate", mate)
-		("lastmate", last_mate)
-		("skill", skill)
-		("active", t_active)
-		("respawn", t_respawn)
-		("strafe", t_strafe)
-		("react", t_react)
-		("fight", t_fight)
-		("roam", t_roam)
-		("rocket", t_rocket)
-		("firstshot", first_shot)
-		("sleft", sleft)
-		("allround", allround)
-		("increase", increase)
-		("old", old);
-}
-
-void DBot::Tick ()
-{
-	Super::Tick ();
-
-	if (player->mo == nullptr || Level->isFrozen())
+	if (arc.isWriting())
 	{
-		return;
+		int32_t pNum = Level->PlayerNum(_player);
+		arc("player", pNum)
+			("botid", _botID)
+			("properties", Properties);
 	}
-
-	BotThinkCycles.Clock();
-	Level->BotInfo.m_Thinking = true;
-	Think ();
-	Level->BotInfo.m_Thinking = false;
-	BotThinkCycles.Unclock();
-}
-
-CVAR (Int, bot_next_color, 11, 0)
-
-CCMD (addbot)
-{
-	if (gamestate != GS_LEVEL)
-	{
-		Printf ("Bots cannot be added when not in a game!\n");
-		return;
-	}
-
-	if (!players[consoleplayer].settings_controller)
-	{
-		Printf ("Only setting controllers can add bots\n");
-		return;
-	}
-
-	if (argv.argc() > 2)
-	{
-		Printf ("addbot [botname] : add a bot to the game\n");
-		return;
-	}
-
-	if (argv.argc() > 1)
-		primaryLevel->BotInfo.SpawnBot (argv[1]);
 	else
-		primaryLevel->BotInfo.SpawnBot (nullptr);
+	{
+		int32_t pNum = 0;
+		TMap<FName, FString> props = {};
+		arc("player", pNum)
+			("botid", _botID)
+			("properties", props);
+
+		auto def = DBotManager::BotDefinitions.CheckKey(_botID);
+		if (def == nullptr)
+			Properties = { props }; // Keep its properties and key just in case it needs to be removed.
+		else
+			Properties = { props, &def->GetProperties() };
+
+		// Make sure the player slot is actually the bot. If not, the bot will
+		// attempt to find a new slot if its player pointer is still null
+		// after loading. If no slot open, it'll just boot itself.
+		if (Level->Players[pNum]->Bot == this)
+			_player = Level->Players[pNum];
+	}
 }
 
-void FCajunMaster::ClearPlayer (int i, bool keepTeam)
+// Boon TODO: Figure these out
+constexpr player_t *DBot::GetPlayer() const
 {
-	if (players[i].mo)
-	{
-		players[i].mo->Destroy ();
-		players[i].mo = nullptr;
-	}
-	botinfo_t *bot = botinfo;
-	while (bot && stricmp (players[i].userinfo.GetName(), bot->Name.GetChars()))
-		bot = bot->next;
-	if (bot)
-	{
-		bot->inuse = BOTINUSE_No;
-		bot->lastteam = keepTeam ? players[i].userinfo.GetTeam() : TEAM_NONE;
-	}
-	if (players[i].Bot != nullptr)
-	{
-		players[i].Bot->Destroy ();
-		players[i].Bot = nullptr;
-	}
-	players[i].~player_t();
-	::new(&players[i]) player_t;
-	players[i].userinfo.Reset(i);
-	playeringame[i] = false;
+	return _player;
 }
 
-CCMD (removebots)
+constexpr FName DBot::GetBotID() const
 {
-	if (!players[consoleplayer].settings_controller)
-	{
-		Printf ("Only setting controllers can remove bots\n");
-		return;
-	}
-
-	Net_WriteByte (DEM_KILLBOTS);
+	return _botID;
 }
 
-CCMD (freeze)
+void DBot::Initialize(player_t* player, const FName& id)
 {
-	if (CheckCheatmode ())
+	if (_player != nullptr)
 		return;
 
-	if (netgame && !players[consoleplayer].settings_controller)
-	{
-		Printf ("Only setting controllers can use freeze mode\n");
-		return;
-	}
-
-	Net_WriteByte (DEM_GENERICCHEAT);
-	Net_WriteByte (CHT_FREEZE);
+	_player = player;
+	_botID = id;
+	Properties = { &DBotManager::BotDefinitions.CheckKey(_botID)->GetProperties() };
 }
 
-CCMD (listbots)
+// Called directly before its player's Think so commands can be properly set up
+void DBot::CallBotThink()
 {
-	botinfo_t *thebot = primaryLevel->BotInfo.botinfo;
-	int count = 0;
+	DBotManager::BotThinkCycles.Clock();
 
-	while (thebot)
+	IFVIRTUAL(DBot, BotThink)
 	{
-		Printf ("%s%s\n", thebot->Name.GetChars(), thebot->inuse == BOTINUSE_Yes ? " (active)" : "");
-		thebot = thebot->next;
-		count++;
+		VMValue params[] = { this };
+		VMCall(func, params, 1, nullptr, 0);
 	}
-	Printf ("> %d bots\n", count);
+
+	DBotManager::BotThinkCycles.Unclock();
 }
 
-// set the bot specific weapon information
-// This is intentionally not in the weapon definition anymore.
-
-BotInfoMap BotInfo;
-
-void InitBotStuff()
+void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running) const
 {
-	int lump;
-	int lastlump = 0;
-	while (-1 != (lump = fileSystem.FindLump("BOTSUPP", &lastlump)))
-	{
-		FScanner sc(lump);
-		sc.SetCMode(true);
-		while (sc.GetString())
-		{
-			PClassActor *wcls = PClass::FindActor(sc.String);
-			if (wcls != nullptr && wcls->IsDescendantOf(NAME_Weapon))
-			{
-				BotInfoData bi = {};
-				sc.MustGetStringName(",");
-				sc.MustGetNumber();
-				bi.MoveCombatDist = sc.Number;
-				while (sc.CheckString(","))
-				{
-					sc.MustGetString();
-					if (sc.Compare("BOT_REACTION_SKILL_THING"))
-					{
-						bi.flags |= BIF_BOT_REACTION_SKILL_THING;
-					}
-					else if (sc.Compare("BOT_EXPLOSIVE"))
-					{
-						bi.flags |= BIF_BOT_EXPLOSIVE;
-					}
-					else if (sc.Compare("BOT_BFG"))
-					{
-						bi.flags |= BIF_BOT_BFG;
-					}
-					else
-					{
-						PClassActor *cls = PClass::FindActor(sc.String);
-						bi.projectileType = cls;
-						if (cls == nullptr)
-						{
-							sc.ScriptError("Unknown token %s", sc.String);
-						}
-					}
-				}
-				BotInfo[wcls->TypeName] = bi;
-			}
-			else
-			{
-				sc.ScriptError("%s is not a weapon type", sc.String);
-			}
-		}
-	}
+	if (forward != MDIR_NO_CHANGE)
+		_player->cmd.ucmd.forwardmove = static_cast<int>(gameinfo.normforwardmove[running] * 256.0 * forward);
+	if (side != MDIR_NO_CHANGE)
+		_player->cmd.ucmd.sidemove = static_cast<int>(gameinfo.normsidemove[running] * 256.0 * side);
 
-	// Fixme: Export these, too.
-	static const char *warnbotmissiles[] = { "PlasmaBall", "Ripper", "HornRodFX1" };
-	for(unsigned i=0;i<countof(warnbotmissiles);i++)
-	{
-		AActor *a = GetDefaultByName (warnbotmissiles[i]);
-		if (a != nullptr)
-		{
-			a->flags3|=MF3_WARNBOT;
-		}
-	}
+	SetButtons(BT_SPEED | BT_RUN, running);
 }
+
+void DBot::SetButtons(const int cmds, const bool set) const
+{
+	if (set)
+		_player->cmd.ucmd.buttons |= cmds;
+	else
+		_player->cmd.ucmd.buttons &= ~cmds;
+};

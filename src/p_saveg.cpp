@@ -653,6 +653,8 @@ void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 				ReadMultiplePlayers(arc, numPlayers, numPlayersNow, skipload);
 			}
 			arc.EndArray();
+
+			// Boon TODO: Bots need to be checked for a valid player slot
 		}
 		if (!skipload && numPlayersNow > numPlayers)
 		{
@@ -856,16 +858,6 @@ void FLevelLocals::CopyPlayer(player_t *dst, player_t *src, const char *name)
 
 	if (dst->Bot != nullptr)
 	{
-		botinfo_t *thebot = BotInfo.botinfo;
-		while (thebot && thebot->Name.CompareNoCase(name))
-		{
-			thebot = thebot->next;
-		}
-		if (thebot)
-		{
-			thebot->inuse = BOTINUSE_Yes;
-		}
-		BotInfo.botnum++;
 		dst->userinfo.TransferFrom(uibackup2);
 	}
 	else

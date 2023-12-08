@@ -1146,7 +1146,7 @@ void D_Display ()
 void D_ErrorCleanup ()
 {
 	savegamerestore = false;
-	primaryLevel->BotInfo.RemoveAllBots (primaryLevel, true);
+	DBotManager::RemoveAllBots(primaryLevel);
 	D_QuitNetGame ();
 	if (demorecording || demoplayback)
 		G_CheckDemoStatus ();
@@ -3406,17 +3406,11 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	InitSpawnablesFromMapinfo();
 	PClassActor::StaticSetActorNums();
 
-	//Added by MC:
-	primaryLevel->BotInfo.getspawned.Clear();
+	DBotManager::ParseBotDefinitions();
 	
 	FString *args;
-	int argcount = Args->CheckParmList("-bots", &args);
-	for (int p = 0; p < argcount; ++p)
-	{
-		primaryLevel->BotInfo.getspawned.Push(args[p]);
-	}
-	primaryLevel->BotInfo.spawn_tries = 0;
-	primaryLevel->BotInfo.wanted_botnum = primaryLevel->BotInfo.getspawned.Size();
+	const int argCount = Args->CheckParmList("-bots", &args);
+	DBotManager::SetNamedBots(args, argCount);
 
 	if (!batchrun) Printf ("P_Init: Init Playloop state.\n");
 	if (StartScreen) StartScreen->LoadingStatus ("Init game engine", 0x3f);
