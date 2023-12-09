@@ -36,7 +36,10 @@
 #ifndef __B_BOT_H__
 #define __B_BOT_H__
 
-#include "g_levellocals.h"
+#include "r_defs.h"
+#include "dthinker.h"
+#include "stats.h"
+#include "c_cvars.h"
 #include "d_event.h"
 #include "vm.h"
 #include "m_random.h"

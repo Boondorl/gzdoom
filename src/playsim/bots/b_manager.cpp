@@ -33,7 +33,7 @@
 **
 */
 
-#include "b_bot.h"
+#include "g_levellocals.h" // b_bot.h is defined in here via d_player.h.
 #include "c_dispatch.h"
 #include "teaminfo.h"
 #include "d_net.h"

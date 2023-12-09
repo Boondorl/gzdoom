@@ -33,7 +33,10 @@
 **
 */
 
-#include "b_bot.h"
+#include "d_player.h" // b_bot.h is defined in here.
+#include "dsectoreffect.h"
+#include "a_floor.h"
+#include "a_ceiling.h"
 #include "p_enemy.h"
 #include "p_maputl.h"
 
@@ -44,6 +47,8 @@ static FRandom pr_botpickstrafedir("BotPickStrafeDir");
 // Borrow some movement tables from p_enemy.cpp.
 extern dirtype_t opposite[9];
 extern dirtype_t diags[4];
+
+bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
 
 // Checks if a sector contains a hazard.
 bool DBot::IsSectorDangerous(const sector_t* const sec)
