@@ -85,7 +85,7 @@ bool DBotManager::SpawnBot(FLevelLocals* const level, const FName& name)
 	{
 		if (BotDefinitions.CheckKey(name) == nullptr)
 		{
-   		 	Printf("Couldn't find bot %s\n", name);
+   		 	Printf("Couldn't find bot %s\n", name.GetChars());
 			return false;
 		}
 	}
@@ -127,7 +127,7 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	const auto bot = BotDefinitions.CheckKey(botID);
 	if (bot == nullptr)
 	{
-		Printf("Bot %s does not exist\n", botID);
+		Printf("Bot %s does not exist\n", botID.GetChars());
 		return false;
 	}
 
@@ -388,7 +388,7 @@ CCMD(listbots)
 			}
 		}
 
-		Printf("%s%s\n", pair->Key, i < MAXPLAYERS ? " (active)" : "");
+		Printf("%s%s\n", pair->Key.GetChars(), i < MAXPLAYERS ? " (active)" : "");
 	}
 
 	Printf("> %d bots\n> %d bots active\n", DBotManager::BotDefinitions.CountUsed(), DBotManager::CountBots(primaryLevel));
