@@ -33,10 +33,7 @@
 **
 */
 
-#include "d_player.h" // b_bot.h is defined in here.
-#include "dsectoreffect.h"
-#include "a_floor.h"
-#include "a_ceiling.h"
+#include "actorinlines.h" // b_bot.h is defined in here via d_player.h.
 #include "p_enemy.h"
 #include "p_maputl.h"
 
