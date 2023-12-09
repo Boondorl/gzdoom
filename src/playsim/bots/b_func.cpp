@@ -39,7 +39,7 @@
 int P_GetRealMaxHealth(AActor* actor, int max);
 
 // Check to see if the bot is capable of picking up a given item.
-bool DBot::IsValidItem(AActor* const item) const
+bool DBot::IsValidItem(AActor* const item)
 {
 	// Not something that can be picked up.
 	if (item == nullptr || !(item->flags & MF_SPECIAL) || !item->IsKindOf(NAME_Inventory))
@@ -103,7 +103,7 @@ bool DBot::IsValidItem(AActor* const item) const
 }
 
 // Simple check to see if a given Actor is within view of the bot.
-bool DBot::IsActorInView(AActor* const mo, const DAngle& fov) const
+bool DBot::IsActorInView(AActor* const mo, const DAngle& fov)
 {
 	return mo != nullptr && fov > nullAngle
 			&& (fov >= DAngle360 || absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= fov * 0.5)
@@ -111,13 +111,13 @@ bool DBot::IsActorInView(AActor* const mo, const DAngle& fov) const
 }
 
 // Aim the bots pitch towards the Actor.
-void DBot::PitchTowardsActor(AActor* const target) const
+void DBot::PitchTowardsActor(AActor* const target)
 {
 	_player->mo->Angles.Pitch = target != nullptr ? _player->mo->Vec3To(target).Pitch() : nullAngle;
 }
 
 // Sets the bot's FriendPlayer value to the player index it wants to stick with.
-void DBot::FindPartner() const
+void DBot::FindPartner()
 {
 	// Check if current partner is still alive.
 	unsigned int newFriend = _player->mo->FriendPlayer;
@@ -149,7 +149,7 @@ void DBot::FindPartner() const
 }
 
 // Attempts to set the bot's target. If not in deathmatch mode, tries to get a monster within 20 blockmap units.
-void DBot::FindEnemy(const DAngle& fov) const
+void DBot::FindEnemy(const DAngle& fov)
 {
 	const DAngle viewFov = fov <= nullAngle ? DAngle360 : fov;
 	if (!deathmatch)
@@ -188,7 +188,7 @@ void DBot::FindEnemy(const DAngle& fov) const
 // Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
 // of the Actor type is intentionally kept lazy since more robust solutions can be written from
 // ZScript.
-bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance, const double maxDistance) const
+bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance, const double maxDistance)
 {
 	if (_player->ReadyWeapon == nullptr)
 		return false;

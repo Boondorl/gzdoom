@@ -65,9 +65,10 @@ void DBot::Serialize(FSerializer &arc)
 	if (arc.isWriting())
 	{
 		int32_t pNum = Level->PlayerNum(_player);
+		TMap<FName, FString> props = Properties.GetProperties();
 		arc("player", pNum)
 			("botid", _botID)
-			("properties", Properties);
+			("properties", props);
 	}
 	else
 	{
@@ -91,12 +92,12 @@ void DBot::Serialize(FSerializer &arc)
 	}
 }
 
-player_t* DBot::GetPlayer() const
+constexpr player_t* DBot::GetPlayer() const
 {
 	return _player;
 }
 
-const FName& DBot::GetBotID() const
+constexpr const FName& DBot::GetBotID() const
 {
 	return _botID;
 }
@@ -115,7 +116,7 @@ void DBot::CallBotThink()
 	DBotManager::BotThinkCycles.Unclock();
 }
 
-void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running) const
+void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running)
 {
 	if (forward != MDIR_NO_CHANGE)
 		_player->cmd.ucmd.forwardmove = static_cast<int>(gameinfo.normforwardmove[running] * 256.0 * forward);
@@ -125,7 +126,7 @@ void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side
 	SetButtons(BT_SPEED | BT_RUN, running);
 }
 
-void DBot::SetButtons(const int cmds, const bool set) const
+void DBot::SetButtons(const int cmds, const bool set)
 {
 	if (set)
 		_player->cmd.ucmd.buttons |= cmds;

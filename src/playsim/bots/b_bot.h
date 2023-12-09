@@ -105,7 +105,7 @@ public:
 		return _properties;
 	}
 
-	constexpr bool HasProperty(const FName& key) const
+	bool HasProperty(const FName& key) const
 	{
 		return _properties.CheckKey(key) != nullptr;
 	}
@@ -139,25 +139,25 @@ public:
 		_properties.Insert(key, val);
 	}
 
-	constexpr const FString& GetString(const FName& key, const FString& def = {}) const
+	const FString& GetString(const FName& key, const FString& def = {}) const
 	{
 		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? *value : def;
 	}
 
-	constexpr bool GetBool(const FName& key, const bool def = false) const
+	bool GetBool(const FName& key, const bool def = false) const
 	{
 		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? static_cast<bool>(value->ToLong()) : def;
 	}
 
-	constexpr int GetInt(const FName& key, const int def = 0) const
+	int GetInt(const FName& key, const int def = 0) const
 	{
 		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? static_cast<int>(value->ToLong()) : def;
 	}
 
-	constexpr double GetDouble(const FName& key, const double def = 0.0) const
+	double GetDouble(const FName& key, const double def = 0.0) const
 	{
 		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? value->ToDouble() : def;
@@ -193,7 +193,7 @@ public:
 
 	// Note: This is only meant to be used directly with the function that parses
 	// the user info as a byte stream.
-	constexpr uint8_t* GetUserInfo() const
+	uint8_t* GetUserInfo() const
 	{
 		return reinterpret_cast<uint8_t*>(const_cast<char*>(_userInfo.GetChars()));
 	}
@@ -223,22 +223,22 @@ public:
 		_properties.SetDouble(key, value);
 	}
 
-	constexpr const FString& GetString(const FName& key, const FString& def = {}) const
+	const FString& GetString(const FName& key, const FString& def = {}) const
 	{
 		return _properties.GetString(key, def);
 	}
 
-	constexpr bool GetBool(const FName& key, const bool def = false) const
+	bool GetBool(const FName& key, const bool def = false) const
 	{
 		return _properties.GetBool(key, def);
 	}
 
-	constexpr int GetInt(const FName& key, const int def = 0) const
+	int GetInt(const FName& key, const int def = 0) const
 	{
 		return _properties.GetInt(key, def);
 	}
 
-	constexpr double GetDouble(const FName& key, const double def = 0.0) const
+	double GetDouble(const FName& key, const double def = 0.0) const
 	{
 		return _properties.GetDouble(key, def);
 	}
@@ -299,22 +299,22 @@ public:
 	
 	// Boon TODO: Clean up all these const functions
 	// Boon TODO: nullptr checks since these will be exported
-	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle90) const;	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* const target) const;								// Checks to see if a valid movement can be made towards the target.
-	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0) const; // Checks if anything is blocking the ReadyWeapon missile's path.
-	void FindEnemy(const DAngle& fov = nullAngle) const;				// Tries to find a target.
-	void FindPartner() const;											// Looks for a player to stick near, bot or real.
-	bool IsValidItem(AActor* const item) const;								// Checks to see if the item is able to be picked up.
-	void PitchTowardsActor(AActor* const target) const;						// Aim the bot's pitch towards the target.
-	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false) const; // Same as CheckPosition but prevent picking up items.
-	void Roam() const;													// Attempt to move towards the boat's goal similar to how monsters move.
-	bool CheckMove(const DVector2& pos) const;							// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
-	bool Move() const;													// Check to see if a movement is valid in the current moveDir.
-	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE) const; // Picks a valid strafe direction to move. Can also jump.
-	bool TryWalk() const;												// Same as Move but also sets a turn cool down when moving.
-	void NewChaseDir() const;											// Attempts to get a new direction to move towards the bot's goal.
-	void SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running) const;	// Sets the forwardmove/sidemove commands.
-	void SetButtons(const int cmd, const bool set) const;				// Sets the button commands.
+	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle90);	// Check if the bot has sight of the Actor within a view cone.
+	bool CanReach(AActor* const target);								// Checks to see if a valid movement can be made towards the target.
+	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0); // Checks if anything is blocking the ReadyWeapon missile's path.
+	void FindEnemy(const DAngle& fov = nullAngle);				// Tries to find a target.
+	void FindPartner();											// Looks for a player to stick near, bot or real.
+	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
+	void PitchTowardsActor(AActor* const target);						// Aim the bot's pitch towards the target.
+	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
+	void Roam();													// Attempt to move towards the boat's goal similar to how monsters move.
+	bool CheckMove(const DVector2& pos);							// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
+	bool Move();													// Check to see if a movement is valid in the current moveDir.
+	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE); // Picks a valid strafe direction to move. Can also jump.
+	bool TryWalk();												// Same as Move but also sets a turn cool down when moving.
+	void NewChaseDir();											// Attempts to get a new direction to move towards the bot's goal.
+	void SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running);	// Sets the forwardmove/sidemove commands.
+	void SetButtons(const int cmd, const bool set);				// Sets the button commands.
 };
 
 #endif

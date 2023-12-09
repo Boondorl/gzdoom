@@ -27,7 +27,6 @@
 #include "p_local.h"
 #include "p_effect.h"
 #include "c_console.h"
-#include "b_bot.h"
 #include "doomstat.h"
 #include "sbar.h"
 #include "r_data/r_interpolate.h"

@@ -70,7 +70,7 @@ bool DBot::IsSectorDangerous(const sector_t* const sec)
 
 // Make sure that bots can't pick up any items when checking their position since they're
 // considered actual players and ZDoom throws every interaction inside of P_CheckPosition...
-bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly) const
+bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly)
 {
     const ActorFlags savedFlags = _player->mo->flags;
     _player->mo->flags &= ~MF_PICKUP;
@@ -82,7 +82,7 @@ bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool
 // Checks to see if the bot is capable of reaching a target actor taking
 // level geometry into account. This is mostly for stepping up stairs and
 // avoiding running directly into hazards, but won't take large dropoffs into account.
-bool DBot::CanReach(AActor* const target) const
+bool DBot::CanReach(AActor* const target)
 {
     if (target == nullptr || _player->mo == target
         || target->ceilingz - target->floorz < _player->mo->Height)
@@ -175,7 +175,7 @@ bool DBot::CanReach(AActor* const target) const
 
 // Attempts to move towards the bot's goal. Will automatically update
 // the player's movedir and yaw to the desired direction.
-void DBot::Roam() const
+void DBot::Roam()
 {
 	if (CanReach(_player->mo->goal))
 	{
@@ -199,7 +199,7 @@ void DBot::Roam() const
 
 // Check to ensure the spot ahead of the bot is a valid place that can be walked. Tries
 // to prevent walking over ledges and will automatically jump as well.
-bool DBot::CheckMove(const DVector2& pos) const
+bool DBot::CheckMove(const DVector2& pos)
 {
     // No jump check since the bot will just warp up ledges anyway.
     if (_player->mo->flags & MF_NOCLIP)
@@ -225,7 +225,7 @@ bool DBot::CheckMove(const DVector2& pos) const
 }
 
 // Try and move the bot in its current movedir.
-bool DBot::Move() const
+bool DBot::Move()
 {
 	if (_player->mo->movedir >= DI_NODIR)
 	{
@@ -243,7 +243,7 @@ bool DBot::Move() const
 
 // Similar to Move() but will also set a cool down on the random turning if it could move.
 // Only used when trying to pick a new direction to move.
-bool DBot::TryWalk() const
+bool DBot::TryWalk()
 {
     if (!Move())
         return false;
@@ -252,7 +252,7 @@ bool DBot::TryWalk() const
     return true;
 }
 
-void DBot::NewChaseDir() const
+void DBot::NewChaseDir()
 {
     if (_player->mo->goal == nullptr)
 		return;
@@ -353,7 +353,7 @@ void DBot::NewChaseDir() const
 }
 
 // Choose whether to strafe left or right. Will also allow for jumps in those directions.
-EBotMoveDirection DBot::PickStrafeDirection(const EBotMoveDirection startDir) const
+EBotMoveDirection DBot::PickStrafeDirection(const EBotMoveDirection startDir)
 {
     const DVector2 facing = _player->mo->Angles.Yaw.ToVector(_player->mo->radius * 2.0);
 

@@ -70,7 +70,6 @@
 #include "hu_stuff.h"
 #include "v_video.h"
 #include "c_dispatch.h"
-#include "b_bot.h"	//Added by MC:
 #include "a_sharedglobal.h"
 #include "gi.h"
 #include "sbar.h"

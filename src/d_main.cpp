@@ -117,6 +117,7 @@
 #include "screenjob.h"
 #include "startscreen.h"
 #include "shiftstate.h"
+#include "b_bot.h"
 
 #ifdef __unix__
 #include "i_system.h"  // for SHARE_DIR

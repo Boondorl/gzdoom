@@ -45,6 +45,7 @@
 #include "v_video.h"
 #include "g_cvars.h"
 #include "d_main.h"
+#include "b_bot.h"
 
 static int ThinkCount;
 static cycle_t ThinkCycles;

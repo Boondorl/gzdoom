@@ -43,7 +43,6 @@
 
 #include "a_sharedglobal.h"
 #include "gi.h"
-#include "b_bot.h"
 #include "serializer.h"
 #include "g_levellocals.h"
 #include "a_decalfx.h"

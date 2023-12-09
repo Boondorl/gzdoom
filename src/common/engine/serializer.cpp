@@ -1521,7 +1521,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, TMap<FName, FString>& 
 		if (value.CountUsed() && arc.BeginObject(key))
 		{
 			TMap<FName, FString>::Pair* pair = nullptr;
-			TMap<FName, FString>::ConstIterator it = { value };
+			TMap<FName, FString>::Iterator it = { value };
 			while (it.NextPair(pair))
 				Serialize(arc, pair->Key.GetChars(), pair->Value, defval != nullptr ? defval->CheckKey(pair->Key) : nullptr);
 

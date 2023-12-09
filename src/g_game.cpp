@@ -91,6 +91,7 @@
 #include "screenjob.h"
 #include "i_interface.h"
 #include "fs_findfile.h"
+#include "b_bot.h"
 
 
 static FRandom pr_dmspawn ("DMSpawn");
