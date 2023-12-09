@@ -36,7 +36,7 @@
 #include "g_levellocals.h" // b_bot.h is defined in here via d_player.h.
 #include "p_linetracedata.h"
 
-int P_GetRealMaxHealth(AActor* actor, int max);
+extern int P_GetRealMaxHealth(AActor* actor, int max);
 
 // Check to see if the bot is capable of picking up a given item.
 bool DBot::IsValidItem(AActor* const item)

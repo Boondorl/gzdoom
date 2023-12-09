@@ -92,16 +92,6 @@ void DBot::Serialize(FSerializer &arc)
 	}
 }
 
-constexpr player_t* DBot::GetPlayer() const
-{
-	return _player;
-}
-
-constexpr const FName& DBot::GetBotID() const
-{
-	return _botID;
-}
-
 // Called directly before its player's Think so commands can be properly set up
 void DBot::CallBotThink()
 {

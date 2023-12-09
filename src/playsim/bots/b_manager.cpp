@@ -41,7 +41,7 @@
 
 static FRandom pr_botspawn("BotSpawn");
 
-void G_DoPlayerPop(int playernum);
+extern void G_DoPlayerPop(int playernum);
 
 // Sends out a network message telling clients to spawn a bot. Name
 // is optional and, if not specified, a random one is chosen. This

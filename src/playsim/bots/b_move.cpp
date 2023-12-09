@@ -48,7 +48,7 @@ static FRandom pr_botpickstrafedir("BotPickStrafeDir");
 extern dirtype_t opposite[9];
 extern dirtype_t diags[4];
 
-bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
+extern bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
 
 // Checks if a sector contains a hazard.
 bool DBot::IsSectorDangerous(const sector_t* const sec)
