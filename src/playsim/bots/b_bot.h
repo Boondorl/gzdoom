@@ -188,7 +188,7 @@ public:
 		TMap<FName, FString>::ConstPair* pair = nullptr;
 		TMap<FName, FString>::ConstIterator it = { _properties.GetProperties() };
 		while (it.NextPair(pair))
-			_userInfo.AppendFormat("%s\\%s\\", pair->Key, pair->Value);
+			_userInfo.AppendFormat("%s\\%s\\", pair->Key, pair->Value.GetChars());
 	}
 
 	// Note: This is only meant to be used directly with the function that parses
