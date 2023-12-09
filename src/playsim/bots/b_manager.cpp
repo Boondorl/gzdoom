@@ -388,7 +388,7 @@ CCMD(listbots)
 			}
 		}
 
-		Printf("%s%s\n", pair->Key, i < MAXPLAYERS ? " (active)" : FString{});
+		Printf("%s%s\n", pair->Key, i < MAXPLAYERS ? " (active)" : "");
 	}
 
 	Printf("> %d bots\n> %d bots active\n", DBotManager::BotDefinitions.CountUsed(), DBotManager::CountBots(primaryLevel));
