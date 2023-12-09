@@ -620,7 +620,7 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 		{
 			IFVIRTUALPTR(player->Bot, DBot, BotDied)
 			{
-				VMValue params[] = { (DObject*)player->Bot, source, inflictor, dmgflags, MeansOfDeath.GetIndex() };
+				VMValue params[] = { player->Bot.Get(), source, inflictor, dmgflags, MeansOfDeath.GetIndex() };
 				VMCall(func, params, 5, nullptr, 0);
 			}
 		}

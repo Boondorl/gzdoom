@@ -39,25 +39,25 @@
 int P_GetRealMaxHealth(AActor* actor, int max);
 
 // Check to see if the bot is capable of picking up a given item.
-bool DBot::IsValidItem(AActor* item) const
+bool DBot::IsValidItem(AActor* const item) const
 {
 	// Not something that can be picked up.
-	if (item == nullptr || !item->IsKindOf(NAME_Inventory) || !(item->flags & MF_SPECIAL))
+	if (item == nullptr || !(item->flags & MF_SPECIAL) || !item->IsKindOf(NAME_Inventory))
 		return false;
 
 	constexpr int bIsHealth = 1 << 22;
 	if (item->IsKindOf(NAME_Weapon))
 	{
-		auto heldWeapon = _player->mo->FindInventory(item->GetClass());
+		const auto heldWeapon = _player->mo->FindInventory(item->GetClass());
 		if (heldWeapon != nullptr)
 		{
 			if ((!alwaysapplydmflags && !deathmatch) || (dmflags & DF_WEAPONS_STAY))
 				return false;
 
-			auto ammo1 = heldWeapon->PointerVar<AActor>(NAME_Ammo1);
-			auto ammo2 = heldWeapon->PointerVar<AActor>(NAME_Ammo2);
-			if ((ammo1 == nullptr || ammo1->IntVar(NAME_Amount) >= ammo1->IntVar(NAME_MaxAmount)) &&
-				(ammo2 == nullptr || ammo2->IntVar(NAME_Amount) >= ammo2->IntVar(NAME_MaxAmount)))
+			const auto ammo1 = heldWeapon->PointerVar<AActor>(NAME_Ammo1);
+			const auto ammo2 = heldWeapon->PointerVar<AActor>(NAME_Ammo2);
+			if ((ammo1 == nullptr || ammo1->IntVar(NAME_Amount) >= ammo1->IntVar(NAME_MaxAmount))
+				&& (ammo2 == nullptr || ammo2->IntVar(NAME_Amount) >= ammo2->IntVar(NAME_MaxAmount)))
 			{
 				return false;
 			}
@@ -70,10 +70,12 @@ bool DBot::IsValidItem(AActor* item) const
 		PClassActor* parent = nullptr;
 		IFVIRTUALPTRNAME(item, NAME_Ammo, GetParentAmmo)
 		{
-			VMValue params = { item };
-			VMReturn ret = { (void**)parent };
+			void* retVal = nullptr;
+			VMValue params[] = { item };
+			VMReturn ret[] = { &retVal };
 
-			VMCall(func, &params, 1, &ret, 1);
+			VMCall(func, params, 1, ret, 1);
+			parent = static_cast<PClassActor*>(retVal);
 		}
 
 		if (parent != nullptr)
@@ -85,9 +87,9 @@ bool DBot::IsValidItem(AActor* item) const
 	else if (item->IntVar(NAME_ItemFlags) & bIsHealth) // Boon TODO: Make sure this works
 	{
 		// Unfortunately this has to be checked manually since Megaspheres are horribly set up.
-		auto testItem = item->GetClass()->TypeName == NAME_Megasphere
-			? GetDefaultByName(NAME_MegasphereHealth)
-			: item;
+		const auto testItem = item->GetClass()->TypeName == NAME_Megasphere
+								? GetDefaultByName(NAME_MegasphereHealth)
+								: item;
 
 		if (testItem != nullptr)
 		{
@@ -101,7 +103,7 @@ bool DBot::IsValidItem(AActor* item) const
 }
 
 // Simple check to see if a given Actor is within view of the bot.
-bool DBot::IsActorInView(AActor *mo, const DAngle &fov) const
+bool DBot::IsActorInView(AActor* const mo, const DAngle& fov) const
 {
 	return mo != nullptr && fov > nullAngle
 			&& (fov >= DAngle360 || absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= fov * 0.5)
@@ -109,7 +111,7 @@ bool DBot::IsActorInView(AActor *mo, const DAngle &fov) const
 }
 
 // Aim the bots pitch towards the Actor.
-void DBot::PitchTowardsActor(AActor* target) const
+void DBot::PitchTowardsActor(AActor* const target) const
 {
 	_player->mo->Angles.Pitch = target != nullptr ? _player->mo->Vec3To(target).Pitch() : nullAngle;
 }
@@ -128,13 +130,13 @@ void DBot::FindPartner() const
 	double closest = std::numeric_limits<double>::infinity();
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
-		AActor *client = Level->Players[i]->mo;
+		AActor* const client = Level->Players[i]->mo;
 		if (Level->PlayerInGame(i)
 			&& _player->mo != client
 			&& Level->Players[i]->health > 0
 			&& (!deathmatch || ((_player->health / 2) <= Level->Players[i]->health && _player->mo->IsTeammate(client))))
 		{
-			double dist = _player->mo->Distance3DSquared(client);
+			const double dist = _player->mo->Distance3DSquared(client);
 			if (dist < closest && P_CheckSight(_player->mo, client, SF_IGNOREVISIBILITY))
 			{
 				closest = dist;
@@ -147,7 +149,7 @@ void DBot::FindPartner() const
 }
 
 // Attempts to set the bot's target. If not in deathmatch mode, tries to get a monster within 20 blockmap units.
-void DBot::FindEnemy(const DAngle &fov) const
+void DBot::FindEnemy(const DAngle& fov) const
 {
 	const DAngle viewFov = fov <= nullAngle ? DAngle360 : fov;
 	if (!deathmatch)
@@ -163,13 +165,13 @@ void DBot::FindEnemy(const DAngle &fov) const
 	double closest = std::numeric_limits<double>::infinity();
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
-		AActor *client = Level->Players[i]->mo;
+		AActor* const client = Level->Players[i]->mo;
 		if (Level->PlayerInGame(i)
 			&& _player->mo != client
 			&& Level->Players[i]->health > 0
 			&& !_player->mo->IsTeammate(client))
 		{
-			double dist = _player->mo->Distance3DSquared(client);
+			const double dist = _player->mo->Distance3DSquared(client);
 			if (dist < closest
 				&& (dist <= DarknessRange || client->Sector->GetLightLevel() >= DarknessThreshold)
 				&& IsActorInView(client, viewFov))
@@ -186,7 +188,7 @@ void DBot::FindEnemy(const DAngle &fov) const
 // Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
 // of the Actor type is intentionally kept lazy since more robust solutions can be written from
 // ZScript.
-bool DBot::CheckMissileTrajectory(const DVector3 &dest, const double minDistance, const double maxDistance) const
+bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance, const double maxDistance) const
 {
 	if (_player->ReadyWeapon == nullptr)
 		return false;
@@ -201,7 +203,7 @@ bool DBot::CheckMissileTrajectory(const DVector3 &dest, const double minDistance
 		return false;
 
 	// Don't bother testing against missiles that don't move.
-	auto def = GetDefaultByType(missileType);
+	const auto def = GetDefaultByType(missileType);
 	if (def->Speed < EQUAL_EPSILON)
 		return false;
 

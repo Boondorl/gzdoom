@@ -40,11 +40,11 @@
 IMPLEMENT_CLASS(DBot, false, false)
 
 // For Thinkers the default constructor isn't called at all, so these need to be initialized here.
-void DBot::Construct()
+void DBot::Construct(player_t* const player, const FName& botID)
 {
-	_player = nullptr;
-	_botID = NAME_None;
-	Properties = {};
+	_player = player;
+	_botID = botID;
+	Properties = { &DBotManager::BotDefinitions.CheckKey(botID)->GetProperties() };
 }
 
 // This has to be cleared manually since the destructor never gets called on Thinkers.
@@ -77,7 +77,7 @@ void DBot::Serialize(FSerializer &arc)
 			("botid", _botID)
 			("properties", props);
 
-		auto def = DBotManager::BotDefinitions.CheckKey(_botID);
+		const FBotDefinition* const def = DBotManager::BotDefinitions.CheckKey(_botID);
 		if (def == nullptr)
 			Properties = { props }; // Keep its properties and key just in case it needs to be removed.
 		else
@@ -91,25 +91,14 @@ void DBot::Serialize(FSerializer &arc)
 	}
 }
 
-// Boon TODO: Figure these out
-constexpr player_t *DBot::GetPlayer() const
+player_t* DBot::GetPlayer() const
 {
 	return _player;
 }
 
-constexpr FName DBot::GetBotID() const
+const FName& DBot::GetBotID() const
 {
 	return _botID;
-}
-
-void DBot::Initialize(player_t* player, const FName& id)
-{
-	if (_player != nullptr)
-		return;
-
-	_player = player;
-	_botID = id;
-	Properties = { &DBotManager::BotDefinitions.CheckKey(_botID)->GetProperties() };
 }
 
 // Called directly before its player's Think so commands can be properly set up

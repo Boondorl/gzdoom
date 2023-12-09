@@ -46,21 +46,21 @@ extern dirtype_t opposite[9];
 extern dirtype_t diags[4];
 
 // Checks if a sector contains a hazard.
-bool DBot::IsSectorDangerous(const sector_t* sec)
+bool DBot::IsSectorDangerous(const sector_t* const sec)
 {
     if (sec->damageamount > 0)
         return true;
 
     if (sec->floordata != nullptr && sec->floordata->IsKindOf(RUNTIME_CLASS(DFloor)))
     {
-        auto floor = dynamic_cast<DFloor*>(sec->floordata.Get());
+        const DFloor* const floor = dynamic_cast<DFloor*>(sec->floordata.Get());
         if (floor->m_Crush > 0)
             return true;
     }
 
     if (sec->ceilingdata != nullptr && sec->ceilingdata->IsKindOf(RUNTIME_CLASS(DCeiling)))
     {
-        auto ceiling = dynamic_cast<DCeiling*>(sec->ceilingdata.Get());
+        const DCeiling* const ceiling = dynamic_cast<DCeiling*>(sec->ceilingdata.Get());
         if (ceiling->getCrush() > 0)
             return true;
     }
@@ -82,7 +82,7 @@ bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool
 // Checks to see if the bot is capable of reaching a target actor taking
 // level geometry into account. This is mostly for stepping up stairs and
 // avoiding running directly into hazards, but won't take large dropoffs into account.
-bool DBot::CanReach(AActor* target) const
+bool DBot::CanReach(AActor* const target) const
 {
     if (target == nullptr || _player->mo == target
         || target->ceilingz - target->floorz < _player->mo->Height)
@@ -114,7 +114,7 @@ bool DBot::CanReach(AActor* target) const
     {
         if (in->isaline)
         {
-            const line_t* line = in->d.line;
+            const line_t* const line = in->d.line;
             if (!(line->flags & ML_TWOSIDED) || (line->flags & (ML_BLOCKING | ML_BLOCKEVERYTHING | ML_BLOCK_PLAYERS)))
             {
                 return false;
@@ -122,7 +122,7 @@ bool DBot::CanReach(AActor* target) const
             else
             {
                 //Determine if going to use backsector/frontsector.
-                sector_t* sec = (line->backsector == prevSec) ? line->frontsector : line->backsector;
+                sector_t* const sec = (line->backsector == prevSec) ? line->frontsector : line->backsector;
                 if (doHazardCheck && IsSectorDangerous(sec))
                     return false;
 
@@ -145,7 +145,7 @@ bool DBot::CanReach(AActor* target) const
         }
         else
         {
-            AActor* thing = in->d.thing;
+            AActor* const thing = in->d.thing;
             if (thing == _player->mo)
                 continue;
 
@@ -184,8 +184,8 @@ void DBot::Roam() const
 	else if (_player->mo->movedir < DI_NODIR)
 	{
 		// No point doing this with floating point angles...
-		unsigned int angle = _player->mo->Angles.Yaw.BAMs() & static_cast<unsigned int>(7 << 29);
-		int delta = angle - (_player->mo->movedir << 29);
+		const unsigned int angle = _player->mo->Angles.Yaw.BAMs() & static_cast<unsigned int>(7 << 29);
+		const int delta = angle - (_player->mo->movedir << 29);
 
 		if (delta > 0)
             _player->mo->Angles.Yaw -= DAngle45;
@@ -206,7 +206,7 @@ bool DBot::CheckMove(const DVector2& pos) const
         return true;
 
     constexpr double JumpHeight = 8.0;
-    FCheckPosition tm;
+    FCheckPosition tm = {};
     if (!FakeCheckPosition(pos, tm)
         || tm.ceilingz - tm.floorz < _player->mo->Height
         || tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight + JumpHeight
@@ -261,7 +261,7 @@ void DBot::NewChaseDir() const
     const dirtype_t backDir = opposite[curDir];
 
 	const DVector2 delta = _player->mo->Vec2To(_player->mo->goal);
-    dirtype_t d[] { DI_NODIR, DI_NODIR, DI_NODIR };
+    dirtype_t d[] = { DI_NODIR, DI_NODIR, DI_NODIR };
     if (delta.X > 10.0)
         d[1] = DI_EAST;
     else if (delta.X < -10.0)
@@ -283,7 +283,7 @@ void DBot::NewChaseDir() const
     // Try a more indirect path.
 	if (fabs(delta.Y) > fabs(delta.X) || pr_botnewchasedir() > 200)
 	{
-        dirtype_t temp = d[1];
+        const dirtype_t temp = d[1];
 		d[1] = d[2];
 		d[2] = temp;
 	}

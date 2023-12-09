@@ -41,11 +41,13 @@
 
 static FRandom pr_botspawn("BotSpawn");
 
+void G_DoPlayerPop(int playernum);
+
 // Sends out a network message telling clients to spawn a bot. Name
 // is optional and, if not specified, a random one is chosen. This
 // can include duplicates. This is really only meant to be called
 // from the console command, but is network safe.
-bool DBotManager::SpawnBot(FLevelLocals* level, const FName &name)
+bool DBotManager::SpawnBot(FLevelLocals* const level, const FName& name)
 {
 	if (consoleplayer != Net_Arbitrator)
 	{
@@ -91,8 +93,8 @@ bool DBotManager::SpawnBot(FLevelLocals* level, const FName &name)
 	{
 		// Spawn a random bot if no name given.
 		int r = pr_botspawn() % BotDefinitions.CountUsed();
-		TMap<FName, FBotDefinition>::ConstPair* pair;
-		TMap<FName, FBotDefinition>::ConstIterator it { BotDefinitions };
+		TMap<FName, FBotDefinition>::ConstPair* pair = nullptr;
+		TMap<FName, FBotDefinition>::ConstIterator it = { BotDefinitions };
 		while (it.NextPair(pair) && r-- > 0) {}
 		key = pair->Key;
 	}
@@ -108,7 +110,7 @@ bool DBotManager::SpawnBot(FLevelLocals* level, const FName &name)
 // Attempts to add a bot to the given level. This is really only meant to be called when
 // receiving the network message to spawn a bot. SpawnBot should be used instead if network
 // safety is needed.
-bool DBotManager::TryAddBot(FLevelLocals *level, const unsigned int playerIndex, const FName& botID)
+bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int playerIndex, const FName& botID)
 {
 	if (gamestate != GS_LEVEL)
 	{
@@ -122,7 +124,7 @@ bool DBotManager::TryAddBot(FLevelLocals *level, const unsigned int playerIndex,
 		return false;
 	}
 
-	auto bot = BotDefinitions.CheckKey(botID);
+	const auto bot = BotDefinitions.CheckKey(botID);
 	if (bot == nullptr)
 	{
 		Printf("Bot %s does not exist\n", botID);
@@ -130,13 +132,12 @@ bool DBotManager::TryAddBot(FLevelLocals *level, const unsigned int playerIndex,
 	}
 
 	bot->GenerateUserInfo(); // This can change to account for team.
-	D_ReadUserInfoStrings(playerIndex, (uint8_t **)bot->GetUserInfo(), false);
+	uint8_t* stream = bot->GetUserInfo();
+	D_ReadUserInfoStrings(playerIndex, &stream, false);
 
 	multiplayer = true; // Count this as multiplayer, even if it's not a netgame.
 	playeringame[playerIndex] = true;
-	level->Players[playerIndex]->Bot = level->CreateThinker<DBot>();
-	level->Players[playerIndex]->Bot->Initialize(level->Players[playerIndex], botID);
-	level->Players[playerIndex]->mo = nullptr;
+	level->Players[playerIndex]->Bot = level->CreateThinker<DBot>(level->Players[playerIndex], botID);
 	level->Players[playerIndex]->playerstate = PST_ENTER;
 
 	if (teamplay)
@@ -150,22 +151,23 @@ bool DBotManager::TryAddBot(FLevelLocals *level, const unsigned int playerIndex,
 	return true;
 }
 
-void DBotManager::RemoveBot(FLevelLocals* level, const unsigned int botNum)
+void DBotManager::RemoveBot(FLevelLocals* const level, const unsigned int botNum)
 {
 	if (level->Players[botNum]->Bot == nullptr)
 		return;
 
 	// Make sure they stay on the same team next time they're added again.
-	auto bot = BotDefinitions.CheckKey(level->Players[botNum]->Bot->GetBotID());
+	const auto bot = BotDefinitions.CheckKey(level->Players[botNum]->Bot->GetBotID());
 	int team = level->Players[botNum]->userinfo.GetTeam();
 	if (!TeamLibrary.IsValidTeam(team))
 		team = bot->GetInt("Team", TEAM_NONE);
 
 	bot->SetInt("Team", team);
 	level->Players[botNum]->playerstate = PST_GONE;
+	G_DoPlayerPop(botNum);
 }
 
-void DBotManager::RemoveAllBots(FLevelLocals *level)
+void DBotManager::RemoveAllBots(FLevelLocals* const level)
 {
 	for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 	{
@@ -174,14 +176,14 @@ void DBotManager::RemoveAllBots(FLevelLocals *level)
 	}
 }
 
-int DBotManager::CountBots(FLevelLocals* level)
+int DBotManager::CountBots(FLevelLocals* const level)
 {
 	int bots = 0;
 	if (level == nullptr)
 	{
-		for (auto lev : AllLevels())
+		for (const auto lev : AllLevels())
 		{
-			for (unsigned int i = 0; i < MAXPLAYERS; ++i)
+			for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 			{
 				if (lev->PlayerInGame(i) && lev->Players[i]->Bot != nullptr)
 					++bots;
@@ -190,7 +192,7 @@ int DBotManager::CountBots(FLevelLocals* level)
 	}
 	else
 	{
-		for (unsigned int i = 0; i < MAXPLAYERS; ++i)
+		for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 		{
 			if (level->PlayerInGame(i) && level->Players[i]->Bot != nullptr)
 				++bots;
@@ -206,12 +208,13 @@ void DBotManager::ParseBotDefinitions()
 	BotWeaponInfo.Clear();
 
 	constexpr int NoLump = -1;
+	constexpr char LumpName[] = "BOTDEF";
 
 	int lump = NoLump;
 	int lastLump = 0;
-	while ((lump = fileSystem.FindLump("BOTDEF", &lastLump)) != NoLump)
+	while ((lump = fileSystem.FindLump(LumpName, &lastLump)) != NoLump)
 	{
-		FScanner sc(lump);
+		FScanner sc = { lump };
 		sc.SetCMode(true);
 		while (sc.GetString())
 		{
@@ -221,7 +224,7 @@ void DBotManager::ParseBotDefinitions()
 				const FName key = sc.String;
 				sc.MustGetStringName("{");
 				FBotDefinition def = {};
-				BotDefinitions[key] = ParseBot(sc, def);
+				BotDefinitions.Insert(key, ParseBot(sc, def));
 			}
 			else if (sc.Compare("Weapon"))
 			{
@@ -229,7 +232,7 @@ void DBotManager::ParseBotDefinitions()
 				const FName key = sc.String;
 				sc.MustGetStringName("{");
 				FEntityProperties props = {};
-				BotWeaponInfo[key] = ParseWeapon(sc, props);
+				BotWeaponInfo.Insert(key, ParseWeapon(sc, props));
 			}
 			else
 			{
@@ -251,10 +254,10 @@ FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
 		def.SetString(key, sc.String);
 	}
 
-	if (def.GetString("PlayerClass").IsEmpty())
+	if ((&def.GetString("PlayerClass"))->IsEmpty())
 		def.SetString("PlayerClass", "Random");
 
-	unsigned int team = def.GetInt("Team", UINT_MAX);
+	const unsigned int team = def.GetInt("Team", UINT_MAX);
 	if (!TeamLibrary.IsValidTeam(team))
 		def.SetInt("Team", TEAM_NONE);
 
@@ -276,7 +279,7 @@ FEntityProperties& DBotManager::ParseWeapon(FScanner& sc, FEntityProperties& pro
 	return props;
 }
 
-void DBotManager::SetNamedBots(const FString* args, const int argCount)
+void DBotManager::SetNamedBots(const FString* const args, const int argCount)
 {
 	_botNameArgs.Clear();
 
@@ -285,12 +288,12 @@ void DBotManager::SetNamedBots(const FString* args, const int argCount)
 }
 
 // Boon TODO: This really needs a GS_LEVEL check...
-void DBotManager::SpawnNamedBots(FLevelLocals* level)
+void DBotManager::SpawnNamedBots(FLevelLocals* const level)
 {
 	// Only the host gets to specify bots.
 	if (consoleplayer == Net_Arbitrator)
 	{
-		for (auto& name : _botNameArgs)
+		for (const auto& name : _botNameArgs)
 			SpawnBot(level, name);
 	}
 
@@ -301,7 +304,7 @@ CVAR(Int, bot_next_color, 0, 0)
 
 ADD_STAT(bots)
 {
-	FString out;
+	FString out = {};
 	out.Format("think = %04.1f ms", DBotManager::BotThinkCycles.TimeMS());
 	return out;
 }
@@ -343,8 +346,7 @@ CCMD(removebot)
 	}
 
 	const FName id = argv[1];
-	const auto bot = DBotManager::BotDefinitions.CheckKey(id);
-	if (bot == nullptr)
+	if (DBotManager::BotDefinitions.CheckKey(id) == nullptr)
 	{
 		Printf("Bot with name %s does not exist\n", argv[1]);
 		return;
@@ -354,7 +356,7 @@ CCMD(removebot)
 	for (; i < MAXPLAYERS; ++i)
 	{
 		if (primaryLevel->PlayerInGame(i) && primaryLevel->Players[i]->Bot != nullptr
-			&& &primaryLevel->Players[i]->Bot->GetBotID() == &id)
+			&& primaryLevel->Players[i]->Bot->GetBotID() == id)
 		{
 			break;
 		}
@@ -373,14 +375,14 @@ CCMD(removebot)
 CCMD(listbots)
 {
 	TMap<FName, FBotDefinition>::ConstPair* pair = nullptr;
-	TMap<FName, FBotDefinition>::ConstIterator it{ DBotManager::BotDefinitions };
+	TMap<FName, FBotDefinition>::ConstIterator it = { DBotManager::BotDefinitions };
 	while (it.NextPair(pair))
 	{
 		unsigned int i = 0u;
 		for (; i < MAXPLAYERS; ++i)
 		{
 			if (primaryLevel->PlayerInGame(i) && primaryLevel->Players[i]->Bot != nullptr
-				&& &primaryLevel->Players[i]->Bot->GetBotID() == &pair->Key)
+				&& primaryLevel->Players[i]->Bot->GetBotID() == pair->Key)
 			{
 				break;
 			}

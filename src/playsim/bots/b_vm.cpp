@@ -37,7 +37,7 @@
 
 DEFINE_FIELD(DBot, Properties)
 
-static player_t* GetPlayer(DBot* self)
+static player_t* GetPlayer(DBot* const self)
 {
 	return self->GetPlayer();
 }
@@ -49,7 +49,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, GetPlayer, GetPlayer)
 	ACTION_RETURN_POINTER(GetPlayer(self));
 }
 
-static int GetBotID(DBot* self)
+static int GetBotID(DBot* const self)
 {
 	return (&self->GetBotID())->GetIndex();
 }

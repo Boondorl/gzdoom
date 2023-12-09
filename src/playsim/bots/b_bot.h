@@ -55,26 +55,25 @@ enum EBotMoveDirection
 	MDIR_LEFT = MDIR_FORWARDS
 };
 
-// Allow for modders to set up any custom properties they want in BOTDEFS. Includes wrapper functionality
+// Allow for modders to set up any custom properties they want in BOTDEF. Includes wrapper functionality
 // for getting simple data types (others like vectors can be implemented ZScript side). Name is more generic since
 // this can technically be used for anything for any reason.
 struct FEntityProperties
 {
 private:
 	TMap<FName, FString> _properties = {};
-	const FEntityProperties* _default = nullptr; // Similar to a class' default field.
+	const FEntityProperties* _default = nullptr; // Similar to a PClass's defaults.
 
 public:
-	FEntityProperties() {}
+	FEntityProperties() = default;
 	FEntityProperties(const TMap<FName, FString>& _properties) : _properties(_properties) {}
-	FEntityProperties(const FEntityProperties* _default) : _default(_default) { ResetAllProperties(); }
-	FEntityProperties(const TMap<FName, FString>& _properties, const FEntityProperties* _default) : _properties(_properties), _default(_default) {}
+	FEntityProperties(const FEntityProperties* const _default) : _default(_default) { ResetAllProperties(); }
+	FEntityProperties(const TMap<FName, FString>& _properties, const FEntityProperties* const _default) : _properties(_properties), _default(_default) {}
 
 	// Needed for when the bot is destroyed.
 	void Clear()
 	{
 		_properties.Clear();
-		_default = nullptr;
 	}
 
 	void ResetProperty(const FName& key)
@@ -90,7 +89,7 @@ public:
 		if (_default != nullptr)
 			_properties = _default->_properties;
 		else
-			_properties = {};
+			_properties.Clear();
 	}
 
 	// This is important so that properties can be properly reset to use defaults
@@ -101,12 +100,12 @@ public:
 		_properties.Remove(key);
 	}
 
-	const TMap<FName, FString>& GetProperties() const
+	constexpr const TMap<FName, FString>& GetProperties() const
 	{
 		return _properties;
 	}
 
-	bool HasProperty(const FName& key) const
+	constexpr bool HasProperty(const FName& key) const
 	{
 		return _properties.CheckKey(key) != nullptr;
 	}
@@ -118,7 +117,7 @@ public:
 
 	void SetBool(const FName& key, const bool value)
 	{
-		FString val;
+		FString val = {};
 		val.Format("%d", value);
 
 		_properties.Insert(key, val);
@@ -126,7 +125,7 @@ public:
 
 	void SetInt(const FName& key, const int value)
 	{
-		FString val;
+		FString val = {};
 		val.Format("%d", value);
 
 		_properties.Insert(key, val);
@@ -134,33 +133,33 @@ public:
 
 	void SetDouble(const FName& key, const double value)
 	{
-		FString val;
+		FString val = {};
 		val.Format("%f", value);
 
 		_properties.Insert(key, val);
 	}
 
-	const FString& GetString(const FName& key, const FString& def = {}) const
+	constexpr const FString& GetString(const FName& key, const FString& def = {}) const
 	{
-		auto value = _properties.CheckKey(key);
+		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? *value : def;
 	}
 
-	bool GetBool(const FName& key, const bool def = false) const
+	constexpr bool GetBool(const FName& key, const bool def = false) const
 	{
-		auto value = _properties.CheckKey(key);
+		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? static_cast<bool>(value->ToLong()) : def;
 	}
 
-	int GetInt(const FName& key, const int def = 0) const
+	constexpr int GetInt(const FName& key, const int def = 0) const
 	{
-		auto value = _properties.CheckKey(key);
+		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? static_cast<int>(value->ToLong()) : def;
 	}
 
-	double GetDouble(const FName& key, const double def = 0.0) const
+	constexpr double GetDouble(const FName& key, const double def = 0.0) const
 	{
-		auto value = _properties.CheckKey(key);
+		const auto value = _properties.CheckKey(key);
 		return value != nullptr ? value->ToDouble() : def;
 	}
 };
@@ -186,18 +185,20 @@ public:
 		// Reset it if it's being regenerated.
 		_userInfo = FString{};
 
-		TMap<FName, FString>::ConstPair *pair = nullptr;
-		TMap<FName, FString>::ConstIterator it { _properties.GetProperties() };
+		TMap<FName, FString>::ConstPair* pair = nullptr;
+		TMap<FName, FString>::ConstIterator it = { _properties.GetProperties() };
 		while (it.NextPair(pair))
 			_userInfo.AppendFormat("%s\\%s\\", pair->Key, pair->Value);
 	}
 
-	const char *GetUserInfo() const
+	// Note: This is only meant to be used directly with the function that parses
+	// the user info as a byte stream.
+	constexpr uint8_t* GetUserInfo() const
 	{
-		return _userInfo.GetChars();
+		return reinterpret_cast<uint8_t*>(const_cast<char*>(_userInfo.GetChars()));
 	}
 
-	const FEntityProperties &GetProperties() const
+	constexpr const FEntityProperties& GetProperties() const
 	{
 		return _properties;
 	}
@@ -222,22 +223,22 @@ public:
 		_properties.SetDouble(key, value);
 	}
 
-	const FString& GetString(const FName& key, const FString& def = {}) const
+	constexpr const FString& GetString(const FName& key, const FString& def = {}) const
 	{
 		return _properties.GetString(key, def);
 	}
 
-	bool GetBool(const FName& key, const bool def = false) const
+	constexpr bool GetBool(const FName& key, const bool def = false) const
 	{
 		return _properties.GetBool(key, def);
 	}
 
-	int GetInt(const FName& key, const int def = 0) const
+	constexpr int GetInt(const FName& key, const int def = 0) const
 	{
 		return _properties.GetInt(key, def);
 	}
 
-	double GetDouble(const FName& key, const double def = 0.0) const
+	constexpr double GetDouble(const FName& key, const double def = 0.0) const
 	{
 		return _properties.GetDouble(key, def);
 	}
@@ -245,6 +246,7 @@ public:
 
 // Used to keep all the globally needed variables and functions in order. A namespace isn't used
 // here in order to prevent certain functionality from being accessed globally.
+// Boon TODO: Now that shit is organized, this can probably be turned into a namespace proper
 class DBotManager final
 {
 private:
@@ -260,15 +262,15 @@ public:
 	static TMap<FName, FBotDefinition> BotDefinitions;		// Default properties and userinfo to give when spawning a bot. Stored by bot ID.
 	static TMap<FName, FEntityProperties> BotWeaponInfo;	// Key information about how bots should use each weapon. Stored by weapon class name.
 
-	static void ParseBotDefinitions();									// Parses the BOTDEF lumps.
-	static void SetNamedBots(const FString* args, const int argCount);	// Parses the "-bots" arg for the names of the bots.
-	static void SpawnNamedBots(FLevelLocals* level);					// Spawns any named bots. Only the host can do this. Triggers on level load.
-	static int CountBots(FLevelLocals* level = nullptr);				// Counts the number of bots in the game. Used after loading.
+	static void ParseBotDefinitions();											// Parses the BOTDEF lumps.
+	static void SetNamedBots(const FString* const args, const int argCount);	// Parses the "-bots" arg for the names of the bots.
+	static void SpawnNamedBots(FLevelLocals* const level);						// Spawns any named bots. Only the host can do this. Triggers on level load.
+	static int CountBots(FLevelLocals* const level = nullptr);					// Counts the number of bots in the game. Used after loading.
 
-	static bool SpawnBot(FLevelLocals* level, const FName& name = NAME_None);						// Spawns a bot over the network. If no name is passed, spawns a random one.
-	static bool TryAddBot(FLevelLocals *level, const unsigned int playerIndex, const FName& botID);	// Parses the network message to try and add a bot.
-	static void RemoveBot(FLevelLocals* level, const unsigned int botNum);							// Removes the bot and makes it emulate a player leaving the game.
-	static void RemoveAllBots(FLevelLocals* level);													// Removes all bots from the game.
+	static bool SpawnBot(FLevelLocals* const level, const FName& name = NAME_None);							// Spawns a bot over the network. If no name is passed, spawns a random one.
+	static bool TryAddBot(FLevelLocals* const level, const unsigned int playerIndex, const FName& botID);	// Parses the network message to try and add a bot.
+	static void RemoveBot(FLevelLocals* const level, const unsigned int botNum);							// Removes the bot and makes it emulate a player leaving the game.
+	static void RemoveAllBots(FLevelLocals* const level);													// Removes all bots from the game.
 };
 
 class DBot : public DThinker
@@ -280,30 +282,30 @@ private:
 	FName _botID;		// Tracks which bot definition it's tied to.
 
 public:
-	static const int DEFAULT_STAT = STAT_BOT;
+	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
 
 	FEntityProperties Properties; // Stores current information about the bot. Uses the properties from its bot ID as defaults.
 
-	static bool IsSectorDangerous(const sector_t* sec); // Checks if the sector is dangerous to the bot.
+	static bool IsSectorDangerous(const sector_t* const sec); // Checks if the sector is dangerous to the bot.
 
-	void Construct();										// Set the default values of the class fields.
-	void OnDestroy() override;								// Clear the Properties map.
-	void Initialize(player_t* player, const FName& index);	// Initialize the bot with a player and bot ID.
-	void Serialize(FSerializer &arc);						// Stuff to write to and load from the save file.
+	void Construct(player_t* const player, const FName& index);	// Set the default values of the class fields.
+	void OnDestroy() override;									// Clear the Properties map.
+	void Serialize(FSerializer &arc);							// Stuff to write to and load from the save file.
 
-	constexpr player_t *GetPlayer() const;
-	constexpr FName GetBotID() const;
+	constexpr player_t* GetPlayer() const;
+	constexpr const FName& GetBotID() const;
 
 	void CallBotThink(); // Handles overall thinking logic. Called directly before PlayerThink.
 	
+	// Boon TODO: Clean up all these const functions
 	// Boon TODO: nullptr checks since these will be exported
-	bool IsActorInView(AActor* mo, const DAngle& fov = DAngle90) const;	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* target) const;								// Checks to see if a valid movement can be made towards the target.
+	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle90) const;	// Check if the bot has sight of the Actor within a view cone.
+	bool CanReach(AActor* const target) const;								// Checks to see if a valid movement can be made towards the target.
 	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0) const; // Checks if anything is blocking the ReadyWeapon missile's path.
 	void FindEnemy(const DAngle& fov = nullAngle) const;				// Tries to find a target.
 	void FindPartner() const;											// Looks for a player to stick near, bot or real.
-	bool IsValidItem(AActor* item) const;								// Checks to see if the item is able to be picked up.
-	void PitchTowardsActor(AActor* target) const;						// Aim the bot's pitch towards the target.
+	bool IsValidItem(AActor* const item) const;								// Checks to see if the item is able to be picked up.
+	void PitchTowardsActor(AActor* const target) const;						// Aim the bot's pitch towards the target.
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false) const; // Same as CheckPosition but prevent picking up items.
 	void Roam() const;													// Attempt to move towards the boat's goal similar to how monsters move.
 	bool CheckMove(const DVector2& pos) const;							// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
@@ -312,7 +314,7 @@ public:
 	bool TryWalk() const;												// Same as Move but also sets a turn cool down when moving.
 	void NewChaseDir() const;											// Attempts to get a new direction to move towards the bot's goal.
 	void SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running) const;	// Sets the forwardmove/sidemove commands.
-	void SetButtons(const int cmd, const bool set) const;													// Sets the button commands.
+	void SetButtons(const int cmd, const bool set) const;				// Sets the button commands.
 };
 
 #endif

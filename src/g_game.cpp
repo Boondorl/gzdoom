@@ -1435,22 +1435,22 @@ void FLevelLocals::PlayerReborn (int player)
 	}
 
 	// Let the bot thinker know its pawn (re)spawned.
-	if (Bot != nullptr)
+	if (p->Bot != nullptr)
 	{
 		if (isRespawning)
 		{
-			IFVIRTUALPTR(Bot, DBot, BotRespawned)
+			IFVIRTUALPTR(p->Bot, DBot, BotRespawned)
 			{
-				VMValue params = { Bot };
-				VMCall(func, &params, 1, nullptr, 0);
+				VMValue params[] = { p->Bot.Get() };
+				VMCall(func, params, 1, nullptr, 0);
 			}
 		}
 		else
 		{
-			IFVIRTUALPTR(Bot, DBot, BotSpawned)
+			IFVIRTUALPTR(p->Bot, DBot, BotSpawned)
 			{
-				VMValue params = { Bot };
-				VMCall(func, &params, 1, nullptr, 0);
+				VMValue params[] = { p->Bot.Get() };
+				VMCall(func, params, 1, nullptr, 0);
 			}
 		}
 	}
