@@ -33,7 +33,7 @@
 **
 */
 
-#include "g_levellocals.h" // b_bot.h is defined in here via d_player.h.
+#include "actorinlines.h" // b_bot.h is defined in here via d_player.h.
 #include "p_linetracedata.h"
 
 extern int P_GetRealMaxHealth(AActor* actor, int max);
