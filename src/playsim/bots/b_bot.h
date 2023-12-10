@@ -64,6 +64,9 @@ enum EBotMoveDirection
 struct FEntityProperties
 {
 private:
+	static constexpr char True[] = "true";
+	static constexpr char False[] = "false";
+
 	TMap<FName, FString> _properties = {};
 	const FEntityProperties* _default = nullptr; // Similar to a PClass's defaults.
 
@@ -151,7 +154,15 @@ public:
 	bool GetBool(const FName& key, const bool def = false) const
 	{
 		const auto value = _properties.CheckKey(key);
-		return value != nullptr ? static_cast<bool>(value->ToLong()) : def;
+		if (value == nullptr)
+			return def;
+
+		if (value->CompareNoCase(True))
+			return true;
+		if (value->CompareNoCase(False))
+			return false;
+
+		return static_cast<bool>(value->ToLong());
 	}
 
 	int GetInt(const FName& key, const int def = 0) const
@@ -253,7 +264,9 @@ public:
 class DBotManager final
 {
 private:
-	static inline TArray<FString> _botNameArgs = {}; // Bot names given when the host launched the game with the "-bots" arg.
+	static inline TArray<FName> _botNameArgs = {}; // Bot names given when the host launched the game with the "-bots" arg.
+	static inline TMap<FName, FName> _botReplacements = {};
+	static inline TMap<FName, FName> _weaponReplacements = {};
 
 	static FBotDefinition& ParseBot(FScanner& sc, FBotDefinition& def);				// Function that parses a bot block in BOTDEFS.
 	static FEntityProperties& ParseWeapon(FScanner& sc, FEntityProperties& props);	// Function that parses a weapon block in BOTDEFS.
@@ -270,6 +283,8 @@ public:
 	static void SpawnNamedBots(FLevelLocals* const level);						// Spawns any named bots. Only the host can do this. Triggers on level load.
 	static int CountBots(FLevelLocals* const level = nullptr);					// Counts the number of bots in the game. Used after loading.
 
+	static FEntityProperties* GetWeaponInfo(const PClassActor* const weap);
+	static FBotDefinition* GetBot(const FName& botName);
 	static bool SpawnBot(FLevelLocals* const level, const FName& name = NAME_None);							// Spawns a bot over the network. If no name is passed, spawns a random one.
 	static bool TryAddBot(FLevelLocals* const level, const unsigned int playerIndex, const FName& botID);	// Parses the network message to try and add a bot.
 	static void RemoveBot(FLevelLocals* const level, const unsigned int botNum);							// Removes the bot and makes it emulate a player leaving the game.

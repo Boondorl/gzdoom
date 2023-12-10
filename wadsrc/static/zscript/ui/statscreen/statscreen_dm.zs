@@ -199,8 +199,7 @@ class DeathmatchStatusScreen : StatusScreen
 
 			screen.Dim(player.GetDisplayColor(), 0.8, x, y - ypadding, (deaths_x - x) + (8 * CleanXfac), lineheight);
 
-			//if (playerready[pnum] || player.Bot != NULL) // Bots are automatically assumed ready, to prevent confusion
-				screen.DrawTexture(readyico, true, x - (readysize.X * CleanXfac), y, DTA_CleanNoMove, true);
+			screen.DrawTexture(readyico, true, x - (readysize.X * CleanXfac), y, DTA_CleanNoMove, true);
 
 			let thiscolor = GetRowColor(player, pnum == consoleplayer);
 			if (player.mo.ScoreIcon.isValid())

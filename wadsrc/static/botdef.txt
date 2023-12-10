@@ -1,0 +1,67 @@
+// Doom weapons
+Weapon Fist
+{
+	CombatRange 48
+	bMelee true
+	bInstantReaction true
+}
+
+Weapon Chainsaw
+{
+	CombatRange 48
+	bMelee true
+	bInstantReaction true
+}
+
+Weapon Pistol
+{
+	CombatRange 384
+}
+
+Weapon Shotgun
+{
+	CombatRange 320
+}
+
+Weapon SuperShotgun
+{
+	CombatRange 320
+}
+
+Weapon Chaingun
+{
+	CombatRange 544
+}
+
+Weapon RocketLauncher
+{
+	ProjectileType Rocket
+	CombatRange 800
+	ExplosiveRange 256
+	bInstantReaction true
+	bExplosive true
+}
+
+Weapon PlasmaRifle
+{
+	ProjectileType PlasmaBall
+	CombatRange 960
+}
+
+Weapon BFG9000
+{
+	ProjectileType BFGBall
+	CombatRange 640
+	bBFG true
+}
+
+// Heretic weapons
+Weapon GoldWand
+{
+	CombatRange 640
+}
+
+Weapon GoldWandPowered
+{
+	CombatRange 384
+}

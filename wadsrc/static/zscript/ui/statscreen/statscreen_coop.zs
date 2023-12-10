@@ -303,8 +303,7 @@ class CoopStatusScreen : StatusScreen
 
 			screen.Dim(player.GetDisplayColor(), 0.8f, x, y - ypadding, (secret_x - x) + (8 * CleanXfac), lineheight);
 
-			//if (playerready[i] || player.Bot != NULL) // Bots are automatically assumed ready, to prevent confusion
-				screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
+			screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
 
 			Color thiscolor = GetRowColor(player, i == consoleplayer);
 			if (player.mo.ScoreIcon.isValid())

@@ -818,13 +818,6 @@ class Inventory : Actor
 			Actor ac = player != NULL? Actor(player.mo) : toucher;
 			ac.GiveSecret(true, true);
 		}
-
-		//Added by MC: Check if item taken was the roam destination of any bot
-		for (int i = 0; i < MAXPLAYERS; i++)
-		{
-			if (players[i].Bot != NULL && self == players[i].Bot.dest)
-				players[i].Bot.dest = NULL;
-		}
 	}
 
 	//===========================================================================

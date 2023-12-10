@@ -124,7 +124,7 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 		return false;
 	}
 
-	const auto bot = BotDefinitions.CheckKey(botID);
+	const auto bot = GetBot(botID);
 	if (bot == nullptr)
 	{
 		Printf("Bot %s does not exist\n", botID.GetChars());
@@ -202,6 +202,225 @@ int DBotManager::CountBots(FLevelLocals* const level)
 	return bots;
 }
 
+FEntityProperties* DBotManager::GetWeaponInfo(const PClassActor* const weap)
+{
+	if (weap == nullptr || !weap->IsDescendantOf(NAME_Weapon))
+		return nullptr;
+
+	FName key = weap->TypeName;
+	const auto replacement = _weaponReplacements.CheckKey(key);
+	if (replacement != nullptr)
+		key = *replacement;
+
+	FEntityProperties* weapInfo = BotWeaponInfo.CheckKey(key);
+	if (weapInfo != nullptr)
+		return weapInfo;
+
+	// Maybe a class it inherits from has one?
+	const PClass* parent = weap;
+	while (parent->TypeName != NAME_Weapon && (parent = parent->ParentClass) != nullptr)
+	{
+		weapInfo = BotWeaponInfo.CheckKey(parent->TypeName);
+		if (weapInfo != nullptr)
+			return weapInfo;
+	}
+
+	// What about the weapon it replaces?
+	weapInfo = BotWeaponInfo.CheckKey(weap->ActorInfo()->Replacee->TypeName);
+	if (weapInfo != nullptr)
+		return weapInfo;
+
+	// Or the weapon replacing it?
+	return BotWeaponInfo.CheckKey(weap->ActorInfo()->Replacement->TypeName);
+}
+
+FBotDefinition* DBotManager::GetBot(const FName& botName)
+{
+	FName id = botName;
+	const auto replacement = _botReplacements.CheckKey(botName);
+	if (replacement != nullptr)
+		id = *replacement;
+
+	return BotDefinitions.CheckKey(id);
+}
+
+// BOTDEF parsing
+
+static bool GetWeaponDef(const FName& cls, const FName& base)
+{
+	const auto clsDef = DBotManager::BotWeaponInfo.CheckKey(cls);
+	if (clsDef == nullptr)
+		return false;
+
+	const FEntityProperties* const baseDef = DBotManager::BotWeaponInfo.CheckKey(base);
+	if (base == nullptr)
+		return false;
+
+	TMap<FName, FString>::ConstPair* pair = nullptr;
+	TMap<FName, FString>::ConstIterator it = { baseDef->GetProperties() };
+	while (it.NextPair(pair))
+	{
+		if (!clsDef->HasProperty(pair->Key))
+			clsDef->SetString(pair->Key, pair->Value);
+	}
+
+	return true;
+}
+
+static bool GetBotDef(const FName& cls, const FName& base)
+{
+	const auto clsDef = DBotManager::BotDefinitions.CheckKey(cls);
+	if (clsDef == nullptr)
+		return false;
+
+	const FBotDefinition* const baseDef = DBotManager::BotDefinitions.CheckKey(base);
+	if (base == nullptr)
+		return false;
+
+	const auto& props = clsDef->GetProperties();
+	TMap<FName, FString>::ConstPair* pair = nullptr;
+	TMap<FName, FString>::ConstIterator it = { (&baseDef->GetProperties())->GetProperties() };
+	while (it.NextPair(pair))
+	{
+		if (!props.HasProperty(pair->Key))
+			clsDef->SetString(pair->Key, pair->Value);
+	}
+
+	return true;
+}
+
+struct FTreeNode
+{
+private:
+	bool _bVisited = false;
+	FName _cls = NAME_None;
+	bool (*_nodeAction)(const FName&, const FName&) = nullptr;
+	TArray<FName> _children = {};
+
+public:
+	FTreeNode(const FName& _cls, bool (*_nodeAction)(const FName&, const FName&)) : _cls(_cls), _nodeAction(_nodeAction) {}
+
+	bool AlreadyVisited() const
+	{
+		return _bVisited;
+	}
+
+	bool IsInvalid() const
+	{
+		return _cls == NAME_None || _nodeAction == nullptr;
+	}
+
+	void Validate(const FName& cls, bool (*action)(const FName&, const FName&))
+	{
+		if (cls != NAME_None && action != nullptr)
+		{
+			_cls = cls;
+			_nodeAction = action;
+		}
+	}
+
+	void AddChildNode(const FName& child)
+	{
+		if (child != NAME_None && _children.Find(child) >= _children.Size())
+			_children.Push(child);
+	}
+
+	bool ParseChildren(const FName& base, TMap<FName, FTreeNode>& nodes)
+	{
+		_bVisited = true;
+		if (base != NAME_None)
+		{
+			bool res = _nodeAction(_cls, base);
+			if (!res)
+				return false;
+		}
+
+		for (const auto& cls : _children)
+		{
+			const auto node = nodes.CheckKey(cls);
+			if (node == nullptr)
+				continue;
+
+			if (node->AlreadyVisited()) 
+				return false;
+
+			if (!node->ParseChildren(_cls, nodes))
+				return false;
+		}
+
+		return true;
+	}
+};
+
+struct FInheritenceTree
+{
+private:
+	TArray<FName> _roots = {};
+	TMap<FName, FTreeNode> _nodeList = {};
+
+public:
+	int IsInvalidClassName(const FName& cls) const
+	{
+		return _nodeList.CheckKey(cls) != nullptr;
+	}
+
+	bool GenerateData()
+	{
+		for (const auto& cls : _roots)
+		{
+			const auto node = _nodeList.CheckKey(cls);
+			if (node == nullptr)
+				continue;
+
+			// Dummy class that never existed.
+			if (node->IsInvalid())
+				return false;
+
+			// Tried to inherit from child class.
+			if (!node->ParseChildren(NAME_None, _nodeList))
+				return false;
+		}
+
+		return true;
+	}
+
+	void InsertNode(const FName& cls, const FName& parent, bool (*action)(const FName&, const FName&))
+	{
+		if (cls == NAME_None)
+			return;
+
+		const auto existing = _nodeList.CheckKey(cls);
+		if (existing)
+		{
+			existing->Validate(cls, action);
+			if (parent != NAME_None)
+				_roots.Delete(_roots.Find(parent));
+		}
+		else
+		{
+			_nodeList.Insert(cls, { (action != nullptr ? cls : NAME_None), action });
+		}
+
+		if (parent == NAME_None)
+		{
+			_roots.Push(cls);
+		}
+		else
+		{
+			auto node = _nodeList.CheckKey(parent);
+			if (node == nullptr)
+			{
+				// Make a temporary root for now. If the actual class is found,
+				// it'll be reorganized.
+				InsertNode(parent, NAME_None, nullptr);
+				node = _nodeList.CheckKey(parent);
+			}
+
+			node->AddChildNode(cls);
+		}
+	}
+};
+
 void DBotManager::ParseBotDefinitions()
 {
 	BotDefinitions.Clear();
@@ -209,6 +428,13 @@ void DBotManager::ParseBotDefinitions()
 
 	constexpr int NoLump = -1;
 	constexpr char LumpName[] = "BOTDEF";
+	constexpr char BotDef[] = "Bot";
+	constexpr char WeaponDef[] = "Weapon";
+	constexpr char Replaces[] = "Replaces";
+
+	// TODO: #include support
+
+	FInheritenceTree weapTree = {}, botTree = {};
 
 	int lump = NoLump;
 	int lastLump = 0;
@@ -218,28 +444,65 @@ void DBotManager::ParseBotDefinitions()
 		sc.SetCMode(true);
 		while (sc.GetString())
 		{
-			if (sc.Compare("Bot"))
+			const bool isBot = sc.Compare(BotDef);
+			if (!isBot && !sc.Compare(WeaponDef))
+				sc.ScriptError("Expected '%s' or '%s', got '%s'.", BotDef, WeaponDef, sc.String);
+
+			sc.MustGetString();
+			const FName key = sc.String;
+
+			FName parent = NAME_None;
+			sc.MustGetString();
+			if (sc.Compare(":"))
 			{
 				sc.MustGetString();
-				const FName key = sc.String;
-				sc.MustGetStringName("{");
+				parent = sc.String;
+				if (parent == key)
+					sc.ScriptError("Definition '%s' tried to inherit from itself.", key);
+			}
+
+			FName replacement = NAME_None;
+			sc.MustGetString();
+			if (sc.Compare(Replaces))
+			{
+				sc.MustGetString();
+				replacement = sc.String;
+				sc.MustGetString();
+			}
+
+			if (!sc.Compare("{"))
+				sc.ScriptError("Expected '{', got '%s'.", sc.String);
+
+			if(isBot)
+			{
+				if (botTree.IsInvalidClassName(key))
+					sc.ScriptError("Bot '%s' already exists.", key);
+
 				FBotDefinition def = {};
 				BotDefinitions.Insert(key, ParseBot(sc, def));
-			}
-			else if (sc.Compare("Weapon"))
-			{
-				sc.MustGetString();
-				const FName key = sc.String;
-				sc.MustGetStringName("{");
-				FEntityProperties props = {};
-				BotWeaponInfo.Insert(key, ParseWeapon(sc, props));
+				botTree.InsertNode(key, parent, GetBotDef);
+				if (replacement != NAME_None)
+					_botReplacements.Insert(replacement, key);
 			}
 			else
 			{
-				sc.ScriptError("Expected 'Weapon' or 'Bot, got '%s'.", sc.String);
+				if (weapTree.IsInvalidClassName(key))
+					sc.ScriptError("Weapon '%s' cannot be redefined.", key);
+
+				FEntityProperties props = {};
+				BotWeaponInfo.Insert(key, ParseWeapon(sc, props));
+				weapTree.InsertNode(key, parent, GetWeaponDef);
+				if (replacement != NAME_None)
+					_weaponReplacements.Insert(replacement, key);
 			}
 		}
 	}
+
+	// Now that we've done an initial pass, start inheriting.
+	if (!weapTree.GenerateData())
+		; // Class didn't exist, inherited from child class
+	if (!botTree.GenerateData())
+		; // Class didn't exist, inherited from child class
 }
 
 FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
@@ -257,8 +520,7 @@ FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
 	if ((&def.GetString("PlayerClass"))->IsEmpty())
 		def.SetString("PlayerClass", "Random");
 
-	const unsigned int team = def.GetInt("Team", UINT_MAX);
-	if (!TeamLibrary.IsValidTeam(team))
+	if (!TeamLibrary.IsValidTeam(def.GetInt("Team", UINT_MAX)))
 		def.SetInt("Team", TEAM_NONE);
 
 	return def;
