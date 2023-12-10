@@ -293,16 +293,32 @@ struct FTreeNode
 {
 private:
 	bool _bVisited = false;
+	FName _parent = NAME_None;
 	FName _cls = NAME_None;
 	bool (*_nodeAction)(const FName&, const FName&) = nullptr;
 	TArray<FName> _children = {};
 
 public:
-	FTreeNode(const FName& _cls, bool (*_nodeAction)(const FName&, const FName&)) : _cls(_cls), _nodeAction(_nodeAction) {}
+	FTreeNode(const FName& _cls, const FName& _parent, bool (*_nodeAction)(const FName&, const FName&)) : _cls(_cls), _parent(_parent), _nodeAction(_nodeAction) {}
 
-	bool AlreadyVisited() const
+	const FName& GetParent() const
+	{
+		return _parent;
+	}
+
+	bool CouldPotentiallyLoop() const
+	{
+		return  _parent != NAME_None && _children.Size() && !WasVisited();
+	}
+
+	bool WasVisited() const
 	{
 		return _bVisited;
+	}
+
+	void SetVisited()
+	{
+		_bVisited = true;
 	}
 
 	bool IsInvalid() const
@@ -310,11 +326,12 @@ public:
 		return _cls == NAME_None || _nodeAction == nullptr;
 	}
 
-	void Validate(const FName& cls, bool (*action)(const FName&, const FName&))
+	void Validate(const FName& cls, const FName& parent, bool (*action)(const FName&, const FName&))
 	{
 		if (cls != NAME_None && action != nullptr)
 		{
 			_cls = cls;
+			_parent = parent;
 			_nodeAction = action;
 		}
 	}
@@ -325,12 +342,11 @@ public:
 			_children.Push(child);
 	}
 
-	bool ParseChildren(const FName& base, TMap<FName, FTreeNode>& nodes)
+	bool ParseChildren(TMap<FName, FTreeNode>& nodes)
 	{
-		_bVisited = true;
-		if (base != NAME_None)
+		if (_parent != NAME_None)
 		{
-			bool res = _nodeAction(_cls, base);
+			bool res = _nodeAction(_cls, _parent);
 			if (!res)
 				return false;
 		}
@@ -341,10 +357,7 @@ public:
 			if (node == nullptr)
 				continue;
 
-			if (node->AlreadyVisited()) 
-				return false;
-
-			if (!node->ParseChildren(_cls, nodes))
+			if (!node->ParseChildren(nodes))
 				return false;
 		}
 
@@ -359,25 +372,66 @@ private:
 	TMap<FName, FTreeNode> _nodeList = {};
 
 public:
-	int IsInvalidClassName(const FName& cls) const
+	bool IsInvalidClass(const FName& cls) const
 	{
 		return _nodeList.CheckKey(cls) != nullptr;
 	}
 
+	// Make sure no loops exist. These can't be childless or parentless
+	// by definition, so those nodes can be skipped. Nodes that were already
+	// visited are also safe.
+	bool ValidateNodes()
+	{
+		TMap<FName, FTreeNode>::Pair* pair = nullptr;
+		TMap<FName, FTreeNode>::Iterator it = { _nodeList };
+		while (it.NextPair(pair))
+		{
+			// Class that never got defined.
+			if (pair->Value.IsInvalid())
+				return false;
+
+			if (pair->Value.CouldPotentiallyLoop())
+			{
+				TArray<FName> traversed = {};
+				traversed.Push(pair->Key);
+
+				FName parent = pair->Value.GetParent();
+				while (parent != NAME_None)
+				{
+					// Recursion detected.
+					if (traversed.Find(parent) < traversed.Size())
+						return false;
+
+					const auto node = _nodeList.CheckKey(parent);
+					// Must have been found in a valid path previously.
+					if (node->WasVisited())
+						break;
+
+					traversed.Push(parent);
+					node->SetVisited();
+					parent = node->GetParent();
+				}
+			}
+
+			pair->Value.SetVisited();
+		}
+
+		return true;
+	}
+
 	bool GenerateData()
 	{
+		if (!ValidateNodes())
+			return false;
+
 		for (const auto& cls : _roots)
 		{
 			const auto node = _nodeList.CheckKey(cls);
 			if (node == nullptr)
 				continue;
 
-			// Dummy class that never existed.
-			if (node->IsInvalid())
-				return false;
-
-			// Tried to inherit from child class.
-			if (!node->ParseChildren(NAME_None, _nodeList))
+			// Something went wrong in the class definition updating.
+			if (!node->ParseChildren(_nodeList))
 				return false;
 		}
 
@@ -392,13 +446,13 @@ public:
 		const auto existing = _nodeList.CheckKey(cls);
 		if (existing)
 		{
-			existing->Validate(cls, action);
+			existing->Validate(cls, parent, action);
 			if (parent != NAME_None)
 				_roots.Delete(_roots.Find(parent));
 		}
 		else
 		{
-			_nodeList.Insert(cls, { (action != nullptr ? cls : NAME_None), action });
+			_nodeList.Insert(cls, { (action != nullptr ? cls : NAME_None), parent, action });
 		}
 
 		if (parent == NAME_None)
@@ -475,7 +529,7 @@ void DBotManager::ParseBotDefinitions()
 
 			if(isBot)
 			{
-				if (botTree.IsInvalidClassName(key))
+				if (botTree.IsInvalidClass(key))
 					sc.ScriptError("Bot '%s' already exists.", key);
 
 				FBotDefinition def = {};
@@ -486,7 +540,7 @@ void DBotManager::ParseBotDefinitions()
 			}
 			else
 			{
-				if (weapTree.IsInvalidClassName(key))
+				if (weapTree.IsInvalidClass(key))
 					sc.ScriptError("Weapon '%s' cannot be redefined.", key);
 
 				FEntityProperties props = {};
