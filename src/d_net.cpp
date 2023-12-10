@@ -790,7 +790,7 @@ void GetPackets (void)
 					uint8_t *foo = &netbuffer[2];
 					for (int i = 0; i < MAXPLAYERS; ++i)
 					{
-						if (playeringame[i])
+						if (playeringame[i] && players[i].Bot == nullptr)
 						{
 							int resend = ReadLong (&foo);
 							if (i != consoleplayer)
@@ -1779,7 +1779,7 @@ void D_QuitNetGame (void)
 
 		for (i = 0; i < MAXPLAYERS; ++i)
 		{
-			if (playeringame[i] && i != consoleplayer)
+			if (playeringame[i] && players[i].Bot == nullptr && i != consoleplayer)
 				WriteLong (resendto[nodeforplayer[i]], &foo);
 		}
 		k = int(foo - netbuffer);
@@ -2921,7 +2921,7 @@ CCMD (pings)
 {
 	int i;
 	for (i = 0; i < MAXPLAYERS; i++)
-		if (playeringame[i])
+		if (playeringame[i] && players[i].Bot == nullptr)
 			Printf ("% 4" PRId64 " %s\n", currrecvtime[i] - lastrecvtime[i],
 					players[i].userinfo.GetName());
 }
