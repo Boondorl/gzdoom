@@ -1,3 +1,14 @@
+// GZDoom Bots
+Bot DefaultGZDoomBot
+{
+	Warn "PlasmaBall,HornStaffFX1,Ripper"
+}
+
+Bot GZDoomBot1 : DefaultGZDoomBot
+{
+	Name "Graf Zhal"
+}
+
 // Doom weapons
 Weapon Fist
 {

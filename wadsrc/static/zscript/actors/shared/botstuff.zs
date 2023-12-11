@@ -64,6 +64,7 @@ class Bot : Thinker native
 	native clearscope PlayerInfo GetPlayer() const;
 	native void SetMove(EBotMoveDirection forward, EBotMoveDirection side, bool running);
 	native void SetButtons(EButtons cmd, bool set);
+
 	native bool IsActorInView(Actor mo, double fov = 90.0);
 	native bool CanReach(Actor mo);
 	native bool CheckMissileTrajectory(Vector3 dest, double minDistance = 0.0, double maxDistance = 320.0);
@@ -77,7 +78,7 @@ class Bot : Thinker native
 	native bool Move();
 	native bool TryWalk();
 	native void NewChaseDir();
-	native EBotMoveDirection PickStrafeDirection();
+	native EBotMoveDirection PickStrafeDirection(EBotMoveDirection start = MDIR_NONE);
 
 	clearscope Actor GetActor() const
 	{
@@ -134,12 +135,12 @@ class Bot : Thinker native
 					SetTarget(mo);
 				}
 			}
-			else if (bMissile)
+			else if (mo.bMissile)
 			{
 				if (!Evade && mo.bWarnBot && mo.target != player && IsActorInView(mo))
 					Evade = mo;
 			}
-			else if (mo.bSpecial && (!goal || !goal.bSpecial) && IsValidItem(mo))
+			else if (mo.bSpecial && (!goal || !goal.bSpecial) && IsValidItem(Inventory(mo)))
 			{
 				goal = mo;
 				SetGoal(goal);
@@ -166,8 +167,8 @@ class Bot : Thinker native
 			HandleMovement();
 			AdjustAngles();
 
-			player.cmd.yaw = Actor.DeltaAngle(curYaw, mo.angle) * ANG_TO_CMD;
-			player.cmd.pitch = Actor.DeltaAngle(curPitch, mo.pitch) * ANG_TO_CMD;
+			player.cmd.yaw = int(Actor.DeltaAngle(curYaw, mo.angle) * ANG_TO_CMD);
+			player.cmd.pitch = int(Actor.DeltaAngle(curPitch, mo.pitch) * ANG_TO_CMD);
 			if (player.cmd.pitch == -32768)
 				player.cmd.pitch = -32767;
 
@@ -205,7 +206,7 @@ class Bot : Thinker native
 
 		if (deathmatch || !target)
 		{
-			FindTarget(target ? 360.0 : 0.0);
+			FindEnemy(target ? 360.0 : 0.0);
 			target = GetTarget();
 			if (!target)
 				target = prevTarget;
@@ -227,11 +228,11 @@ class Bot : Thinker native
 		double turn = MAX_TURN;
 		if (player.readyWeapon)
 		{
-			EntityProperties weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
+			let weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
 			if (weapInfo)
 			{
 				class<Actor> projType = weapInfo.GetString('ProjectileType');
-				if (target && !goal && !projType && weapInfo.GetFloat('MoveCombatDist') > 0.0
+				if (target && !goal && !projType && weapInfo.GetDouble('CombatRange') > 0.0
 					&& IsActorInView(target, FIRE_FOV + 5.0))
 				{
 					turn = 3.0;
@@ -239,7 +240,7 @@ class Bot : Thinker native
 			}
 		}
 
-		double delta = Actor.DeltaAngle(mo.angle, DestYaw);
+		double delta = Actor.DeltaAngle(mo.angle, DestAngle);
 		if (abs(delta) < 5.0 && !target)
 			return;
 
@@ -254,8 +255,8 @@ class Bot : Thinker native
 		Actor partner = GetPartner();
 		Actor goal = GetGoal();
 
-		EntityProperties weapInfo = player.readyWeapon ? GetWeaponInfo(player.readyWeapon.GetClass()) : null;
-		double combatDist = weapInfo ? weapInfo.GetFloat('MoveCombatDist') : 0.0;
+		let weapInfo = player.readyWeapon ? GetWeaponInfo(player.readyWeapon.GetClass()) : null;
+		double combatDist = weapInfo ? weapInfo.GetDouble('CombatRange') : 0.0;
 
 		if (Evade &&
 			((Evade.default.bMissile && !Evade.bMissile) || !IsActorInView(Evade)))
@@ -268,7 +269,7 @@ class Bot : Thinker native
 		if (Evade && mo.Distance2D(Evade) < EVADE_RANGE)
 		{
 			PitchTowardsActor(Evade);
-			DestYaw = mo.AngleTo(Evade);
+			DestAngle = mo.AngleTo(Evade);
 			SetMove(MDIR_BACKWARDS, strafeDir, true);
 
 			if (strafeTics <= 0)
@@ -284,11 +285,13 @@ class Bot : Thinker native
 		{
 			PitchTowardsActor(target);
 
-			if (goal.bSpecial && goal is "Inventory")
+			if (goal is "Inventory" && goal.bSpecial)
 			{
-				if (((player.health < Properties.GetInt('ISP') && (goal.bIsHealth || goal.bBigPowerup))
-						|| goal < COMBAT_RANGE*0.25 || combatDist <= 0.0)
-					&& ((goal ? mo.Distance2D(goal) : 0.0) < COMBAT_RANGE || combatDist <= 0.0)
+				let item = Inventory(goal);
+				double goalDist = goal ? mo.Distance2D(goal) : 0.0;
+				if (((player.health < Properties.GetInt('ISP') && (item.bIsHealth || item.bBigPowerup))
+						|| goalDist < COMBAT_RANGE*0.25 || combatDist <= 0.0)
+					&& (goalDist < COMBAT_RANGE || combatDist <= 0.0)
 					&& CanReach(goal))
 				{
 					doRoam = true;
@@ -312,7 +315,7 @@ class Bot : Thinker native
 					strafeDir = PickStrafeDirection();
 				}
 
-				DestYaw = mo.AngleTo(target);
+				DestAngle = mo.AngleTo(target);
 
 				EBotMoveDirection fDir = MDIR_NONE;
 				if (player.readyWeapon || mo.Distance2D(target) > combatDist)
@@ -337,7 +340,7 @@ class Bot : Thinker native
 
 			if (!doRoam)
 			{
-				DestYaw = mo.AngleTo(partner);
+				DestAngle = mo.AngleTo(partner);
 				double dist = mo.Distance2D(partner);
 				if (dist > PARTNER_RANGE * 2.0)
 					SetMove(MDIR_FORWARDS, MDIR_NO_CHANGE, true);
@@ -370,7 +373,7 @@ class Bot : Thinker native
 				{
 					if (target.player)
 					{
-						EntityProperties targInfo = target.player.readyWeapon ? GetWeaponInfo(target.player.readyWeapon.GetClass()) : null;
+						let targInfo = target.player.readyWeapon ? GetWeaponInfo(target.player.readyWeapon.GetClass()) : null;
 						if (((targInfo && targInfo.GetBool('bExplosive')) || Random[Bot](0, 99) > Properties.GetInt('ISP'))
 							&& combatDist > 0.0)
 						{
@@ -378,7 +381,7 @@ class Bot : Thinker native
 						}
 						else
 						{
-							DestYaw = mo.AngleTo(target);
+							DestAngle = mo.AngleTo(target);
 						}
 					}
 					else
@@ -404,7 +407,7 @@ class Bot : Thinker native
 								item = Inventory(it.Next());
 							} while (item && --r > 0)
 
-							SetGoatl(item ? item : prev);
+							SetGoal(item ? item : prev);
 							foundDest = true;
 						}
 					}
@@ -460,13 +463,14 @@ class Bot : Thinker native
 		if (!player.readyWeapon)
 			return false;
 
-		if (player.damageCount > Properties.GetInt('ISP'))
+		uint isp = Properties.GetInt('ISP');
+		if (player.damageCount > isp)
 		{
 			bHasToReact = true;
 			return false;
 		}
 
-		EntityProperties weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
+		let weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
 		if (bHasToReact && (!weapInfo || !weapInfo.GetBool('bNoReactionTime')))
 			reactionTics = (100 - Properties.GetInt('ReactionTime') + 1) / (Random[Bot](0, 2) + 3);
 
@@ -480,7 +484,7 @@ class Bot : Thinker native
 		if (weapInfo)
 			projType = weapInfo.GetString('ProjectileType');
 
-		if (weapInfo && weapInfo.GetFloat('MoveCombatDist') <= 0.0)
+		if (weapInfo && weapInfo.GetDouble('CombatRange') <= 0.0)
 		{
 			if (dist > DEFMELEERANGE*4.0)
 				return false;
@@ -500,14 +504,15 @@ class Bot : Thinker native
 				return false;
 
 			Vector3 targetPos = level.Vec3Offset(target.pos, target.vel * int(dist/speed));
-			if (!CheckMissileTrajectory(targetPos, weapInfo.GetFloat('ExplosiveDist')))
+			if (!CheckMissileTrajectory(targetPos, weapInfo.GetDouble('ExplosiveDist')))
 				return false;
 
-			DestYaw = (targetPos - mo.pos).xy.Angle();
+			Vector2 diff = targetPos.xy - mo.pos.xy;
+			DestAngle = diff.Angle();
 		}
 		else
 		{
-			DestYaw = mo.AngleTo(target);
+			DestAngle = mo.AngleTo(target);
 			int aimPenalty;
 			if (target.bShadow)
 				aimPenalty += Random[Bot](0, 24) + 10;
@@ -518,7 +523,7 @@ class Bot : Thinker native
 
 			int aim = max(Properties.GetInt('Aiming') - aimPenalty, 0);
 			double inaccuracy = max((FIRE_FOV * 0.5) - (aim * FIRE_FOV/200.0), 0.0);
-			DestYaw += inaccuracy * RandomPick[Bot](-1, 1);
+			DestAngle += inaccuracy * RandomPick[Bot](-1, 1);
 
 			if (!IsActorInView(target, FIRE_FOV * 0.5))
 				return false;

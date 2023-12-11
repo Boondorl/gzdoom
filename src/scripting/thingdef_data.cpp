@@ -813,6 +813,10 @@ void InitThingdef()
 	fspp->Size = sizeof(FSpawnParticleParams);
 	fspp->Align = alignof(FSpawnParticleParams);
 
+	auto fep = NewStruct("EntityProperties", nullptr);
+	fep->Size = sizeof(FEntityProperties);
+	fep->Align = alignof(FEntityProperties);
+
 	auto cvst = NewStruct("CVar", nullptr, true);
 	NewPointer(cvst, false)->InstallHandlers(
 		[](FSerializer &arc, const char *key, const void *addr)

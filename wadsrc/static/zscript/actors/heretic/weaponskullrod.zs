@@ -149,8 +149,6 @@ class HornRodFX1 : Actor
 		SeeSound "weapons/hornrodshoot";
 		DeathSound "weapons/hornrodhit";
 		Obituary "$OB_MPSKULLROD";
-
-		+WARNBOT
 	}
 
 	States

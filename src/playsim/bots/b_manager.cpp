@@ -155,9 +155,8 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	else
 		Printf("%s joined the game\n", level->Players[playerIndex]->userinfo.GetName());
 
-	// Since bots can enter the game at any time unlike clients, this has to be handled here manually.
+	// Boon TODO: double check the enter function is firing off
 	level->DoReborn(playerIndex);
-	level->localEventManager->PlayerEntered(playerIndex, false);
 	return true;
 }
 
@@ -377,6 +376,9 @@ public:
 	{
 		if (_parent != NAME_None)
 		{
+			if (_nodeAction == nullptr)
+				return false;
+
 			bool res = _nodeAction(_cls, _parent);
 			if (!res)
 				return false;
