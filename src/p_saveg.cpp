@@ -654,10 +654,9 @@ void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 			}
 			arc.EndArray();
 		}
-		if (!skipload && numPlayersNow > numPlayers)
-		{
+		// Make sure any newly connected real players have a map object.
+		if (!skipload)
 			SpawnExtraPlayers();
-		}
 
 		// Redo pitch limits, since the spawned player has them at 0.
 		auto p = GetConsolePlayer();
@@ -810,7 +809,8 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 						CopyPlayer(Players[j], &playerInfos[i], playerNames[i]);
 						slotOpen[j] = false;
 						playerAssigned[i] = true;
-						playeringame[j] = true; // This has to be set manually.
+						multiplayer = true; // These have to be set manually.
+						playeringame[j] = true;
 						break;
 					}
 				}

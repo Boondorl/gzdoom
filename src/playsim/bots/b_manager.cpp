@@ -135,9 +135,19 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	uint8_t* stream = bot->GetUserInfo();
 	D_ReadUserInfoStrings(playerIndex, &stream, false);
 
+	const auto defClass = PClass::FindClass("Bot");
+	const auto& cls = bot->GetString("BotClass", "Bot");
+	auto botClass = PClass::FindClass(cls);
+	if (botClass == nullptr || !botClass->IsDescendantOf(defClass))
+	{
+		Printf("Bot class %s is invalid, defaulting to Bot\n", cls.GetChars());
+		botClass = defClass;
+	}
+
 	multiplayer = true; // Count this as multiplayer, even if it's not a netgame.
 	playeringame[playerIndex] = true;
-	level->Players[playerIndex]->Bot = level->CreateThinker<DBot>(level->Players[playerIndex], botID);
+	level->Players[playerIndex]->Bot = static_cast<DBot*>(level->CreateThinker(botClass, DBot::DEFAULT_STAT));
+	level->Players[playerIndex]->Bot->Construct(level->Players[playerIndex], botID);
 	level->Players[playerIndex]->playerstate = PST_ENTER;
 
 	if (teamplay)
@@ -534,10 +544,11 @@ void DBotManager::ParseBotDefinitions()
 				parent = sc.String;
 				if (parent == key)
 					sc.ScriptError("Definition '%s' tried to inherit from itself.", key);
+
+				sc.MustGetString();
 			}
 
 			FName replacement = NAME_None;
-			sc.MustGetString();
 			if (sc.Compare(Replaces))
 			{
 				sc.MustGetString();
@@ -634,7 +645,7 @@ CCMD(addbot)
 		return;
 	}
 
-	DBotManager::SpawnBot(primaryLevel, argv.argc() > 1 ? argv[1] : FString{});
+	DBotManager::SpawnBot(primaryLevel, argv.argc() > 1 ? FName(argv[1]) : NAME_None);
 }
 
 CCMD(removebots)
