@@ -1,5 +1,7 @@
 struct EntityProperties native
 {
+	// TODO: Return a list of properties? Is that even useful?
+	//       Default getters?
 	native void SetString(Name key, string value);
 	native void SetBool(Name key, bool value);
 	native void SetInt(Name key, int value);
@@ -58,7 +60,6 @@ class Bot : Thinker native
 	native clearscope static EntityProperties GetWeaponInfo(class<Weapon> weap);
 	native clearscope static bool IsSectorDangerous(Sector sec);
 	native clearscope static int GetBotCount();
-	// TODO: Spawn and Remove bot should be level functions
 
 	native clearscope PlayerInfo GetPlayer() const;
 	native void SetMove(EBotMoveDirection forward, EBotMoveDirection side, bool running);
@@ -317,7 +318,7 @@ class Bot : Thinker native
 				if (player.readyWeapon || mo.Distance2D(target) > combatDist)
 					fDir = MDIR_FORWARDS;
 				else if (!stuck)
-					fDir = MDIR_BACKWARDS
+					fDir = MDIR_BACKWARDS;
 
 				SetMove(fDir, strafeDir, !target.bIsMonster);
 				TryFire();
@@ -551,7 +552,7 @@ class Bot : Thinker native
 	}
 }
 
-// Deprecated: Do not use
+// Deprecated: Bots no longer use this.
 class CajunBodyNode : Actor
 {
 	Default
@@ -562,7 +563,7 @@ class CajunBodyNode : Actor
 	}
 }
 
-// Deprecated: Do not use
+// Deprecated: Bots no longer use this.
 class CajunTrace : Actor
 {
 	Default

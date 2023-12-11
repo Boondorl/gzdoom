@@ -111,7 +111,7 @@ bool DBot::CanReach(AActor* const target)
     const sector_t* prevSec = _player->mo->Sector;
     double prevZ = _player->mo->floorz;
     const intercept_t* in = nullptr;
-    FPathTraverse it(Level, _player->mo->X(), _player->mo->Y(), dest.X, dest.Y, PT_ADDLINES | PT_ADDTHINGS);
+    FPathTraverse it = { Level, _player->mo->X(), _player->mo->Y(), dest.X, dest.Y, PT_ADDLINES | PT_ADDTHINGS };
     while ((in = it.Next()) != nullptr)
     {
         if (in->isaline)

@@ -244,6 +244,27 @@ FBotDefinition* DBotManager::GetBot(const FName& botName)
 	return BotDefinitions.CheckKey(id);
 }
 
+void DBotManager::SetNamedBots(const FString* const args, const int argCount)
+{
+	_botNameArgs.Clear();
+	if (consoleplayer != Net_Arbitrator)
+		return;
+
+	for (int i = 0; i < argCount; ++i)
+		_botNameArgs.Push(args[i]);
+}
+
+void DBotManager::SpawnNamedBots(FLevelLocals* const level)
+{
+	if (gamestate != GS_LEVEL || consoleplayer != Net_Arbitrator)
+		return;
+
+	for (const auto& name : _botNameArgs)
+		SpawnBot(level, name);
+
+	_botNameArgs.Clear();
+}
+
 // BOTDEF parsing
 
 static bool GetWeaponDef(const FName& cls, const FName& base)
@@ -541,7 +562,7 @@ void DBotManager::ParseBotDefinitions()
 			else
 			{
 				if (weapTree.IsInvalidClass(key))
-					sc.ScriptError("Weapon '%s' cannot be redefined.", key);
+					sc.ScriptError("Weapon '%s' already exists.", key);
 
 				FEntityProperties props = {};
 				BotWeaponInfo.Insert(key, ParseWeapon(sc, props));
@@ -552,11 +573,12 @@ void DBotManager::ParseBotDefinitions()
 		}
 	}
 
+	// Boon TODO: Needs an error code
 	// Now that we've done an initial pass, start inheriting.
 	if (!weapTree.GenerateData())
-		; // Class didn't exist, inherited from child class
+		; // Class didn't exist, looped
 	if (!botTree.GenerateData())
-		; // Class didn't exist, inherited from child class
+		; // Class didn't exist, looped
 }
 
 FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
@@ -593,27 +615,6 @@ FEntityProperties& DBotManager::ParseWeapon(FScanner& sc, FEntityProperties& pro
 	}
 
 	return props;
-}
-
-void DBotManager::SetNamedBots(const FString* const args, const int argCount)
-{
-	_botNameArgs.Clear();
-
-	for (int i = 0; i < argCount; ++i)
-		_botNameArgs.Push(args[i]);
-}
-
-// Boon TODO: This really needs a GS_LEVEL check...
-void DBotManager::SpawnNamedBots(FLevelLocals* const level)
-{
-	// Only the host gets to specify bots.
-	if (consoleplayer == Net_Arbitrator)
-	{
-		for (const auto& name : _botNameArgs)
-			SpawnBot(level, name);
-	}
-
-	_botNameArgs.Clear();
 }
 
 CVAR(Int, bot_next_color, 0, 0)

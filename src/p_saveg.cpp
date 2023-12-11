@@ -650,16 +650,15 @@ void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 			}
 			else
 			{
-				ReadMultiplePlayers(arc, numPlayers, numPlayersNow, skipload);
+				ReadMultiplePlayers(arc, numPlayers, skipload);
 			}
 			arc.EndArray();
-
-			// Boon TODO: Bots need to be checked for a valid player slot
 		}
 		if (!skipload && numPlayersNow > numPlayers)
 		{
 			SpawnExtraPlayers();
 		}
+
 		// Redo pitch limits, since the spawned player has them at 0.
 		auto p = GetConsolePlayer();
 		if (p) p->SendPitchLimits();
@@ -672,48 +671,49 @@ void FLevelLocals::SerializePlayers(FSerializer &arc, bool skipload)
 //
 //==========================================================================
 
-void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool skipload)
+void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool fromHub)
 {
-	int i;
-	const char *name = NULL;
-	bool didIt = false;
-
+	const char *name = nullptr;
+	bool foundFirstPlayer = false;
 	if (arc.BeginObject(nullptr))
 	{
 		arc.StringPtr("playername", name);
 
-		for (i = 0; i < MAXPLAYERS; ++i)
+		for (int i = 0; i < MAXPLAYERS; ++i)
 		{
-			if (playeringame[i])
+			// Get the first real player since bots are ignored here.
+			if (!foundFirstPlayer && PlayerInGame(i))
 			{
-				if (!didIt)
+				foundFirstPlayer = true;
+				player_t playerTemp;
+				playerTemp.Serialize(arc);
+				if (!fromHub)
 				{
-					didIt = true;
-					player_t playerTemp;
-					playerTemp.Serialize(arc);
-					if (!skipload)
-					{
-						// This temp player has undefined pitch limits, so set them to something
-						// that should leave the pitch stored in the savegame intact when
-						// rendering. The real pitch limits will be set by P_SerializePlayers()
-						// via a net command, but that won't be processed in time for a screen
-						// wipe, so we need something here.
-						playerTemp.MaxPitch = playerTemp.MinPitch = playerTemp.mo->Angles.Pitch;
-						CopyPlayer(Players[i], &playerTemp, name);
-					}
-					else
-					{
-						// we need the player actor, so that G_FinishTravel can destroy it later.
-						Players[i]->mo = playerTemp.mo;
-					}
+					// This temp player has undefined pitch limits, so set them to something
+					// that should leave the pitch stored in the savegame intact when
+					// rendering. The real pitch limits will be set by P_SerializePlayers()
+					// via a net command, but that won't be processed in time for a screen
+					// wipe, so we need something here.
+					playerTemp.MaxPitch = playerTemp.MinPitch = playerTemp.mo->Angles.Pitch;
+					CopyPlayer(Players[i], &playerTemp, name);
 				}
 				else
 				{
-					if (Players[i]->mo != NULL)
-					{
-						Players[i]->mo->Destroy();
-						Players[i]->mo = NULL;
-					}
+					// we need the player actor, so that G_FinishTravel can destroy it later.
+					Players[i]->mo = playerTemp.mo;
+				}
+			}
+			else
+			{
+				if (Players[i]->mo != nullptr)
+				{
+					Players[i]->mo->Destroy();
+					Players[i]->mo = nullptr;
+				}
+				if (Players[i]->Bot != nullptr)
+				{
+					Players[i]->Bot->Destroy();
+					Players[i]->Bot = nullptr;
 				}
 			}
 		}
@@ -727,47 +727,52 @@ void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool skipload)
 //
 //==========================================================================
 
-void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, int numPlayersNow, bool skipload)
+// For two or more players, read each player into a temporary array.
+void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fromHub)
 {
-	// For two or more players, read each player into a temporary array.
-	int i, j;
-	const char **nametemp = new const char *[numPlayers];
-	player_t *playertemp = new player_t[numPlayers];
-	uint8_t *tempPlayerUsed = new uint8_t[numPlayers];
-	uint8_t playerUsed[MAXPLAYERS];
+	bool slotOpen[MAXPLAYERS];
+	for (int i = 0; i < MAXPLAYERS; ++i)
+		slotOpen[i] = true; // Consider all slots open since bots will need to be shuffled around.
 
-	for (i = 0; i < numPlayers; ++i)
+	const char** playerNames = new const char* [numPlayers];
+	player_t* playerInfos = new player_t[numPlayers];
+	uint8_t* playerAssigned = new uint8_t[numPlayers];
+	for (int i = 0; i < numPlayers; ++i)
 	{
-		nametemp[i] = NULL;
+		playerNames[i] = nullptr;
 		if (arc.BeginObject(nullptr))
 		{
-			arc.StringPtr("playername", nametemp[i]);
-			playertemp[i].Serialize(arc);
+			arc.StringPtr("playername", playerNames[i]);
+			playerInfos[i].Serialize(arc);
 			arc.EndObject();
 		}
-		tempPlayerUsed[i] = 0;
-	}
-	for (i = 0; i < MAXPLAYERS; ++i)
-	{
-		playerUsed[i] = playeringame[i] ? 0 : 2;
+		playerAssigned[i] = false;
 	}
 
-	if (!skipload)
+	if (!fromHub)
 	{
 		// Now try to match players from the savegame with players present
 		// based on their names. If two players in the savegame have the
 		// same name, then they are assigned to players in the current game
 		// on a first-come, first-served basis.
-		for (i = 0; i < numPlayers; ++i)
+		for (int i = 0; i < numPlayers; ++i)
 		{
-			for (j = 0; j < MAXPLAYERS; ++j)
+			// Bots will be assigned last so players can always take
+			// priority.
+			if (playerInfos[i].Bot != nullptr)
+				continue;
+
+			// Try and arrange players back into their correct slots. Players should always attempt to be assigned into
+			// the very first slots where actual players are stored.
+			for (int j = 0; j < MAXPLAYERS; ++j)
 			{
-				if (playerUsed[j] == 0 && stricmp(players[j].userinfo.GetName(), nametemp[i]) == 0)
-				{ // Found a match, so copy our temp player to the real player
-					Printf("Found player %d (%s) at %d\n", i, nametemp[i], j);
-					CopyPlayer(Players[j], &playertemp[i], nametemp[i]);
-					playerUsed[j] = 1;
-					tempPlayerUsed[i] = 1;
+				// Found a match, so copy our temp player to the real player
+				if (slotOpen[j] && PlayerInGame(j) && !stricmp(Players[j]->userinfo.GetName(), playerNames[i]))
+				{
+					Printf("Found player %d (%s) at %d\n", i, playerNames[i], j);
+					CopyPlayer(Players[j], &playerInfos[i], playerNames[i]);
+					slotOpen[j] = false;
+					playerAssigned[i] = true;
 					break;
 				}
 			}
@@ -775,18 +780,37 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, int num
 
 		// Any players that didn't have matching names are assigned to existing
 		// players on a first-come, first-served basis.
-		for (i = 0; i < numPlayers; ++i)
+		for (int i = 0; i < numPlayers; ++i)
 		{
-			if (tempPlayerUsed[i] == 0)
+			if (!playerAssigned[i] && playerInfos[i].Bot == nullptr)
 			{
-				for (j = 0; j < MAXPLAYERS; ++j)
+				for (int j = 0; j < MAXPLAYERS; ++j)
 				{
-					if (playerUsed[j] == 0)
+					if (slotOpen[j] && PlayerInGame(j))
 					{
-						Printf("Assigned player %d (%s) to %d (%s)\n", i, nametemp[i], j, players[j].userinfo.GetName());
-						CopyPlayer(&players[j], &playertemp[i], nametemp[i]);
-						playerUsed[j] = 1;
-						tempPlayerUsed[i] = 1;
+						Printf("Assigned player %d (%s) to %d (%s)\n", i, playerNames[i], j, Players[j]->userinfo.GetName());
+						CopyPlayer(Players[j], &playerInfos[i], playerNames[i]);
+						slotOpen[j] = false;
+						playerAssigned[i] = true;
+						break;
+					}
+				}
+			}
+		}
+
+		// Now we can assign the bots.
+		for (int i = 0; i < numPlayers; ++i)
+		{
+			if (!playerAssigned[i] && playerInfos[i].Bot != nullptr)
+			{
+				for (int j = 0; j < MAXPLAYERS; ++j)
+				{
+					if (slotOpen[j] && !PlayerInGame(j))
+					{
+						CopyPlayer(Players[j], &playerInfos[i], playerNames[i]);
+						slotOpen[j] = false;
+						playerAssigned[i] = true;
+						playeringame[j] = true; // This has to be set manually.
 						break;
 					}
 				}
@@ -796,40 +820,52 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, int num
 		// Make sure any extra players don't have actors spawned yet. Happens if the players
 		// present now got the same slots as they had in the save, but there are not as many
 		// as there were in the save.
-		for (j = 0; j < MAXPLAYERS; ++j)
+		for (int i = 0; i < MAXPLAYERS; ++i)
 		{
-			if (playerUsed[j] == 0)
+			if (slotOpen[i])
 			{
-				if (players[j].mo != NULL)
+				if (Players[i]->mo != nullptr)
 				{
-					players[j].mo->Destroy();
-					players[j].mo = NULL;
+					Players[i]->mo->Destroy();
+					Players[i]->mo = nullptr;
+				}
+				if (Players[i]->Bot != nullptr)
+				{
+					Players[i]->Bot->Destroy();
+					Players[i]->Bot = nullptr;
 				}
 			}
 		}
 
 		// Remove any temp players that were not used. Happens if there are fewer players
 		// than there were in the save, and they got shuffled.
-		for (i = 0; i < numPlayers; ++i)
+		for (int i = 0; i < numPlayers; ++i)
 		{
-			if (tempPlayerUsed[i] == 0)
+			if (!playerAssigned[i])
 			{
-				playertemp[i].mo->Destroy();
-				playertemp[i].mo = NULL;
+				playerInfos[i].mo->Destroy();
+				playerInfos[i].mo = nullptr;
+				if (playerInfos[i].Bot != nullptr)
+				{
+					playerInfos[i].Bot->Destroy();
+					playerInfos[i].Bot = nullptr;
+				}
 			}
 		}
 	}
 	else
 	{
-		for (i = 0; i < numPlayers; ++i)
+		// Hub level transition so no need to shuffle things.
+		for (int i = 0; i < numPlayers; ++i)
 		{
-			players[i].mo = playertemp[i].mo;
+			Players[i]->mo = playerInfos[i].mo;
+			Players[i]->Bot = playerInfos[i].Bot;
 		}
 	}
 
-	delete[] tempPlayerUsed;
-	delete[] playertemp;
-	delete[] nametemp;
+	delete[] playerAssigned;
+	delete[] playerInfos;
+	delete[] playerNames;
 }
 
 //==========================================================================
@@ -840,15 +876,13 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, int num
 
 void FLevelLocals::CopyPlayer(player_t *dst, player_t *src, const char *name)
 {
-	// The userinfo needs to be saved for real players, but it
-	// needs to come from the save for bots.
-	userinfo_t uibackup;
-	userinfo_t uibackup2;
+	userinfo_t destInfo;
+	userinfo_t srcInfo;
 
-	uibackup.TransferFrom(dst->userinfo);
-	uibackup2.TransferFrom(src->userinfo);
+	destInfo.TransferFrom(dst->userinfo);
+	srcInfo.TransferFrom(src->userinfo);
 
-	int chasecam = dst->cheats & CF_CHASECAM;	// Remember the chasecam setting
+	int chasecam = dst->cheats & CF_CHASECAM;
 	bool attackdown = dst->attackdown;
 	bool usedown = dst->usedown;
 
@@ -856,32 +890,28 @@ void FLevelLocals::CopyPlayer(player_t *dst, player_t *src, const char *name)
 
 	dst->cheats |= chasecam;
 
+	// Bots don't have their userinfo built on connect so it should retrieve it directly from
+	// the save file.
 	if (dst->Bot != nullptr)
-	{
-		dst->userinfo.TransferFrom(uibackup2);
-	}
+		dst->userinfo.TransferFrom(srcInfo);
 	else
-	{
-		dst->userinfo.TransferFrom(uibackup);
-		// The player class must come from the save, so that the menu reflects the currently playing one.
-		dst->userinfo.PlayerClassChanged(src->mo->GetInfo()->DisplayName.GetChars());
-	}
+		dst->userinfo.TransferFrom(destInfo);
+
+	// The player class must come from the save, so that the menu reflects the currently playing one.
+	dst->userinfo.PlayerClassChanged(src->mo->GetInfo()->DisplayName.GetChars());
 
 	// Validate the skin
 	dst->userinfo.SkinNumChanged(R_FindSkin(Skins[dst->userinfo.GetSkin()].Name.GetChars(), dst->CurrentPlayerClass));
 
 	// Make sure the player pawn points to the proper player struct.
 	if (dst->mo != nullptr)
-	{
 		dst->mo->player = dst;
-	}
 
 	// Same for the psprites.
 	DPSprite *pspr = dst->psprites;
 	while (pspr)
 	{
 		pspr->Owner = dst;
-
 		pspr = pspr->Next;
 	}
 
@@ -897,20 +927,18 @@ void FLevelLocals::CopyPlayer(player_t *dst, player_t *src, const char *name)
 //
 //==========================================================================
 
+// If there are more players now than there were in the savegame,
+// be sure to spawn the extra players.
 void FLevelLocals::SpawnExtraPlayers()
 {
-	// If there are more players now than there were in the savegame,
-	// be sure to spawn the extra players.
-	int i;
-
 	if (deathmatch || !isPrimaryLevel())
 	{
 		return;
 	}
 
-	for (i = 0; i < MAXPLAYERS; ++i)
+	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
-		if (PlayerInGame(i) && Players[i]->mo == NULL)
+		if (PlayerInGame(i) && Players[i]->mo == nullptr)
 		{
 			Players[i]->playerstate = PST_ENTER;
 			SpawnPlayer(&playerstarts[i], i, (flags2 & LEVEL2_PRERAISEWEAPON) ? SPF_WEAPONFULLYUP : 0);

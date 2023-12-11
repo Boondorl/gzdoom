@@ -55,9 +55,8 @@ void DBot::OnDestroy()
 	Properties.Clear();
 }
 
-// Player is serialized via player slot. Bots always refresh their player struct on load so saving it is not needed.
-// If a player currently occupies its desired slot, its player pointer will be null and an attempt
-// will be made to see if a new slot exists for it to be moved to.
+// Player is tracked via player slot. If a player currently occupies its desired slot, it will attempt
+// to shift to a newly opened spot or, if none found, destroy itself.
 void DBot::Serialize(FSerializer &arc)
 {
 	Super::Serialize(arc);
@@ -83,12 +82,6 @@ void DBot::Serialize(FSerializer &arc)
 			Properties = { props }; // Keep its properties and key just in case it needs to be removed.
 		else
 			Properties = { props, &def->GetProperties() };
-
-		// Make sure the player slot is actually the bot. If not, the bot will
-		// attempt to find a new slot if its player pointer is still null
-		// after loading. If no slot open, it'll just boot itself.
-		if (Level->Players[pNum]->Bot == this)
-			_player = Level->Players[pNum];
 	}
 }
 

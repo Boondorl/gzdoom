@@ -469,7 +469,8 @@ void G_NewInit ()
 	primaryLevel->FraggleScriptThinker = nullptr;
 
 	// Destroy thinkers that may remain after change level failure
-	// Usually, the list contains just a sentinel when such error occurred
+	// Usually, the list contains just a sentinel when such error occurred,
+	// but can also contains traveling Bots
 	primaryLevel->Thinkers.DestroyThinkersInList(STAT_TRAVELLING);
 
 	G_ClearSnapshots ();
