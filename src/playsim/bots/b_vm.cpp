@@ -214,17 +214,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(FEntityProperties, ResetAllProperties, ResetAllPro
 
 DEFINE_FIELD(DBot, Properties)
 
-static FEntityProperties* GetWeaponInfo(const PClassActor* const weap)
+static FEntityProperties* GetEntityInfo(const int ent, const int base)
 {
-	return DBotManager::GetWeaponInfo(weap);
+	return DBotManager::GetEntityInfo(ENamedName(ent), ENamedName(base));
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, GetWeaponInfo, GetWeaponInfo)
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, GetEntityInfo, GetEntityInfo)
 {
 	PARAM_PROLOGUE;
-	PARAM_POINTER(weap, PClassActor);
+	PARAM_INT(ent);
+	PARAM_INT(base);
 
-	ACTION_RETURN_POINTER(GetWeaponInfo(weap));
+	ACTION_RETURN_POINTER(GetEntityInfo(ent, base));
 }
 
 static int IsSectorDangerous(const sector_t* const sec)

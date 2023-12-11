@@ -266,24 +266,24 @@ class DBotManager final
 private:
 	static inline TArray<FName> _botNameArgs = {}; // Bot names given when the host launched the game with the "-bots" arg.
 	static inline TMap<FName, FName> _botReplacements = {};
-	static inline TMap<FName, FName> _weaponReplacements = {};
+	static inline TMap<FName, FName> _botEntityReplacements = {};
 
 	static FBotDefinition& ParseBot(FScanner& sc, FBotDefinition& def);				// Function that parses a bot block in BOTDEFS.
-	static FEntityProperties& ParseWeapon(FScanner& sc, FEntityProperties& props);	// Function that parses a weapon block in BOTDEFS.
+	static FEntityProperties& ParseEntity(FScanner& sc, FEntityProperties& props);	// Function that parses a weapon block in BOTDEFS.
 
 	DBotManager(); // Don't instantiate it.
 
 public:
 	static inline cycle_t BotThinkCycles = {};							// For tracking think time of bots specifically.
 	static inline TMap<FName, FBotDefinition> BotDefinitions = {};		// Default properties and userinfo to give when spawning a bot. Stored by bot ID.
-	static inline TMap<FName, FEntityProperties> BotWeaponInfo = {};	// Key information about how bots should use each weapon. Stored by weapon class name.
+	static inline TMap<FName, FEntityProperties> BotEntityInfo = {};	// Key information about how bots should use each weapon. Stored by weapon class name.
 
 	static void ParseBotDefinitions();											// Parses the BOTDEF lumps.
 	static void SetNamedBots(const FString* const args, const int argCount);	// Parses the "-bots" arg for the names of the bots.
 	static void SpawnNamedBots(FLevelLocals* const level);						// Spawns any named bots. Only the host can do this. Triggers on level load.
 	static int CountBots(FLevelLocals* const level = nullptr);					// Counts the number of bots in the game. Used after loading.
 
-	static FEntityProperties* GetWeaponInfo(const PClassActor* const weap);
+	static FEntityProperties* GetEntityInfo(const FName& ent, const FName& baseClass = NAME_Actor);
 	static FBotDefinition* GetBot(const FName& botName);
 	static bool SpawnBot(FLevelLocals* const level, const FName& name = NAME_None);							// Spawns a bot over the network. If no name is passed, spawns a random one.
 	static bool TryAddBot(FLevelLocals* const level, const unsigned int playerIndex, const FName& botID);	// Parses the network message to try and add a bot.

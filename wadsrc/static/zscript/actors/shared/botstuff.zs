@@ -37,7 +37,7 @@ class Bot : Thinker native
 	const STRAFE_COOL_DOWN = 5;
 	const MIN_RESPAWN_TIME = int(0.25 * TICRATE);
 	const MAX_RESPAWN_TIME = int(1.0 * TICRATE);
-	const MAX_MONSTER_RANGE = 768.0;
+	const MAX_MONSTER_RANGE_SQ = 768.0 * 768.0;
 	const EVADE_RANGE = 672.0;
 	const COMBAT_RANGE = 512.0;
 	const PARTNER_RANGE = 224.0;
@@ -57,7 +57,7 @@ class Bot : Thinker native
 	protected Vector3 prevPos;
 	protected bool bHasToReact;
 
-	native clearscope static EntityProperties GetWeaponInfo(class<Weapon> weap);
+	native clearscope static EntityProperties GetEntityInfo(Name entity, Name baseClass = 'Actor');
 	native clearscope static bool IsSectorDangerous(Sector sec);
 	native clearscope static int GetBotCount();
 
@@ -93,7 +93,7 @@ class Bot : Thinker native
 	clearscope Actor GetPartner() const
 	{
 		Actor player = GetActor();
-		return player.friendPlayer > 0u ? players[player.friendPlayer - 1u].mo : null;
+		return player.friendPlayer > 0u && player.friendPlayer <= MAXPLAYERS ? players[player.friendPlayer - 1u].mo : null;
 	}
 
 	clearscope Actor GetGoal() const
@@ -108,7 +108,7 @@ class Bot : Thinker native
 
 	void SetPartner(int pNum)
 	{
-		GetActor().friendPlayer = pNum < 0 ? 0 : pNum + 1;
+		GetActor().friendPlayer = pNum < 0 || pNum >= MAXPLAYERS ? 0 : pNum + 1;
 	}
 
 	void SetGoal(Actor goal)
@@ -126,25 +126,27 @@ class Bot : Thinker native
 		let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
 		while (mo = Actor(it.Next()))
 		{
-			if (mo.bIsMonster)
+			if (mo.bIsMonster && mo.health > 0 && mo != target
+				&& !player.IsFriend(mo) && player.Distance3DSquared(mo) < MAX_MONSTER_RANGE_SQ
+				&& player.CheckSight(mo, SF_SEEPASTBLOCKEVERYTHING))
 			{
-				if (mo.health > 0 && mo != target
-					&& player.Distance2D(mo) < MAX_MONSTER_RANGE
-					&& player.CheckSight(mo, SF_SEEPASTBLOCKEVERYTHING))
-				{
-					SetTarget(mo);
-				}
-			}
-			else if (mo.bMissile)
-			{
-				if (!Evade && mo.bWarnBot && mo.target != player && IsActorInView(mo))
-					Evade = mo;
+				SetTarget(mo);
+				break;
 			}
 			else if (mo.bSpecial && (!goal || !goal.bSpecial) && IsValidItem(Inventory(mo)))
 			{
-				goal = mo;
 				SetGoal(goal);
 				roamTics = ROAM_TIME;
+				break;
+			}
+			else if (mo.bMissile && !Evade)
+			{
+				let entity = GetEntityInfo(mo.GetClassName());
+				if (entity && entity.GetBool('bWarn') && (!mo.target || !player.IsFriend(mo.target)))
+				{
+					Evade = mo;
+					break;
+				}
 			}
 		}
 	}
@@ -228,7 +230,7 @@ class Bot : Thinker native
 		double turn = MAX_TURN;
 		if (player.readyWeapon)
 		{
-			let weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
+			let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
 			if (weapInfo)
 			{
 				class<Actor> projType = weapInfo.GetString('ProjectileType');
@@ -255,7 +257,7 @@ class Bot : Thinker native
 		Actor partner = GetPartner();
 		Actor goal = GetGoal();
 
-		let weapInfo = player.readyWeapon ? GetWeaponInfo(player.readyWeapon.GetClass()) : null;
+		let weapInfo = player.readyWeapon ? GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon') : null;
 		double combatDist = weapInfo ? weapInfo.GetDouble('CombatRange') : 0.0;
 
 		if (Evade &&
@@ -373,7 +375,7 @@ class Bot : Thinker native
 				{
 					if (target.player)
 					{
-						let targInfo = target.player.readyWeapon ? GetWeaponInfo(target.player.readyWeapon.GetClass()) : null;
+						let targInfo = target.player.readyWeapon ? GetEntityInfo(target.player.readyWeapon.GetClassName(), 'Weapon') : null;
 						if (((targInfo && targInfo.GetBool('bExplosive')) || Random[Bot](0, 99) > Properties.GetInt('ISP'))
 							&& combatDist > 0.0)
 						{
@@ -470,7 +472,7 @@ class Bot : Thinker native
 			return false;
 		}
 
-		let weapInfo = GetWeaponInfo(player.readyWeapon.GetClass());
+		let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
 		if (bHasToReact && (!weapInfo || !weapInfo.GetBool('bNoReactionTime')))
 			reactionTics = (100 - Properties.GetInt('ReactionTime') + 1) / (Random[Bot](0, 2) + 3);
 

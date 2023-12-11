@@ -194,7 +194,7 @@ bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance
 		return false;
 
 	const PClass* missileType = nullptr;
-	const FEntityProperties* const weapInfo = DBotManager::GetWeaponInfo(_player->ReadyWeapon->GetClass());
+	const FEntityProperties* const weapInfo = DBotManager::GetEntityInfo(_player->ReadyWeapon->GetClass()->TypeName, NAME_Weapon);
 	if (weapInfo != nullptr)
 		missileType = PClass::FindClass(weapInfo->GetString("ProjectileType"));
 

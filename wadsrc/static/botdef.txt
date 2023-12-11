@@ -1,5 +1,5 @@
 // GZDoom Bots
-Bot DefaultGZDoomBot
+abstract Bot DefaultGZDoomBot
 {
 	Warn "PlasmaBall,HornStaffFX1,Ripper"
 }
@@ -10,41 +10,41 @@ Bot GZDoomBot1 : DefaultGZDoomBot
 }
 
 // Doom weapons
-Weapon Fist
+Entity Fist
 {
 	CombatRange 48
 	bMelee true
 	bInstantReaction true
 }
 
-Weapon Chainsaw
+Entity Chainsaw
 {
 	CombatRange 48
 	bMelee true
 	bInstantReaction true
 }
 
-Weapon Pistol
+Entity Pistol
 {
 	CombatRange 384
 }
 
-Weapon Shotgun
+Entity Shotgun
 {
 	CombatRange 320
 }
 
-Weapon SuperShotgun
+Entity SuperShotgun
 {
 	CombatRange 320
 }
 
-Weapon Chaingun
+Entity Chaingun
 {
 	CombatRange 544
 }
 
-Weapon RocketLauncher
+Entity RocketLauncher
 {
 	ProjectileType Rocket
 	CombatRange 800
@@ -53,13 +53,18 @@ Weapon RocketLauncher
 	bExplosive true
 }
 
-Weapon PlasmaRifle
+Entity PlasmaRifle
 {
 	ProjectileType PlasmaBall
 	CombatRange 960
 }
 
-Weapon BFG9000
+Entity PlasmaBall
+{
+	bWarn true
+}
+
+Entity BFG9000
 {
 	ProjectileType BFGBall
 	CombatRange 640
@@ -67,12 +72,12 @@ Weapon BFG9000
 }
 
 // Heretic weapons
-Weapon GoldWand
+Entity GoldWand
 {
 	CombatRange 640
 }
 
-Weapon GoldWandPowered
+Entity GoldWandPowered
 {
 	CombatRange 384
 }

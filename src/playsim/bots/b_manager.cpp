@@ -211,36 +211,55 @@ int DBotManager::CountBots(FLevelLocals* const level)
 	return bots;
 }
 
-FEntityProperties* DBotManager::GetWeaponInfo(const PClassActor* const weap)
+FEntityProperties* DBotManager::GetEntityInfo(const FName& ent, const FName& baseClass)
 {
-	if (weap == nullptr || !weap->IsDescendantOf(NAME_Weapon))
-		return nullptr;
-
-	FName key = weap->TypeName;
-	const auto replacement = _weaponReplacements.CheckKey(key);
+	FName key = ent;
+	const auto replacement = _botEntityReplacements.CheckKey(key);
 	if (replacement != nullptr)
 		key = *replacement;
 
-	FEntityProperties* weapInfo = BotWeaponInfo.CheckKey(key);
-	if (weapInfo != nullptr)
-		return weapInfo;
+	FEntityProperties* entInfo = BotEntityInfo.CheckKey(key);
+	if (entInfo != nullptr)
+		return entInfo;
 
 	// Maybe a class it inherits from has one?
-	const PClass* parent = weap;
-	while (parent->TypeName != NAME_Weapon && (parent = parent->ParentClass) != nullptr)
+	const PClass* const classType = PClass::FindClass(ent);
+	if (classType == nullptr || !classType->IsDescendantOf(baseClass))
+		return nullptr;
+
+	const PClass* parent = classType->ParentClass;
+	while (parent != nullptr && parent->IsDescendantOf(baseClass))
 	{
-		weapInfo = BotWeaponInfo.CheckKey(parent->TypeName);
-		if (weapInfo != nullptr)
-			return weapInfo;
+		entInfo = BotEntityInfo.CheckKey(parent->TypeName);
+		if (entInfo != nullptr)
+			return entInfo;
+
+		parent = parent->ParentClass;
 	}
 
-	// What about the weapon it replaces?
-	weapInfo = BotWeaponInfo.CheckKey(weap->ActorInfo()->Replacee->TypeName);
-	if (weapInfo != nullptr)
-		return weapInfo;
+	// If it's an actor, what about replacements?
+	const PClassActor* const actor = PClass::FindActor(ent);
+	if (actor == nullptr)
+		return nullptr;
 
-	// Or the weapon replacing it?
-	return BotWeaponInfo.CheckKey(weap->ActorInfo()->Replacement->TypeName);
+	// Like the actor it replaces.
+	const FActorInfo* const info = actor->ActorInfo();
+	if (info->Replacee != nullptr)
+	{
+		entInfo = BotEntityInfo.CheckKey(info->Replacee->TypeName);
+		if (entInfo != nullptr)
+			return entInfo;
+	}
+
+	// Or the actor replacing it.
+	if (info->Replacement != nullptr)
+	{
+		entInfo = BotEntityInfo.CheckKey(info->Replacement->TypeName);
+		if (entInfo != nullptr)
+			return entInfo;
+	}
+
+	return nullptr;
 }
 
 FBotDefinition* DBotManager::GetBot(const FName& botName)
@@ -276,13 +295,13 @@ void DBotManager::SpawnNamedBots(FLevelLocals* const level)
 
 // BOTDEF parsing
 
-static bool GetWeaponDef(const FName& cls, const FName& base)
+static bool GetEntityDef(const FName& cls, const FName& base)
 {
-	const auto clsDef = DBotManager::BotWeaponInfo.CheckKey(cls);
+	const auto clsDef = DBotManager::BotEntityInfo.CheckKey(cls);
 	if (clsDef == nullptr)
 		return false;
 
-	const FEntityProperties* const baseDef = DBotManager::BotWeaponInfo.CheckKey(base);
+	const FEntityProperties* const baseDef = DBotManager::BotEntityInfo.CheckKey(base);
 	if (base == nullptr)
 		return false;
 
@@ -511,17 +530,19 @@ public:
 void DBotManager::ParseBotDefinitions()
 {
 	BotDefinitions.Clear();
-	BotWeaponInfo.Clear();
+	BotEntityInfo.Clear();
 
 	constexpr int NoLump = -1;
 	constexpr char LumpName[] = "BOTDEF";
 	constexpr char BotDef[] = "Bot";
-	constexpr char WeaponDef[] = "Weapon";
+	constexpr char EntityDef[] = "Entity";
 	constexpr char Replaces[] = "Replaces";
+	constexpr char Abstract[] = "Abstract";
 
 	// TODO: #include support
 
-	FInheritenceTree weapTree = {}, botTree = {};
+	TArray<FName> abstractEnts = {}, abstractBots = {};
+	FInheritenceTree entTree = {}, botTree = {};
 
 	int lump = NoLump;
 	int lastLump = 0;
@@ -531,9 +552,13 @@ void DBotManager::ParseBotDefinitions()
 		sc.SetCMode(true);
 		while (sc.GetString())
 		{
+			const bool isAbstract = sc.Compare(Abstract);
+			if (isAbstract)
+				sc.MustGetString();
+
 			const bool isBot = sc.Compare(BotDef);
-			if (!isBot && !sc.Compare(WeaponDef))
-				sc.ScriptError("Expected '%s' or '%s', got '%s'.", BotDef, WeaponDef, sc.String);
+			if (!isBot && !sc.Compare(EntityDef))
+				sc.ScriptError("Expected '%s' or '%s', got '%s'.", BotDef, EntityDef, sc.String);
 
 			sc.MustGetString();
 			const FName key = sc.String;
@@ -553,6 +578,9 @@ void DBotManager::ParseBotDefinitions()
 			FName replacement = NAME_None;
 			if (sc.Compare(Replaces))
 			{
+				if (isAbstract)
+					sc.ScriptError("Abstract definitions cannot replace other definitions.");
+
 				sc.MustGetString();
 				replacement = sc.String;
 				sc.MustGetString();
@@ -571,27 +599,44 @@ void DBotManager::ParseBotDefinitions()
 				botTree.InsertNode(key, parent, GetBotDef);
 				if (replacement != NAME_None)
 					_botReplacements.Insert(replacement, key);
+
+				if (isAbstract)
+					abstractBots.Push(key);
 			}
 			else
 			{
-				if (weapTree.IsInvalidClass(key))
+				if (entTree.IsInvalidClass(key))
 					sc.ScriptError("Weapon '%s' already exists.", key);
 
 				FEntityProperties props = {};
-				BotWeaponInfo.Insert(key, ParseWeapon(sc, props));
-				weapTree.InsertNode(key, parent, GetWeaponDef);
+				BotEntityInfo.Insert(key, ParseEntity(sc, props));
+				entTree.InsertNode(key, parent, GetEntityDef);
 				if (replacement != NAME_None)
-					_weaponReplacements.Insert(replacement, key);
+					_botEntityReplacements.Insert(replacement, key);
+
+				if (isAbstract)
+					abstractEnts.Push(key);
 			}
 		}
 	}
 
 	// Boon TODO: Needs an error code
 	// Now that we've done an initial pass, start inheriting.
-	if (!weapTree.GenerateData())
+	if (!entTree.GenerateData())
 		; // Class didn't exist, looped
 	if (!botTree.GenerateData())
 		; // Class didn't exist, looped
+
+	for (const auto& def : abstractBots)
+	{
+		BotDefinitions.Remove(def);
+		_botReplacements.Remove(def); // Just in case someone decided to try replacing it.
+	}
+	for (const auto& def : abstractEnts)
+	{
+		BotEntityInfo.Remove(def);
+		_botEntityReplacements.Remove(def);
+	}
 }
 
 FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
@@ -615,7 +660,7 @@ FBotDefinition& DBotManager::ParseBot(FScanner& sc, FBotDefinition& def)
 	return def;
 }
 
-FEntityProperties& DBotManager::ParseWeapon(FScanner& sc, FEntityProperties& props)
+FEntityProperties& DBotManager::ParseEntity(FScanner& sc, FEntityProperties& props)
 {
 	while (sc.GetString())
 	{
