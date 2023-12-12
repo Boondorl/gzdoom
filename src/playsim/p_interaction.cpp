@@ -1265,6 +1265,21 @@ static int DamageMobj (AActor *target, AActor *inflictor, AActor *source, int da
 			flags &= ~DMG_FORCED;
 		}
 
+		// Alert the bot its pawn was damaged. We need to make sure this is applied before
+		// armor in case the bot thinker decides it wants to modify the damage amount.
+		if (player->Bot != nullptr)
+		{
+			IFVIRTUALPTR(player->Bot, DBot, BotDamaged)
+			{
+				int retDamage = 0;
+				VMValue params[] = { player->Bot.Get(), inflictor, source, damage, mod.GetIndex(), flags, angle.Degrees() };
+				VMReturn res[] = { &retDamage };
+				VMCall(func, params, 7, res, 1);
+
+				damage = retDamage;
+			}
+		}
+
 		// end of game hell hack
 		if ((target->Sector->Flags & SECF_ENDLEVEL) && damage >= target->health)
 		{

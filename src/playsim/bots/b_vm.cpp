@@ -277,9 +277,9 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, GetBotID, GetBotID)
 	ACTION_RETURN_INT(GetBotID(self));
 }
 
-static void SetMove(DBot* const self, const int forw, const int side, const int running)
+static void SetMove(DBot* const self, const int forw, const int side, const int up, const int running)
 {
-	return self->SetMove(static_cast<EBotMoveDirection>(forw), static_cast<EBotMoveDirection>(side), running);
+	self->SetMove(static_cast<EBotMoveDirection>(forw), static_cast<EBotMoveDirection>(side), static_cast<EBotMoveDirection>(up), running);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetMove, SetMove)
@@ -287,9 +287,10 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetMove, SetMove)
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_INT(forw);
 	PARAM_INT(side);
+	PARAM_INT(up);
 	PARAM_INT(running);
 
-	SetMove(self, forw, side, running);
+	SetMove(self, forw, side, up, running);
 	return 0;
 }
 
@@ -305,6 +306,48 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetButtons, SetButtons)
 	PARAM_INT(set);
 
 	SetButtons(self, buttons, set);
+	return 0;
+}
+
+static void SetAngle(DBot* const self, const double destAng)
+{
+	self->SetAngle(DAngle::fromDeg(destAng), ACMD_YAW);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetAngle, SetAngle)
+{
+	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_FLOAT(yaw);
+
+	SetAngle(self, yaw);
+	return 0;
+}
+
+static void SetPitch(DBot* const self, const double destAng)
+{
+	self->SetAngle(DAngle::fromDeg(destAng), ACMD_PITCH);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetPitch, SetPitch)
+{
+	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_FLOAT(pitch);
+
+	SetPitch(self, pitch);
+	return 0;
+}
+
+static void SetRoll(DBot* const self, const double destAng)
+{
+	self->SetAngle(DAngle::fromDeg(destAng), ACMD_ROLL);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, SetRoll, SetRoll)
+{
+	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_FLOAT(roll);
+
+	SetRoll(self, roll);
 	return 0;
 }
 

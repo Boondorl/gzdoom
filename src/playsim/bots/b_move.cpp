@@ -239,7 +239,7 @@ bool DBot::Move()
 	if (!CheckMove(pos))
         return false;
 
-    SetMove(MDIR_FORWARDS, MDIR_NO_CHANGE, true);
+    SetMove(MDIR_FORWARDS);
 	return true;
 }
 

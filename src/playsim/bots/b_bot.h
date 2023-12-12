@@ -54,8 +54,18 @@ enum EBotMoveDirection
 	MDIR_FORWARDS,
 	MDIR_NO_CHANGE,
 
+	MDIR_LEFT = MDIR_FORWARDS,
 	MDIR_RIGHT = MDIR_BACKWARDS,
-	MDIR_LEFT = MDIR_FORWARDS
+
+	MDIR_UP = MDIR_FORWARDS,
+	MDIR_DOWN = MDIR_BACKWARDS
+};
+
+enum EBotAngleCmd
+{
+	ACMD_YAW,
+	ACMD_PITCH,
+	ACMD_ROLL
 };
 
 // Allow for modders to set up any custom properties they want in BOTDEF. Includes wrapper functionality
@@ -296,8 +306,11 @@ class DBot : public DThinker
 	DECLARE_CLASS(DBot, DThinker)
 
 private:
-	player_t* _player;	// Player info for the bot.
+	player_t* _player;	// Player info for the bot. This gets reset every time the game loads into a new map.
 	FName _botID;		// Tracks which bot definition it's tied to.
+
+	void NormalizeSpeed(short& cmd, const int* const speeds, const bool running);	// Ensure that speeds adhere to running properly.
+	void SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng);	// Convert a delta angle into a valid turn command.
 
 public:
 	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
@@ -306,33 +319,34 @@ public:
 
 	static bool IsSectorDangerous(const sector_t* const sec); // Checks if the sector is dangerous to the bot.
 
-	void Construct(player_t* const player, const FName& index);	// Set the default values of the class fields.
+	void Construct(player_t* const player, const FName& index);	// Set the default values of the class fields when the Thinker is created.
 	void OnDestroy() override;									// Clear the Properties map.
-	void Serialize(FSerializer &arc);							// Stuff to write to and load from the save file.
+	void Serialize(FSerializer &arc);							// Only serialize the bot id and properties.
 
 	inline player_t* GetPlayer() const { return _player; }
 	inline const FName& GetBotID() const { return _botID; }
+	inline void ResetPlayer(player_t* const player) { _player = player; } // This should only be called when deserializing.
 
 	void CallBotThink(); // Handles overall thinking logic. Called directly before PlayerThink.
 	
 	// Boon TODO: Clean up all these const functions
-	// Boon TODO: nullptr checks since these will be exported
 	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle90);	// Check if the bot has sight of the Actor within a view cone.
 	bool CanReach(AActor* const target);								// Checks to see if a valid movement can be made towards the target.
 	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0); // Checks if anything is blocking the ReadyWeapon missile's path.
-	void FindEnemy(const DAngle& fov = nullAngle);				// Tries to find a target.
-	void FindPartner();											// Looks for a player to stick near, bot or real.
+	void FindEnemy(const DAngle& fov = nullAngle);						// Tries to find a target.
+	void FindPartner();													// Looks for a player to stick near, bot or real.
 	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
 	void PitchTowardsActor(AActor* const target);						// Aim the bot's pitch towards the target.
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
-	void Roam();													// Attempt to move towards the boat's goal similar to how monsters move.
-	bool CheckMove(const DVector2& pos);							// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
-	bool Move();													// Check to see if a movement is valid in the current moveDir.
+	void Roam();														// Attempt to move towards the boat's goal similar to how monsters move.
+	bool CheckMove(const DVector2& pos);								// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
+	bool Move();														// Check to see if a movement is valid in the current moveDir.
 	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE); // Picks a valid strafe direction to move. Can also jump.
-	bool TryWalk();												// Same as Move but also sets a turn cool down when moving.
-	void NewChaseDir();											// Attempts to get a new direction to move towards the bot's goal.
-	void SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running);	// Sets the forwardmove/sidemove commands.
-	void SetButtons(const int cmd, const bool set);				// Sets the button commands.
+	bool TryWalk();														// Same as Move but also sets a turn cool down when moving.
+	void NewChaseDir();													// Attempts to get a new direction to move towards the bot's goal.
+	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
+	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
+	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.
 };
 
 #endif

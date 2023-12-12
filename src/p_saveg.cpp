@@ -726,7 +726,8 @@ void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool fromHub)
 //
 //==========================================================================
 
-// For two or more players, read each player into a temporary array.
+// For two or more players, read each player into a temporary array and try and correctly
+// assign their slots.
 void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fromHub)
 {
 	bool slotOpen[MAXPLAYERS];
@@ -807,6 +808,7 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 					if (slotOpen[j] && !PlayerInGame(j))
 					{
 						CopyPlayer(Players[j], &playerInfos[i], playerNames[i]);
+						Players[j]->Bot->ResetPlayer(Players[j]);
 						slotOpen[j] = false;
 						playerAssigned[i] = true;
 						multiplayer = true; // These have to be set manually.
@@ -817,9 +819,8 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 			}
 		}
 
-		// Make sure any extra players don't have actors spawned yet. Happens if the players
-		// present now got the same slots as they had in the save, but there are not as many
-		// as there were in the save.
+		// Make sure all remaining open slots are cleared properly. We don't want
+		// any leftover pawns remaining in the game.
 		for (int i = 0; i < MAXPLAYERS; ++i)
 		{
 			if (slotOpen[i])
@@ -837,8 +838,8 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 			}
 		}
 
-		// Remove any temp players that were not used. Happens if there are fewer players
-		// than there were in the save, and they got shuffled.
+		// For any players that were left unassigned from the save, remove
+		// them from the game as well.
 		for (int i = 0; i < numPlayers; ++i)
 		{
 			if (!playerAssigned[i])
@@ -860,6 +861,8 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 		{
 			Players[i]->mo = playerInfos[i].mo;
 			Players[i]->Bot = playerInfos[i].Bot;
+			if (Players[i]->Bot != nullptr)
+				Players[i]->Bot->ResetPlayer(Players[i]);
 		}
 	}
 

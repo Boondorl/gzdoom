@@ -35,7 +35,8 @@
 
 #include "g_levellocals.h" // b_bot.h is defined in here via d_player.h.
 #include "serializer_doom.h"
-#include "gi.h"
+
+extern int forwardmove[2], sidemove[2], flyspeed[2];
 
 IMPLEMENT_CLASS(DBot, false, false)
 
@@ -55,26 +56,22 @@ void DBot::OnDestroy()
 	Properties.Clear();
 }
 
-// Player is tracked via player slot. If a player currently occupies its desired slot, it will attempt
-// to shift to a newly opened spot or, if none found, destroy itself.
+// The player pointer isn't serialized since bots will have their slots rearranged on load
+// anyway to account for real players if needed. Instead their player pointer is reset then.
 void DBot::Serialize(FSerializer &arc)
 {
 	Super::Serialize(arc);
 
 	if (arc.isWriting())
 	{
-		int32_t pNum = Level->PlayerNum(_player);
 		TMap<FName, FString> props = Properties.GetProperties();
-		arc("player", pNum)
-			("botid", _botID)
+		arc("botid", _botID)
 			("properties", props);
 	}
 	else
 	{
-		int32_t pNum = 0;
 		TMap<FName, FString> props = {};
-		arc("player", pNum)
-			("botid", _botID)
+		arc("botid", _botID)
 			("properties", props);
 
 		const FBotDefinition* const def = DBotManager::BotDefinitions.CheckKey(_botID);
@@ -99,12 +96,31 @@ void DBot::CallBotThink()
 	DBotManager::BotThinkCycles.Unclock();
 }
 
-void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const bool running)
+void DBot::NormalizeSpeed(short& cmd, const int* const speeds, const bool running)
+{
+	const bool curRunning = _player->cmd.ucmd.buttons & (BT_SPEED | BT_RUN);
+	if (curRunning && !running)
+		cmd *= static_cast<double>(speeds[0]) / speeds[1];
+	else if (!curRunning && running)
+		cmd *= static_cast<double>(speeds[1]) / speeds[0];
+}
+
+void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const EBotMoveDirection up, const bool running)
 {
 	if (forward != MDIR_NO_CHANGE)
-		_player->cmd.ucmd.forwardmove = static_cast<int>(gameinfo.normforwardmove[running] * 256.0 * forward);
+		_player->cmd.ucmd.forwardmove = forwardmove[running] * forward;
+	else
+		NormalizeSpeed(_player->cmd.ucmd.forwardmove, forwardmove, running);
+
 	if (side != MDIR_NO_CHANGE)
-		_player->cmd.ucmd.sidemove = static_cast<int>(gameinfo.normsidemove[running] * 256.0 * side);
+		_player->cmd.ucmd.sidemove = sidemove[running] * side;
+	else
+		NormalizeSpeed(_player->cmd.ucmd.sidemove, sidemove, running);
+
+	if (up != MDIR_NO_CHANGE)
+		_player->cmd.ucmd.upmove = flyspeed[running] * up;
+	else
+		NormalizeSpeed(_player->cmd.ucmd.upmove, flyspeed, running);
 
 	SetButtons(BT_SPEED | BT_RUN, running);
 }
@@ -116,3 +132,29 @@ void DBot::SetButtons(const int cmds, const bool set)
 	else
 		_player->cmd.ucmd.buttons &= ~cmds;
 };
+
+void DBot::SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng)
+{
+	constexpr double AngToCmd = 65536.0 / 360.0;
+
+	const DAngle delta = deltaangle(curAng, destAng);
+	cmd = static_cast<int>(delta.Degrees() * AngToCmd);
+}
+
+void DBot::SetAngle(const DAngle& dest, const EBotAngleCmd type)
+{
+	switch (type)
+	{
+		case ACMD_YAW:
+			SetAngleCommand(_player->cmd.ucmd.yaw, _player->mo->Angles.Yaw, dest);
+			break;
+
+		case ACMD_PITCH:
+			SetAngleCommand(_player->cmd.ucmd.pitch, _player->mo->Angles.Pitch, dest);
+			break;
+
+		case ACMD_ROLL:
+			SetAngleCommand(_player->cmd.ucmd.roll, _player->mo->Angles.Roll, dest);
+			break;
+	}
+}
