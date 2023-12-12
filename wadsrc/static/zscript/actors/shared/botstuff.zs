@@ -24,46 +24,47 @@ enum EBotMoveDirection
 	MDIR_FORWARDS,
 	MDIR_NO_CHANGE,
 
+	MDIR_LEFT = MDIR_FORWARDS,
 	MDIR_RIGHT = MDIR_BACKWARDS,
-	MDIR_LEFT = MDIR_FORWARDS
+	
+	MDIR_UP = MDIR_FORWARDS,
+	MDIR_DOWN = MDIR_BACKWARDS
 }
 
 class Bot : Thinker native
 {
 	const ANG_TO_CMD = 65536.0 / 360.0;
-	const FIRE_FOV = 60.0;
-	const COMBAT_TIME = 2 * TICRATE;
-	const ROAM_TIME = 4 * TICRATE;
-	const STRAFE_COOL_DOWN = 5;
+	const TARGET_COOL_DOWN_TICS = int(3.0 * TICRATE);
+	const EVADE_RANGE_SQ = 640.0 * 640.0;
+	const EVADE_COOL_DOWN_TICS = int(1.0 * TICRATE);
+	const ITEM_RANGE_SQ = 480.0 * 480.0;
+	const GOAL_COOL_DOWN_TICS = int(5.0 * TICRATE);
+	const MAX_TURN_SPEED = 1.0;
 	const MIN_RESPAWN_TIME = int(0.25 * TICRATE);
 	const MAX_RESPAWN_TIME = int(1.0 * TICRATE);
-	const MAX_MONSTER_RANGE_SQ = 768.0 * 768.0;
-	const EVADE_RANGE = 672.0;
-	const COMBAT_RANGE = 512.0;
-	const PARTNER_RANGE = 224.0;
-	const DARKNESS_THRESHOLD = 50;
-	const MAX_TURN = 15.0;
 
 	native EntityProperties Properties;
 
 	Actor Evade;
-	double DestAngle;
 
-	protected int combatTics;
-	protected int reactionTics;
-	protected int roamTics;
-	protected int strafeTics;
-	protected EBotMoveDirection strafeDir;
-	protected Vector3 prevPos;
-	protected bool bHasToReact;
+	protected int partnerCoolDown;
+	protected int targetCoolDown;
+	protected int evadeCoolDown;
+	protected int goalCoolDown;
+	protected int reactionCoolDown;
+	protected int strafeCoolDown;
+	protected EBotMoveDirection curStrafeDir;
 
 	native clearscope static EntityProperties GetEntityInfo(Name entity, Name baseClass = 'Actor');
 	native clearscope static bool IsSectorDangerous(Sector sec);
 	native clearscope static int GetBotCount();
 
 	native clearscope PlayerInfo GetPlayer() const;
-	native void SetMove(EBotMoveDirection forward, EBotMoveDirection side, bool running);
+	native void SetMove(EBotMoveDirection forward = MDIR_NO_CHANGE, EBotMoveDirection side = MDIR_NO_CHANGE, EBotMoveDirection up = MDIR_NO_CHANGE, bool running = true);
 	native void SetButtons(EButtons cmd, bool set);
+	native void SetAngle(double destAngle);
+	native void SetPitch(double destPitch);
+	native void SetRoll(double destRoll);
 
 	native bool IsActorInView(Actor mo, double fov = 90.0);
 	native bool CanReach(Actor mo);
@@ -78,9 +79,9 @@ class Bot : Thinker native
 	native bool Move();
 	native bool TryWalk();
 	native void NewChaseDir();
-	native EBotMoveDirection PickStrafeDirection(EBotMoveDirection start = MDIR_NONE);
+	native EBotMoveDirection PickStrafeDirection(EBotMoveDirection startDir = MDIR_NONE);
 
-	clearscope Actor GetActor() const
+	clearscope PlayerPawn GetActor() const
 	{
 		return GetPlayer().mo;
 	}
@@ -90,9 +91,9 @@ class Bot : Thinker native
 		return GetActor().target;
 	}
 
-	clearscope Actor GetPartner() const
+	clearscope PlayerPawn GetPartner() const
 	{
-		Actor player = GetActor();
+		let player = GetActor();
 		return player.friendPlayer > 0u && player.friendPlayer <= MAXPLAYERS ? players[player.friendPlayer - 1u].mo : null;
 	}
 
@@ -116,445 +117,254 @@ class Bot : Thinker native
 		GetActor().goal = goal;
 	}
 
-	override void Tick()
-	{
-		Actor player = GetActor();
-		Actor target = GetTarget();
-		Actor goal = GetGoal();
-
-		Actor mo;
-		let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
-		while (mo = Actor(it.Next()))
-		{
-			if (mo.bIsMonster && mo.health > 0 && mo != target
-				&& !player.IsFriend(mo) && player.Distance3DSquared(mo) < MAX_MONSTER_RANGE_SQ
-				&& player.CheckSight(mo, SF_SEEPASTBLOCKEVERYTHING))
-			{
-				SetTarget(mo);
-				break;
-			}
-			else if (mo.bSpecial && (!goal || !goal.bSpecial) && IsValidItem(Inventory(mo)))
-			{
-				SetGoal(goal);
-				roamTics = ROAM_TIME;
-				break;
-			}
-			else if (mo.bMissile && !Evade)
-			{
-				let entity = GetEntityInfo(mo.GetClassName());
-				if (entity && entity.GetBool('bWarn') && (!mo.target || !player.IsFriend(mo.target)))
-				{
-					Evade = mo;
-					break;
-				}
-			}
-		}
-	}
-
 	virtual void BotThink()
 	{
-		Actor target = GetTarget();
-		if (target && target.health <= 0)
-			SetTarget(null);
-
-		PlayerInfo player = GetPlayer();
-		if (player.playerState != PST_DEAD)
+		if (GetPlayer().playerState == PST_DEAD)
 		{
-			Actor mo = GetActor();
-			double curYaw = mo.angle;
-			double curPitch = mo.pitch;
-
-			SearchForPartner();
-			SearchForTarget();
-			HandleMovement();
-			AdjustAngles();
-
-			player.cmd.yaw = int(Actor.DeltaAngle(curYaw, mo.angle) * ANG_TO_CMD);
-			player.cmd.pitch = int(Actor.DeltaAngle(curPitch, mo.pitch) * ANG_TO_CMD);
-			if (player.cmd.pitch == -32768)
-				player.cmd.pitch = -32767;
-
-			mo.angle = curYaw;
-			mo.pitch = curPitch;
+			BotDeathThink();
+			return;
 		}
 
-		if (combatTics > 0)
-			--combatTics;
-		if (reactionTics > 0)
-			--reactionTics;
-		if (roamTics > 0)
-			--roamTics;
-		if (strafeTics > 0)
-			--strafeTics;
+		SearchForPartner();
+		SearchForTarget();
+		CheckEvade();
+		UpdateGoal();
+		
+		HandleMovement();
+		AdjustAngles();
+	}
 
-		if (player.playerState == PST_DEAD && player.respawn_time <= level.time)
+	virtual void BotDeathThink()
+	{
+		if (GetPlayer().respawn_time <= level.time)
 			SetButtons(BT_USE, true);
 	}
 
 	virtual void SearchForPartner()
 	{
-		if (teamplay || !deathmatch)
+		// TODO: Check partner status
+		if (!deathmatch || teamplay)
 			FindPartner();
 	}
 
 	virtual void SearchForTarget()
 	{
-		Actor mo = GetActor();
+		let mo = GetActor();
 		Actor target = GetTarget();
-
-		Actor prevTarget;
-		if (target && target.health > 0 && mo.CheckSight(target))
-			prevTarget = target;
-
-		if (deathmatch || !target)
+		if (target && (target.health <= 0 || !target.bShootable || mo.IsFriend(target)
+						|| (/*outOfCombatCoolDown <= 0 && */!IsActorInView(target))))
 		{
-			FindEnemy(target ? 360.0 : 0.0);
-			target = GetTarget();
-			if (!target)
-				target = prevTarget;
+			SetTarget(null);
+			targetCoolDown = 0;
 		}
 
-		if (target && (target.health < 0 || !target.bShootable || mo.IsFriend(target)))
-			target = null;
+		if (targetCoolDown > 0)
+			--targetCoolDown;
 
-		SetTarget(target);
+		if (!GetTarget() || (deathmatch && targetCoolDown <= 0))
+		{
+			FindEnemy(120.0);
+			if (GetTarget())
+				targetCoolDown = TARGET_COOL_DOWN_TICS;
+		}
+	}
+
+	virtual void CheckEvade()
+	{
+		if (!Evade || !Evade.bMissile)
+		{
+			Evade = null;
+			evadeCoolDown = 0;
+		}
+
+		if (evadeCoolDown > 0)
+		{
+			--evadeCoolDown;
+			return;
+		}
+
+		let pawn = GetActor();
+
+		Actor mo;
+		Actor closest;
+		double closestDist = double.infinity;
+		let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
+		while (mo = Actor(it.Next()))
+		{
+			if (!mo.bMissile || (mo.target && pawn.IsFriend(mo.target)))
+				continue;
+
+			let entity = GetEntityInfo(mo.GetClassName());
+			if (!entity || !entity.GetBool('bWarn'))
+				continue;
+
+			double dist = pawn.Distance3DSquared(mo);
+			if (dist <= EVADE_RANGE_SQ && dist < closestDist && IsActorInView(mo))
+			{
+				closestDist = dist;
+				closest = mo;
+			}
+		}
+
+		if (closest)
+		{
+			Evade = closest;
+			evadeCoolDown = EVADE_COOL_DOWN_TICS;
+		}
+	}
+
+	virtual void UpdateGoal()
+	{
+		Actor goal = GetGoal();
+		if (!goal)
+			goalCoolDown = 0;
+
+		let curItem = Inventory(goal);
+		if (curItem && !curItem.bSpecial)
+		{
+			SetGoal(null);
+			curItem = null;
+			goalCoolDown = 0;
+		}
+
+		if (goalCoolDown > 0)
+		{
+			--goalCoolDown;
+			return;
+		}
+
+		PlayerInfo player = GetPlayer();
+		let mo = GetActor();
+		bool isLowHealth = player.health <= int(0.25 * mo.GetMaxHealth(true));
+		if (curItem && curItem.bIsHealth && isLowHealth)
+			return;
+
+		Inventory item;
+		Inventory closest;
+		double closestDist = double.infinity;
+		let it = ThinkerIterator.Create("Inventory", STAT_DEFAULT);
+		while (item = Inventory(it.Next()))
+		{
+			double dist = mo.Distance3DSquared(item);
+			if (item.bIsHealth && isLowHealth)
+				dist *= 0.75;
+
+			if (dist <= ITEM_RANGE_SQ && dist < closestDist && IsValidItem(item)
+				&& IsActorInView(item) && CanReach(item))
+			{
+				closestDist = dist;
+				closest = item;
+			}
+		}
+
+		if (closest)
+		{
+			SetGoal(closest);
+			goalCoolDown = GOAL_COOL_DOWN_TICS;
+			return;
+		}
+
+		Actor target = GetTarget();
+		if (target && player.readyWeapon)
+		{
+			let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
+			double combatRange = weapInfo ? weapInfo.GetDouble('CombatRange') : 0.0;
+			if (combatRange > 0.0)
+			{
+				double dist = mo.Distance3D(target);
+				bool isMelee = combatRange <= DEFMELEERANGE * 2.0;
+
+				if ((!isMelee && dist > combatRange)
+					|| (isMelee && dist < combatRange * 2.0 && CanReach(target)))
+				{
+					SetGoal(target);
+					goalCoolDown = GOAL_COOL_DOWN_TICS;
+					return;
+				}
+			}
+		}
+
+		Actor partner = GetPartner();
+		if (partner)
+		{
+			SetGoal(partner);
+			goalCoolDown = GOAL_COOL_DOWN_TICS;
+			return;
+		}
+
+		SetGoal(null);
+		goalCoolDown = GOAL_COOL_DOWN_TICS;
 	}
 
 	virtual void AdjustAngles()
 	{
-		PlayerInfo player = GetPlayer();
-		Actor mo = GetActor();
+		let pawn = GetActor();
+
+		Vector3 destPos;
+		Vector3 viewPos = pawn.pos.PlusZ(pawn.viewHeight - pawn.floorClip);
+
 		Actor target = GetTarget();
 		Actor goal = GetGoal();
-
-		double turn = MAX_TURN;
-		if (player.readyWeapon)
+		if (target)
 		{
-			let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
-			if (weapInfo)
-			{
-				class<Actor> projType = weapInfo.GetString('ProjectileType');
-				if (target && !goal && !projType && weapInfo.GetDouble('CombatRange') > 0.0
-					&& IsActorInView(target, FIRE_FOV + 5.0))
-				{
-					turn = 3.0;
-				}
-			}
+			destPos = target.pos.PlusZ(target.height * 0.75 - target.floorClip);
+		}
+		else if (goal)
+		{
+			destPos = goal is "Inventory"
+						? goal.pos.PlusZ(goal.height * 0.5)
+						: goal.pos.PlusZ(goal.height * 0.75);
+
+			destPos.z -= goal.floorClip;
+		}
+		else
+		{
+			destPos = viewPos + (pawn.angle.ToVector(), 0.0);
 		}
 
-		double delta = Actor.DeltaAngle(mo.angle, DestAngle);
-		if (abs(delta) < 5.0 && !target)
-			return;
+		Vector3 diff = level.Vec3Diff(viewPos, destPos);
+		if (!(diff ~== (0.0, 0.0, 0.0)))
+		{
+			double turn = clamp(Actor.DeltaAngle(pawn.angle, diff.xy.Angle()), -MAX_TURN_SPEED, MAX_TURN_SPEED);
+			SetAngle(pawn.angle + turn);
 
-		mo.angle += clamp(delta / 3.0, -turn, turn);
+			turn = clamp(Actor.DeltaAngle(pawn.pitch, -atan2(diff.z, diff.xy.Length())), -MAX_TURN_SPEED, MAX_TURN_SPEED);
+			SetPitch(pawn.pitch + turn);
+		}
 	}
 
 	virtual void HandleMovement()
 	{
-		PlayerInfo player = GetPlayer();
-		Actor mo = GetActor();
-		Actor target = GetTarget();
-		Actor partner = GetPartner();
-		Actor goal = GetGoal();
-
-		let weapInfo = player.readyWeapon ? GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon') : null;
-		double combatDist = weapInfo ? weapInfo.GetDouble('CombatRange') : 0.0;
-
-		if (Evade &&
-			((Evade.default.bMissile && !Evade.bMissile) || !IsActorInView(Evade)))
-		{
-			strafeDir = MDIR_NONE;
-			Evade = null;
-		}
-
-		bool doRoam;
-		if (Evade && mo.Distance2D(Evade) < EVADE_RANGE)
-		{
-			PitchTowardsActor(Evade);
-			DestAngle = mo.AngleTo(Evade);
-			SetMove(MDIR_BACKWARDS, strafeDir, true);
-
-			if (strafeTics <= 0)
-			{
-				strafeTics = STRAFE_COOL_DOWN;
-				strafeDir = PickStrafeDirection(strafeDir);
-			}
-
-			if (target && IsActorInView(target, FIRE_FOV))
-				TryFire();
-		}
-		else if (target && mo.CheckSight(target, 0))
-		{
-			PitchTowardsActor(target);
-
-			if (goal is "Inventory" && goal.bSpecial)
-			{
-				let item = Inventory(goal);
-				double goalDist = goal ? mo.Distance2D(goal) : 0.0;
-				if (((player.health < Properties.GetInt('ISP') && (item.bIsHealth || item.bBigPowerup))
-						|| goalDist < COMBAT_RANGE*0.25 || combatDist <= 0.0)
-					&& (goalDist < COMBAT_RANGE || combatDist <= 0.0)
-					&& CanReach(goal))
-				{
-					doRoam = true;
-				}
-			}
-
-			if (!doRoam)
-			{
-				SetGoal(null);
-				if (combatDist <= 0)
-					mo.bDropOff = false;
-
-				if (!target.bIsMonster)
-					combatTics = COMBAT_TIME;
-
-				bool stuck;
-				if (strafeTics <= 0
-					&& ((mo.pos.xy - prevPos.xy).LengthSquared() < 1.0 || Random[Bot](0, 29) == 10))
-				{
-					stuck = true;
-					strafeDir = PickStrafeDirection();
-				}
-
-				DestAngle = mo.AngleTo(target);
-
-				EBotMoveDirection fDir = MDIR_NONE;
-				if (player.readyWeapon || mo.Distance2D(target) > combatDist)
-					fDir = MDIR_FORWARDS;
-				else if (!stuck)
-					fDir = MDIR_BACKWARDS;
-
-				SetMove(fDir, strafeDir, !target.bIsMonster);
-				TryFire();
-			}
-		}
-		else if (partner && !target && (!goal || goal == partner))
-		{
-			PitchTowardsActor(partner);
-			if (!CanReach(partner))
-			{
-				if (partner == goal && Random[Bot]() < 32)
-					SetGoal(null);
-
-				doRoam = true;
-			}
-
-			if (!doRoam)
-			{
-				DestAngle = mo.AngleTo(partner);
-				double dist = mo.Distance2D(partner);
-				if (dist > PARTNER_RANGE * 2.0)
-					SetMove(MDIR_FORWARDS, MDIR_NO_CHANGE, true);
-				else if (dist > PARTNER_RANGE)
-					SetMove(MDIR_FORWARDS, MDIR_NO_CHANGE, false);
-				else if (dist < PARTNER_RANGE - PARTNER_RANGE/3.0)
-					SetMove(MDIR_BACKWARDS, MDIR_NO_CHANGE, false);
-			}
-		}
-		else
-		{
-			doRoam = true;
-			bHasToReact = true;
-		}
-
-		if (doRoam)
-		{
-			if (target && IsActorInView(target))
-				TryFire();
-
-			if (goal
-				&& ((goal.default.bShootable && goal.health <= 0) || (goal is "Inventory" && !goal.bSpecial)))
-			{
-				SetGoal(null);
-			}
-
-			if (!goal)
-			{
-				if (target && combatTics > 0)
-				{
-					if (target.player)
-					{
-						let targInfo = target.player.readyWeapon ? GetEntityInfo(target.player.readyWeapon.GetClassName(), 'Weapon') : null;
-						if (((targInfo && targInfo.GetBool('bExplosive')) || Random[Bot](0, 99) > Properties.GetInt('ISP'))
-							&& combatDist > 0.0)
-						{
-							SetGoal(target);
-						}
-						else
-						{
-							DestAngle = mo.AngleTo(target);
-						}
-					}
-					else
-					{
-						SetGoal(target);
-					}
-				}
-				else
-				{
-					bool foundDest;
-					int r = Random[Bot]();
-					if (r < 128)
-					{
-						Inventory item;
-						let it = ThinkerIterator.Create("Inventory", STAT_DEFAULT);
-						if (item = Inventory(it.Next()))
-						{
-							r &= 63;
-							Inventory prev;
-							do
-							{
-								prev = item;
-								item = Inventory(it.Next());
-							} while (item && --r > 0)
-
-							SetGoal(item ? item : prev);
-							foundDest = true;
-						}
-					}
-
-					if (!foundDest && partner && (r < 179 || mo.CheckSight(partner)))
-					{
-						SetGoal(partner);
-						foundDest = true;
-					}
-
-					if (!foundDest)
-					{
-						int start = r & (MAXPLAYERS-1);
-						int end = start - 1;
-						if (end < 0)
-							end = MAXPLAYERS-1;
-
-						for (int i = start; i != end; i = (i+1) & (MAXPLAYERS-1))
-						{
-							if (playerInGame[i] && players[i].health > 0)
-							{
-								SetGoal(players[i].mo);
-								break;
-							}
-						}
-					}
-				}
-
-				if (GetGoal())
-					roamTics = ROAM_TIME;
-			}
-
-			if (GetGoal())
-				Roam();
-		}
-
-		if (roamTics <= 0 && GetGoal())
-			SetGoal(null);
-
-		if (combatTics < COMBAT_TIME / 2)
-			mo.bDropOff = true;
-
-		prevPos = mo.pos;
+		Roam();
 	}
 
 	virtual bool TryFire()
 	{
-		Actor target = GetTarget();
-		if (!target || !target.bShootable || target.health <= 0)
-			return false;
-
-		PlayerInfo player = GetPlayer();
-		if (!player.readyWeapon)
-			return false;
-
-		uint isp = Properties.GetInt('ISP');
-		if (player.damageCount > isp)
-		{
-			bHasToReact = true;
-			return false;
-		}
-
-		let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
-		if (bHasToReact && (!weapInfo || !weapInfo.GetBool('bNoReactionTime')))
-			reactionTics = (100 - Properties.GetInt('ReactionTime') + 1) / (Random[Bot](0, 2) + 3);
-
-		bHasToReact = false;
-		if (reactionTics > 0)
-			return false;
-
-		Actor mo = GetActor();
-		double dist = mo.Distance3D(target);
-		class<Actor> projType;
-		if (weapInfo)
-			projType = weapInfo.GetString('ProjectileType');
-
-		if (weapInfo && weapInfo.GetDouble('CombatRange') <= 0.0)
-		{
-			if (dist > DEFMELEERANGE*4.0)
-				return false;
-		}
-		else if (weapInfo && weapInfo.GetBool('bBFG'))
-		{
-			if (Random[Bot](0, 199) > Properties.GetInt('Reaction') || !IsActorInView(target, FIRE_FOV))
-				return false;
-		}
-		else if (projType)
-		{
-			double speed = GetDefaultByType(projType).speed;
-			if (speed <= 0.0)
-				return false;
-
-			if (!IsActorInView(target, FIRE_FOV))
-				return false;
-
-			Vector3 targetPos = level.Vec3Offset(target.pos, target.vel * int(dist/speed));
-			if (!CheckMissileTrajectory(targetPos, weapInfo.GetDouble('ExplosiveDist')))
-				return false;
-
-			Vector2 diff = targetPos.xy - mo.pos.xy;
-			DestAngle = diff.Angle();
-		}
-		else
-		{
-			DestAngle = mo.AngleTo(target);
-			int aimPenalty;
-			if (target.bShadow)
-				aimPenalty += Random[Bot](0, 24) + 10;
-			if (target.curSector.GetLightLevel() < DARKNESS_THRESHOLD)
-				aimPenalty += Random[Bot](0, 39);
-			if (player.damageCount)
-				aimPenalty += player.damageCount;
-
-			int aim = max(Properties.GetInt('Aiming') - aimPenalty, 0);
-			double inaccuracy = max((FIRE_FOV * 0.5) - (aim * FIRE_FOV/200.0), 0.0);
-			DestAngle += inaccuracy * RandomPick[Bot](-1, 1);
-
-			if (!IsActorInView(target, FIRE_FOV * 0.5))
-				return false;
-		}
-
-		SetButtons(BT_ATTACK, true);
-		return true;
+		return false;
 	}
 
 	virtual void BotSpawned()
 	{
 		SetPartner(-1);
-		DestAngle = GetActor().angle;
-		bHasToReact = true;
 	}
 
 	virtual void BotRespawned()
 	{
 		SetTarget(null);
-		DestAngle = GetActor().angle;
+	}
+
+	virtual int BotDamaged(Actor inflictor, Actor source, int damage, Name damageType, EDmgFlags flags = 0, double angle = 0.0)
+	{
+		return damage;
 	}
 
 	virtual void BotDied(Actor source, Actor inflictor, EDmgFlags dmgFlags = 0, Name meansOfDeath = 'None')
 	{
-		combatTics = reactionTics = roamTics = strafeTics = 0;
+		partnerCoolDown = evadeCoolDown = targetCoolDown = goalCoolDown = reactionCoolDown = strafeCoolDown = 0;
+		curStrafeDir = MDIR_NONE;
 		Evade = null;
 		SetGoal(null);
 		SetPartner(-1);
-		bHasToReact = true;
 		GetPlayer().respawn_time += Random[BotRespawn](MIN_RESPAWN_TIME, MAX_RESPAWN_TIME);
 	}
 }

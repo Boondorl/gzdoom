@@ -108,12 +108,12 @@ void DBot::NormalizeSpeed(short& cmd, const int* const speeds, const bool runnin
 void DBot::SetMove(const EBotMoveDirection forward, const EBotMoveDirection side, const EBotMoveDirection up, const bool running)
 {
 	if (forward != MDIR_NO_CHANGE)
-		_player->cmd.ucmd.forwardmove = forwardmove[running] * forward;
+		_player->cmd.ucmd.forwardmove = forwardmove[running] * 256 * forward;
 	else
 		NormalizeSpeed(_player->cmd.ucmd.forwardmove, forwardmove, running);
 
 	if (side != MDIR_NO_CHANGE)
-		_player->cmd.ucmd.sidemove = sidemove[running] * side;
+		_player->cmd.ucmd.sidemove = sidemove[running] * 256 * side;
 	else
 		NormalizeSpeed(_player->cmd.ucmd.sidemove, sidemove, running);
 
