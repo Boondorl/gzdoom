@@ -101,7 +101,7 @@ bool DBot::CanReach(AActor* const mo, const double maxDistance, const bool doJum
 
     // Intentionally ignore portals here.
     const DVector2 dest = _player->mo->Pos().XY() + dir.XY();
-    const double jumpHeight = doJump ? 8.0 : 0.0;
+    const double jumpHeight = doJump ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
     constexpr int MaxBlocks = 3;
 
     int blockCounter = 0;
@@ -170,7 +170,7 @@ bool DBot::CanReach(AActor* const mo, const double maxDistance, const bool doJum
     }
 
     // This is done last in case there was a valid stairway leading up to the target.
-    return mo->Z() <= prevZ + _player->mo->Height;
+    return mo->Z() <= prevZ + _player->mo->MaxStepHeight + jumpHeight;
 }
 
 // Check to ensure the spot ahead of the bot is a valid place that can be walked. Tries
@@ -181,7 +181,7 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
     if (_player->mo->flags & MF_NOCLIP)
         return true;
 
-    const double jumpHeight = doJump ? 8.0 : 0.0;
+    const double jumpHeight = doJump ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
     FCheckPosition tm = {};
     if (!FakeCheckPosition(pos, tm)
         || tm.ceilingz - tm.floorz < _player->mo->Height
@@ -209,7 +209,7 @@ bool DBot::Move(const bool doJump)
 		return false;
 	}
 
-    const DVector2 pos = { _player->mo->X() + _player->mo->radius * xspeed[_player->mo->movedir], _player->mo->Y() + _player->mo->radius * yspeed[_player->mo->movedir] };
+    const DVector2 pos = { _player->mo->X() + _player->mo->Vel.X, _player->mo->Y() + _player->mo->Vel.Y };
 	if (!CheckMove(pos, doJump))
         return false;
 
@@ -221,8 +221,8 @@ bool DBot::Move(const bool doJump)
     const double delta = deltaangle(_player->mo->Angles.Yaw, DAngle45 * _player->mo->movedir).Degrees();
     const double absAng = fabs(delta);
 
-    EBotMoveDirection forw = absAng <= MinForward && absAng >= MaxForward ? MDIR_FORWARDS : MDIR_NO_CHANGE;
-    EBotMoveDirection side = absAng >= MinSide && absAng <= MaxSide ? MDIR_LEFT : MDIR_NO_CHANGE;
+    EBotMoveDirection forw = absAng <= MinForward || absAng >= MaxForward ? MDIR_FORWARDS : MDIR_NO_CHANGE;
+    EBotMoveDirection side = absAng >= MinSide || absAng <= MaxSide ? MDIR_LEFT : MDIR_NO_CHANGE;
     if (side == MDIR_LEFT && delta < 0.0)
         side = MDIR_RIGHT;
     if (forw == MDIR_FORWARDS && absAng > 90.0)
@@ -239,27 +239,30 @@ bool DBot::TryWalk(const bool doJump)
     if (!Move(doJump))
         return false;
 
-    _player->mo->movecount = pr_bottrywalk() & 60;
+    _player->mo->movecount = pr_bottrywalk() % TICRATE;
     return true;
 }
 
-void DBot::NewChaseDir(const bool doJump)
+void DBot::NewMoveDirection(AActor* const goal, const bool doJump)
 {
-    if (_player->mo->goal == nullptr)
+    int baseDir = 0;
+    if (goal != nullptr)
     {
-        _player->mo->movedir = DI_NODIR;
-        return;
+        constexpr double AngToDir = 1.0 / 45.0;
+
+        double desired = _player->mo->AngleTo(_player->mo->goal).Degrees();
+        while (desired < 0.0)
+            desired += 360.0;
+
+        baseDir = static_cast<int>(desired * AngToDir);
     }
-
-    constexpr double AngToDir = 1.0 / 45.0;
-
-    double desired = _player->mo->AngleTo(_player->mo->goal).Degrees();
-    while (desired < 0.0)
-        desired += 360.0;
+    else
+    {
+        baseDir = pr_botnewchasedir() & 7;
+    }
 
     // Try and walk straight towards the goal, slowly shifting sides unless it needs to
     // turn around entirely.
-    int baseDir = static_cast<int>(desired * AngToDir);
     if (baseDir == _player->mo->movedir && (pr_botnewchasedir() & 1))
         baseDir = ((pr_botnewchasedir() & 1) * 2 - 1 + baseDir) % 8;
 

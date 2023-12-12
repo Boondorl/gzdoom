@@ -123,7 +123,7 @@ unsigned int DBot::FindPartner()
 			&& Level->Players[i]->health > 0 && _player->mo->IsTeammate(client))
 		{
 			const double dist = _player->mo->Distance3DSquared(client);
-			if (dist < closest && P_CheckSight(_player->mo, client, SF_IGNOREVISIBILITY | SF_SEEPASTSHOOTABLELINES | SF_SEEPASTBLOCKEVERYTHING | SF_IGNOREWATERBOUNDARY))
+			if (dist < closest)
 			{
 				closest = dist;
 				newFriend = i + 1u;
