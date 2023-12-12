@@ -721,12 +721,6 @@ CCMD(removebot)
 	}
 
 	const FName id = argv[1];
-	if (DBotManager::BotDefinitions.CheckKey(id) == nullptr)
-	{
-		Printf("Bot with name %s does not exist\n", argv[1]);
-		return;
-	}
-
 	unsigned int i = 0u;
 	for (; i < MAXPLAYERS; ++i)
 	{

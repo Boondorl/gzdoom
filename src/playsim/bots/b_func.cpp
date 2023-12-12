@@ -105,39 +105,25 @@ bool DBot::IsValidItem(AActor* const item)
 // Simple check to see if a given Actor is within view of the bot.
 bool DBot::IsActorInView(AActor* const mo, const DAngle& fov)
 {
-	return mo != nullptr && fov > nullAngle
-			&& (fov >= DAngle360 || absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= fov * 0.5)
-			&& P_CheckSight(_player->mo, mo, SF_SEEPASTBLOCKEVERYTHING);
-}
-
-// Aim the bots pitch towards the Actor.
-void DBot::PitchTowardsActor(AActor* const target)
-{
-	_player->mo->Angles.Pitch = target != nullptr ? _player->mo->Vec3To(target).Pitch() : nullAngle;
+	const DAngle viewFOV = fov <= nullAngle ? DAngle180 : fov;
+	return mo != nullptr
+			&& absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= viewFOV
+			&& P_CheckSight(_player->mo, mo, SF_SEEPASTSHOOTABLELINES | SF_SEEPASTBLOCKEVERYTHING | SF_IGNOREWATERBOUNDARY);
 }
 
 // Sets the bot's FriendPlayer value to the player index it wants to stick with.
-void DBot::FindPartner()
+unsigned int DBot::FindPartner()
 {
-	// Check if current partner is still alive.
-	unsigned int newFriend = _player->mo->FriendPlayer;
-	if (newFriend > 0u && (newFriend > MAXPLAYERS || Level->Players[newFriend - 1u]->health <= 0))
-		newFriend = 0u;
-
-	if (newFriend)
-		return;
-
+	unsigned int newFriend = 0u;
 	double closest = std::numeric_limits<double>::infinity();
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		AActor* const client = Level->Players[i]->mo;
-		if (Level->PlayerInGame(i)
-			&& _player->mo != client
-			&& Level->Players[i]->health > 0
-			&& (!deathmatch || ((_player->health / 2) <= Level->Players[i]->health && _player->mo->IsTeammate(client))))
+		if (Level->PlayerInGame(i) && _player != Level->Players[i]
+			&& Level->Players[i]->health > 0 && _player->mo->IsTeammate(client))
 		{
 			const double dist = _player->mo->Distance3DSquared(client);
-			if (dist < closest && P_CheckSight(_player->mo, client, SF_IGNOREVISIBILITY))
+			if (dist < closest && P_CheckSight(_player->mo, client, SF_IGNOREVISIBILITY | SF_SEEPASTSHOOTABLELINES | SF_SEEPASTBLOCKEVERYTHING | SF_IGNOREWATERBOUNDARY))
 			{
 				closest = dist;
 				newFriend = i + 1u;
@@ -145,18 +131,15 @@ void DBot::FindPartner()
 		}
 	}
 
-	_player->mo->FriendPlayer = newFriend;
+	return newFriend;
 }
 
-// Attempts to set the bot's target. If not in deathmatch mode, tries to get a monster within 20 blockmap units.
-void DBot::FindEnemy(const DAngle& fov)
+// Attempts to set the bot's target. If not in deathmatch mode, tries to get a monster within 16 blockmap units.
+AActor* DBot::FindTarget(const DAngle& fov)
 {
-	const DAngle viewFov = fov <= nullAngle ? DAngle360 : fov;
+	const DAngle viewFOV = fov <= nullAngle ? DAngle180 : fov;
 	if (!deathmatch)
-	{
-		_player->mo->target = P_RoughMonsterSearch(_player->mo, 20, false, false, viewFov.Degrees() * 0.5);
-		return;
-	}
+		return P_RoughMonsterSearch(_player->mo, 16, false, false, viewFOV.Degrees());
 
 	constexpr double DarknessRange = 320.0 * 320.0; // Bots can see roughly 10m in front of them in darkness
 	constexpr int DarknessThreshold = 50;
@@ -166,15 +149,13 @@ void DBot::FindEnemy(const DAngle& fov)
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		AActor* const client = Level->Players[i]->mo;
-		if (Level->PlayerInGame(i)
-			&& _player->mo != client
-			&& Level->Players[i]->health > 0
-			&& !_player->mo->IsTeammate(client))
+		if (Level->PlayerInGame(i) && _player != Level->Players[i]
+			&& Level->Players[i]->health > 0 && !_player->mo->IsTeammate(client))
 		{
 			const double dist = _player->mo->Distance3DSquared(client);
 			if (dist < closest
 				&& (dist <= DarknessRange || client->Sector->GetLightLevel() >= DarknessThreshold)
-				&& IsActorInView(client, viewFov))
+				&& IsActorInView(client, viewFOV))
 			{
 				closest = dist;
 				target = client;
@@ -182,7 +163,7 @@ void DBot::FindEnemy(const DAngle& fov)
 		}
 	}
 
-	_player->mo->target = target;
+	return target;
 }
 
 // Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
@@ -193,30 +174,34 @@ bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance
 	if (_player->ReadyWeapon == nullptr)
 		return false;
 
-	const PClass* missileType = nullptr;
+	const PClassActor* missileType = nullptr;
 	const FEntityProperties* const weapInfo = DBotManager::GetEntityInfo(_player->ReadyWeapon->GetClass()->TypeName, NAME_Weapon);
 	if (weapInfo != nullptr)
-		missileType = PClass::FindClass(weapInfo->GetString("ProjectileType"));
+		missileType = PClass::FindActor(weapInfo->GetString("ProjectileType"));
 
-	// Don't use this with hitscan weapons.
-	if (missileType == nullptr)
-		return false;
+	double radius = 0.0, height = 0.0;
+	const bool isProjectile = missileType != nullptr;
+	if (isProjectile)
+	{
+		// Don't bother testing against missiles that don't move.
+		const auto def = GetDefaultByType(missileType);
+		if (def->Speed < EQUAL_EPSILON)
+			return false;
 
-	// Don't bother testing against missiles that don't move.
-	const auto def = GetDefaultByType(missileType);
-	if (def->Speed < EQUAL_EPSILON)
-		return false;
+		radius = def->radius;
+		height = def->Height;
+	}
 
 	const DVector3 origin = _player->mo->PosAtZ(_player->mo->Center() - _player->mo->Floorclip + _player->mo->AttackOffset());
 	const DVector3 dir = dest - origin + Level->Displacements.getOffset(Level->PointInSector(dest.XY())->PortalGroup, _player->mo->Sector->PortalGroup);
 	const double dist = dir.Length();
 	if (minDistance >= EQUAL_EPSILON && dist <= minDistance)
 		return false;
-	if (dist <= def->radius * 2.0)
+	if (radius > 0.0 && dist <= radius * 2.0)
 		return true;
 
 	// The trajectory check here fires off a series of five line traces in a cross pattern:
-	// * One from the center.
+	// * One from the center. If not a projectile, stops here.
 	// * Two from the furthest extents left/right of the center.
 	// * One from the bottom/front center.
 	// * One from the top/back center.
@@ -224,31 +209,37 @@ bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance
 	const DAngle yaw = dir.Angle();
 	const double range = maxDistance >= EQUAL_EPSILON && dist > maxDistance ? maxDistance : dist;
 	const DAngle pitch = dir.Pitch();
-	constexpr int Flags = TRF_ABSPOSITION | TRF_THRUHITSCAN | TRF_SOLIDACTORS;
-	const double middle = def->Height * 0.5;
+	const double middle = height * 0.5;
+
+	int flags = TRF_ABSPOSITION;
+	if (isProjectile)
+		flags |= (TRF_THRUHITSCAN | TRF_SOLIDACTORS);
 
 	FLineTraceData data = {};
 	DVector3 pos = origin.plusZ(middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
 	}
 
+	if (!isProjectile)
+		return true;
+
 	// Get the radius accounting for the AABB's shape.
 	const DVector2 cs = yaw.ToVector();
-	const double radius = fabs(def->radius * cs.X) + fabs(def->radius * cs.Y);
-	const DVector2 offset = cs * radius;
+	const double projRadius = fabs(radius * cs.X) + fabs(radius * cs.Y);
+	const DVector2 offset = cs * projRadius;
 
 	pos = origin + DVector3(offset.Y, -offset.X, middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
 	}
 
 	pos = origin + DVector3(-offset.Y, offset.X, middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
@@ -259,14 +250,14 @@ bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance
 	if (fabs(pitch.Degrees()) <= PitchLimit)
 	{
 		pos = origin;
-		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}
 
-		pos = origin.plusZ(def->Height);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		pos = origin.plusZ(height);
+		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
@@ -275,14 +266,14 @@ bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance
 	else
 	{
 		pos = origin + DVector3(offset.X, offset.Y, middle);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}
 
 		pos = origin + DVector3(-offset.X, -offset.Y, middle);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, Flags, pos.Z, pos.X, pos.Y, &data)
+		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
 			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;

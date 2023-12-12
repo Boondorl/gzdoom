@@ -365,19 +365,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, IsActorInView, IsActorInView)
 	ACTION_RETURN_INT(IsActorInView(self, mo, fov));
 }
 
-static int CanReach(DBot* const self, AActor* const mo)
-{
-	return self->CanReach(mo);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, CanReach, CanReach)
-{
-	PARAM_SELF_PROLOGUE(DBot);
-	PARAM_POINTER(mo, AActor);
-
-	ACTION_RETURN_INT(CanReach(self, mo));
-}
-
 static int CheckMissileTrajectory(DBot* const self, const double x, const double y, const double z, const double minDistance, const double maxDistance)
 {
 	return self->CheckMissileTrajectory({ x, y, z }, minDistance, maxDistance);
@@ -395,31 +382,29 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckMissileTrajectory, CheckMissileTrajecto
 	ACTION_RETURN_INT(CheckMissileTrajectory(self, x, y, z, minDist, maxDist));
 }
 
-static void FindEnemy(DBot* const self, const double fov)
+static AActor* FindTarget(DBot* const self, const double fov)
 {
-	self->FindEnemy(DAngle::fromDeg(fov));
+	return self->FindTarget(DAngle::fromDeg(fov));
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, FindEnemy, FindEnemy)
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, FindTarget, FindTarget)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_FLOAT(fov);
 
-	FindEnemy(self, fov);
-	return 0;
+	ACTION_RETURN_POINTER(FindTarget(self, fov));
 }
 
-static void FindPartner(DBot* const self)
+static int FindPartner(DBot* const self)
 {
-	self->FindPartner();
+	return self->FindPartner();
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, FindPartner, FindPartner)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 
-	FindPartner(self);
-	return 0;
+	ACTION_RETURN_INT(FindPartner(self));
 }
 
 static int IsValidItem(DBot* const self, AActor* const item)
@@ -433,20 +418,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, IsValidItem, IsValidItem)
 	PARAM_POINTER(item, AActor);
 
 	ACTION_RETURN_INT(IsValidItem(self, item));
-}
-
-static void PitchTowardsActor(DBot* const self, AActor* const mo)
-{
-	self->PitchTowardsActor(mo);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, PitchTowardsActor, PitchTowardsActor)
-{
-	PARAM_SELF_PROLOGUE(DBot);
-	PARAM_POINTER(mo, AActor);
-
-	PitchTowardsActor(self, mo);
-	return 0;
 }
 
 static int FakeCheckPosition(DBot* const self, const double x, const double y, FCheckPosition* const tm, const int actorsOnly)
@@ -476,22 +447,24 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, FakeCheckPosition, FakeCheckPosition)
 	ACTION_RETURN_INT(FakeCheckPosition(self, x, y, tm, actorsOnly));
 }
 
-static void Roam(DBot* const self)
+static int CanReach(DBot* const self, AActor* const mo, const double maxDist, const int jump)
 {
-	self->Roam();
+	return self->CanReach(mo, maxDist, jump);
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, Roam, Roam)
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, CanReach, CanReach)
 {
 	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_POINTER(mo, AActor);
+	PARAM_FLOAT(maxDist);
+	PARAM_INT(jump);
 
-	Roam(self);
-	return 0;
+	ACTION_RETURN_INT(CanReach(self, mo, maxDist, jump));
 }
 
-static int CheckMove(DBot* const self, const double x, const double y)
+static int CheckMove(DBot* const self, const double x, const double y, const int jump)
 {
-	return self->CheckMove({ x, y });
+	return self->CheckMove({ x, y }, jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckMove, CheckMove)
@@ -499,56 +472,48 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckMove, CheckMove)
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_FLOAT(x);
 	PARAM_FLOAT(y);
+	PARAM_INT(jump);
 
-	ACTION_RETURN_INT(CheckMove(self, x, y));
+	ACTION_RETURN_INT(CheckMove(self, x, y, jump));
 }
 
-static int Move(DBot* const self)
+static int Move(DBot* const self, const int jump)
 {
-	return self->Move();
+	return self->Move(jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, Move, Move)
 {
 	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_INT(jump);
 
-	ACTION_RETURN_INT(Move(self));
+	ACTION_RETURN_INT(Move(self, jump));
 }
 
-static int TryWalk(DBot* const self)
+static void NewChaseDir(DBot* const self, const int jump)
 {
-	return self->TryWalk();
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, TryWalk, TryWalk)
-{
-	PARAM_SELF_PROLOGUE(DBot);
-
-	ACTION_RETURN_INT(TryWalk(self));
-}
-
-static void NewChaseDir(DBot* const self)
-{
-	self->NewChaseDir();
+	self->NewChaseDir(jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, NewChaseDir, NewChaseDir)
 {
 	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_INT(jump);
 
-	NewChaseDir(self);
+	NewChaseDir(self, jump);
 	return 0;
 }
 
-static int PickStrafeDirection(DBot* const self, const int startDir)
+static int PickStrafeDirection(DBot* const self, const int startDir, const int jump)
 {
-	return self->PickStrafeDirection(static_cast<EBotMoveDirection>(startDir));
+	return self->PickStrafeDirection(static_cast<EBotMoveDirection>(startDir), jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, PickStrafeDirection, PickStrafeDirection)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_INT(startDir);
+	PARAM_INT(jump);
 
-	ACTION_RETURN_INT(PickStrafeDirection(self, startDir));
+	ACTION_RETURN_INT(PickStrafeDirection(self, startDir, jump));
 }

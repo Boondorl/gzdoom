@@ -311,6 +311,7 @@ private:
 
 	void NormalizeSpeed(short& cmd, const int* const speeds, const bool running);	// Ensure that speeds adhere to running properly.
 	void SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng);	// Convert a delta angle into a valid turn command.
+	bool TryWalk(const bool doJump = true);											// Same as Move but also sets a turn cool down when moving.
 
 public:
 	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
@@ -330,20 +331,17 @@ public:
 	void CallBotThink(); // Handles overall thinking logic. Called directly before PlayerThink.
 	
 	// Boon TODO: Clean up all these const functions
-	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle90);	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* const target);								// Checks to see if a valid movement can be made towards the target.
-	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0); // Checks if anything is blocking the ReadyWeapon missile's path.
-	void FindEnemy(const DAngle& fov = nullAngle);						// Tries to find a target.
-	void FindPartner();													// Looks for a player to stick near, bot or real.
+	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle60);	// Check if the bot has sight of the Actor within a view cone.
+	bool CanReach(AActor* const mo, const double maxDistance = 320.0, const bool doJump = true);							// Checks to see if a valid movement can be made towards the target.
+	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0);	// Checks if anything is blocking the ReadyWeapon missile's path.
+	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
+	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
 	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
-	void PitchTowardsActor(AActor* const target);						// Aim the bot's pitch towards the target.
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
-	void Roam();														// Attempt to move towards the boat's goal similar to how monsters move.
-	bool CheckMove(const DVector2& pos);								// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
-	bool Move();														// Check to see if a movement is valid in the current moveDir.
-	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE); // Picks a valid strafe direction to move. Can also jump.
-	bool TryWalk();														// Same as Move but also sets a turn cool down when moving.
-	void NewChaseDir();													// Attempts to get a new direction to move towards the bot's goal.
+	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
+	bool Move(const bool doJump = true);								// Check to see if a movement is valid in the current moveDir.
+	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE, const bool doJump = true); // Picks a valid strafe direction to move. Can also jump.
+	void NewChaseDir(const bool doJump = true);							// Attempts to get a new direction to move towards the bot's goal.
 	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
 	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
 	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.

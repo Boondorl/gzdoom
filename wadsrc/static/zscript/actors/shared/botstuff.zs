@@ -39,7 +39,7 @@ class Bot : Thinker native
 	const EVADE_COOL_DOWN_TICS = int(1.0 * TICRATE);
 	const ITEM_RANGE_SQ = 480.0 * 480.0;
 	const GOAL_COOL_DOWN_TICS = int(5.0 * TICRATE);
-	const MAX_TURN_SPEED = 1.0;
+	const MAX_TURN_SPEED = 3.0;
 	const MIN_RESPAWN_TIME = int(0.25 * TICRATE);
 	const MAX_RESPAWN_TIME = int(1.0 * TICRATE);
 
@@ -66,20 +66,18 @@ class Bot : Thinker native
 	native void SetPitch(double destPitch);
 	native void SetRoll(double destRoll);
 
-	native bool IsActorInView(Actor mo, double fov = 90.0);
-	native bool CanReach(Actor mo);
+	native bool IsActorInView(Actor mo, double fov = 60.0);
 	native bool CheckMissileTrajectory(Vector3 dest, double minDistance = 0.0, double maxDistance = 320.0);
-	native void FindEnemy(double fov = 0.0);
-	native void FindPartner();
+	native Actor FindTarget(double fov = 60.0);
+	native uint FindPartner();
 	native bool IsValidItem(Inventory item);
-	native void PitchTowardsActor(Actor mo);
+
 	native bool FakeCheckPosition(Vector2 dest, out FCheckPosition tm = null, bool actorsOnly = false);
-	native void Roam();
-	native bool CheckMove(Vector2 dest);
-	native bool Move();
-	native bool TryWalk();
-	native void NewChaseDir();
-	native EBotMoveDirection PickStrafeDirection(EBotMoveDirection startDir = MDIR_NONE);
+	native bool CanReach(Actor mo, double maxDistance = 320.0, bool jump = true);
+	native bool CheckMove(Vector2 dest, bool jump = true);
+	native bool Move(bool jump = true);
+	native void NewChaseDir(bool jump = true);
+	native EBotMoveDirection PickStrafeDirection(EBotMoveDirection startDir = MDIR_NONE, bool jump = true);
 
 	clearscope PlayerPawn GetActor() const
 	{
@@ -130,8 +128,8 @@ class Bot : Thinker native
 		CheckEvade();
 		UpdateGoal();
 		
-		HandleMovement();
 		AdjustAngles();
+		HandleMovement();
 	}
 
 	virtual void BotDeathThink()
@@ -163,7 +161,7 @@ class Bot : Thinker native
 
 		if (!GetTarget() || (deathmatch && targetCoolDown <= 0))
 		{
-			FindEnemy(120.0);
+			FindTarget();
 			if (GetTarget())
 				targetCoolDown = TARGET_COOL_DOWN_TICS;
 		}
@@ -335,7 +333,8 @@ class Bot : Thinker native
 
 	virtual void HandleMovement()
 	{
-		Roam();
+		if (--GetActor().movecount < 0 || !Move())
+			NewChaseDir();
 	}
 
 	virtual bool TryFire()

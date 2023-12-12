@@ -41,10 +41,6 @@ static FRandom pr_bottrywalk("BotTryWalk");
 static FRandom pr_botnewchasedir("BotNewChaseDir");
 static FRandom pr_botpickstrafedir("BotPickStrafeDir");
 
-// Borrow some movement tables from p_enemy.cpp.
-extern dirtype_t opposite[9];
-extern dirtype_t diags[4];
-
 extern bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
 
 // Checks if a sector contains a hazard.
@@ -84,26 +80,28 @@ bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool
 // Checks to see if the bot is capable of reaching a target actor taking
 // level geometry into account. This is mostly for stepping up stairs and
 // avoiding running directly into hazards, but won't take large dropoffs into account.
-bool DBot::CanReach(AActor* const target)
+bool DBot::CanReach(AActor* const mo, const double maxDistance, const bool doJump)
 {
-    if (target == nullptr || _player->mo == target
-        || target->ceilingz - target->floorz < _player->mo->Height)
-    {
+    if (mo == nullptr)
         return false;
-    }
 
-    DVector3 dir = _player->mo->Vec3To(target);
-    const double dist = dir.XY().Length();
-    if (fabs(dir.Z) <= _player->mo->Height && dist < _player->mo->radius * 2.0)
+    if (_player->mo->flags & MF_NOCLIP)
         return true;
 
-    constexpr double MaxRange = 320.0; // Don't check further than ~10m on the xy axes.
-    if (dist > MaxRange)
-        dir *= MaxRange / dist;
+    if (mo->ceilingz - mo->floorz < _player->mo->Height)
+        return false;
+
+    DVector3 dir = _player->mo->Vec3To(mo);
+    const double dist = dir.XY().Length();
+    if (fabs(dir.Z) <= _player->mo->Height && dist <= _player->mo->radius * 2.0)
+        return true;
+
+    if (maxDistance >= EQUAL_EPSILON && dist > maxDistance)
+        dir *= maxDistance / dist;
 
     // Intentionally ignore portals here.
     const DVector2 dest = _player->mo->Pos().XY() + dir.XY();
-    constexpr double JumpHeight = 8.0;
+    const double jumpHeight = doJump ? 8.0 : 0.0;
     constexpr int MaxBlocks = 3;
 
     int blockCounter = 0;
@@ -129,12 +127,12 @@ bool DBot::CanReach(AActor* const target)
                     return false;
 
                 const DVector2 hitPos = it.InterceptPoint(in);
-                const double z = _player->mo->Z() + dir.Z * in->frac;
+                const double hitZ = _player->mo->Z() + dir.Z * in->frac;
 
-                const double ceilZ = NextHighestCeilingAt(sec, hitPos.X, hitPos.Y, z, z + _player->mo->Height);
-                const double floorZ = NextLowestFloorAt(sec, hitPos.Y, hitPos.Y, z);
+                const double ceilZ = NextHighestCeilingAt(sec, hitPos.X, hitPos.Y, hitZ, hitZ + _player->mo->Height);
+                const double floorZ = NextLowestFloorAt(sec, hitPos.Y, hitPos.Y, hitZ);
 
-                if (floorZ <= prevZ + _player->mo->MaxStepHeight + JumpHeight
+                if (floorZ <= prevZ + _player->mo->MaxStepHeight + jumpHeight
                     && ceilZ - floorZ >= _player->mo->Height)
                 {
                     prevZ = floorZ;
@@ -151,7 +149,7 @@ bool DBot::CanReach(AActor* const target)
             if (thing == _player->mo)
                 continue;
 
-            if (thing == target)
+            if (thing == mo)
                 break;
 
             if (!(thing->flags & MF_SOLID))
@@ -172,46 +170,22 @@ bool DBot::CanReach(AActor* const target)
     }
 
     // This is done last in case there was a valid stairway leading up to the target.
-    return target->Z() <= prevZ + _player->mo->Height;
-}
-
-// Attempts to move towards the bot's goal. Will automatically update
-// the player's movedir and yaw to the desired direction.
-void DBot::Roam()
-{
-	if (CanReach(_player->mo->goal))
-	{
-        _player->mo->Angles.Yaw = _player->mo->AngleTo(_player->mo->goal);
-	}
-	else if (_player->mo->movedir < DI_NODIR)
-	{
-		// No point doing this with floating point angles...
-		const unsigned int angle = _player->mo->Angles.Yaw.BAMs() & static_cast<unsigned int>(7 << 29);
-		const int delta = angle - (_player->mo->movedir << 29);
-
-		if (delta > 0)
-            _player->mo->Angles.Yaw -= DAngle45;
-		else if (delta < 0)
-            _player->mo->Angles.Yaw += DAngle45;
-	}
-
-	if (--_player->mo->movecount < 0 || !Move())
-		NewChaseDir();
+    return mo->Z() <= prevZ + _player->mo->Height;
 }
 
 // Check to ensure the spot ahead of the bot is a valid place that can be walked. Tries
 // to prevent walking over ledges and will automatically jump as well.
-bool DBot::CheckMove(const DVector2& pos)
+bool DBot::CheckMove(const DVector2& pos, const bool doJump)
 {
     // No jump check since the bot will just warp up ledges anyway.
     if (_player->mo->flags & MF_NOCLIP)
         return true;
 
-    constexpr double JumpHeight = 8.0;
+    const double jumpHeight = doJump ? 8.0 : 0.0;
     FCheckPosition tm = {};
     if (!FakeCheckPosition(pos, tm)
         || tm.ceilingz - tm.floorz < _player->mo->Height
-        || tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight + JumpHeight
+        || tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight + jumpHeight
         || tm.ceilingz < _player->mo->Top()
         || (!(_player->mo->flags & (MF_DROPOFF | MF_FLOAT)) && tm.floorz - tm.dropoffz > _player->mo->MaxDropOffHeight)
         || (!IsSectorDangerous(_player->mo->Sector) && IsSectorDangerous(tm.sector))) // Only do a hazard check if we're not currently in a hazard zone.
@@ -220,14 +194,14 @@ bool DBot::CheckMove(const DVector2& pos)
     }
 
     // Check if it's jumpable.
-    if (tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight)
+    if (doJump && tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight)
         SetButtons(BT_JUMP, true);
 
     return true;
 }
 
 // Try and move the bot in its current movedir.
-bool DBot::Move()
+bool DBot::Move(const bool doJump)
 {
 	if (_player->mo->movedir >= DI_NODIR)
 	{
@@ -235,137 +209,108 @@ bool DBot::Move()
 		return false;
 	}
 
-    const DVector2 pos = DVector2(_player->mo->X() + 8 * xspeed[_player->mo->movedir], _player->mo->Y() + 8 * yspeed[_player->mo->movedir]);
-	if (!CheckMove(pos))
+    const DVector2 pos = { _player->mo->X() + _player->mo->radius * xspeed[_player->mo->movedir], _player->mo->Y() + _player->mo->radius * yspeed[_player->mo->movedir] };
+	if (!CheckMove(pos, doJump))
         return false;
 
-    SetMove(MDIR_FORWARDS);
-	return true;
+    constexpr double MinForward = 60.0;
+    constexpr double MaxForward = 120.0;
+    constexpr double MinSide = 30.0;
+    constexpr double MaxSide = 150.0;
+
+    const double delta = deltaangle(_player->mo->Angles.Yaw, DAngle45 * _player->mo->movedir).Degrees();
+    const double absAng = fabs(delta);
+
+    EBotMoveDirection forw = absAng <= MinForward && absAng >= MaxForward ? MDIR_FORWARDS : MDIR_NO_CHANGE;
+    EBotMoveDirection side = absAng >= MinSide && absAng <= MaxSide ? MDIR_LEFT : MDIR_NO_CHANGE;
+    if (side == MDIR_LEFT && delta < 0.0)
+        side = MDIR_RIGHT;
+    if (forw == MDIR_FORWARDS && absAng > 90.0)
+        forw = MDIR_BACKWARDS;
+
+    SetMove(forw, side);
+    return true;
 }
 
 // Similar to Move() but will also set a cool down on the random turning if it could move.
 // Only used when trying to pick a new direction to move.
-bool DBot::TryWalk()
+bool DBot::TryWalk(const bool doJump)
 {
-    if (!Move())
+    if (!Move(doJump))
         return false;
 
     _player->mo->movecount = pr_bottrywalk() & 60;
     return true;
 }
 
-void DBot::NewChaseDir()
+void DBot::NewChaseDir(const bool doJump)
 {
     if (_player->mo->goal == nullptr)
-		return;
-
-    const dirtype_t curDir = static_cast<dirtype_t>(_player->mo->movedir);
-    const dirtype_t backDir = opposite[curDir];
-
-	const DVector2 delta = _player->mo->Vec2To(_player->mo->goal);
-    dirtype_t d[] = { DI_NODIR, DI_NODIR, DI_NODIR };
-    if (delta.X > 10.0)
-        d[1] = DI_EAST;
-    else if (delta.X < -10.0)
-        d[1] = DI_WEST;
-
-    if (delta.Y < -10.0)
-        d[2] = DI_SOUTH;
-    else if (delta.Y > 10.0)
-        d[2] = DI_NORTH;
-
-    // Try to walk straight at it.
-    if (d[1] != DI_NODIR && d[2] != DI_NODIR)
     {
-		_player->mo->movedir = diags[((delta.Y < 0.0) << 1) + (delta.X > 0.0)];
-        if (_player->mo->movedir != backDir && TryWalk())
-            return;
+        _player->mo->movedir = DI_NODIR;
+        return;
     }
 
-    // Try a more indirect path.
-	if (fabs(delta.Y) > fabs(delta.X) || pr_botnewchasedir() > 200)
-	{
-        const dirtype_t temp = d[1];
-		d[1] = d[2];
-		d[2] = temp;
-	}
+    constexpr double AngToDir = 1.0 / 45.0;
 
-    if (d[1] == curDir)
-        d[1] = DI_NODIR;
-    if (d[2] == backDir)
-        d[2] = DI_NODIR;
+    double desired = _player->mo->AngleTo(_player->mo->goal).Degrees();
+    while (desired < 0.0)
+        desired += 360.0;
 
-    if (d[1] != DI_NODIR)
-    {
-        _player->mo->movedir = d[1];
-        if (TryWalk())
-            return;
-    }
+    // Try and walk straight towards the goal, slowly shifting sides unless it needs to
+    // turn around entirely.
+    int baseDir = static_cast<int>(desired * AngToDir);
+    if (baseDir == _player->mo->movedir && (pr_botnewchasedir() & 1))
+        baseDir = ((pr_botnewchasedir() & 1) * 2 - 1 + baseDir) % 8;
 
-    if (d[2] != DI_NODIR)
-    {
-        _player->mo->movedir = d[2];
-        if (TryWalk())
-            return;
-    }
+    _player->mo->movedir = baseDir;
+    if (TryWalk(doJump))
+        return;
 
-    // No path, so pick another direction.
-    if (curDir != DI_NODIR)
-    {
-        _player->mo->movedir = curDir;
-        if (TryWalk())
-            return;
-    }
+    _player->mo->movedir = (baseDir + 1) % 8;
+    if (TryWalk(doJump))
+        return;
 
-    if (pr_botnewchasedir() & 1)
-    {
-        for (int i = DI_EAST; i <= DI_SOUTHEAST; ++i)
-        {
-            if (i != backDir)
-            {
-                _player->mo->movedir = i;
-                if (TryWalk())
-                    return;
-            }
-        }
-    }
-    else
-    {
-        for (int i = DI_SOUTHEAST; i >= DI_EAST; --i)
-        {
-            if (i != backDir)
-            {
-                _player->mo->movedir = i;
-                if (TryWalk())
-                    return;
-            }
-        }
-    }
+    _player->mo->movedir = (baseDir - 1) % 8;
+    if (TryWalk(doJump))
+        return;
 
-    // Out of options, so turn around entirely.
-    if (backDir != DI_NODIR)
-    {
-        _player->mo->movedir = backDir;
-        if (TryWalk())
-            return;
-    }
+    _player->mo->movedir = (baseDir + 2) % 8;
+    if (TryWalk(doJump))
+        return;
+
+    _player->mo->movedir = (baseDir - 2) % 8;
+    if (TryWalk(doJump))
+        return;
+
+    _player->mo->movedir = (baseDir + 3) % 8;
+    if (TryWalk(doJump))
+        return;
+
+    _player->mo->movedir = (baseDir - 3) % 8;
+    if (TryWalk(doJump))
+        return;
+
+    _player->mo->movedir = (baseDir + 4) % 8;
+    if (TryWalk(doJump))
+        return;
 
     // Couldn't move at all.
     _player->mo->movedir = DI_NODIR;
 }
 
 // Choose whether to strafe left or right. Will also allow for jumps in those directions.
-EBotMoveDirection DBot::PickStrafeDirection(const EBotMoveDirection startDir)
+EBotMoveDirection DBot::PickStrafeDirection(const EBotMoveDirection startDir, const bool doJump)
 {
     const DVector2 facing = _player->mo->Angles.Yaw.ToVector(_player->mo->radius * 2.0);
 
     int dir = startDir != MDIR_NONE ? startDir : 2 * (pr_botpickstrafedir() & 1) - 1; // Pick a random starting direction.
     DVector2 offset = DVector2(facing.Y * -dir, facing.X * dir);
-    if (!CheckMove(_player->mo->Pos().XY() + offset))
+    if (!CheckMove(_player->mo->Pos().XY() + offset, doJump))
     {
         dir = -dir;
         offset = -offset;
-        if (!CheckMove(_player->mo->Pos().XY() + offset))
+        if (!CheckMove(_player->mo->Pos().XY() + offset, doJump))
             dir = 0;
     }
 
