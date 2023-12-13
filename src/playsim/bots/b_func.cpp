@@ -111,7 +111,8 @@ bool DBot::IsActorInView(AActor* const mo, const DAngle& fov)
 			&& P_CheckSight(_player->mo, mo, SF_SEEPASTSHOOTABLELINES | SF_SEEPASTBLOCKEVERYTHING | SF_IGNOREWATERBOUNDARY);
 }
 
-// Sets the bot's FriendPlayer value to the player index it wants to stick with.
+// Sets the bot's FriendPlayer value to the player index it wants to stick with. Ignores bots
+// since that can cause them to swarm around each other like a hive of angry bees.
 unsigned int DBot::FindPartner()
 {
 	unsigned int newFriend = 0u;
@@ -119,7 +120,7 @@ unsigned int DBot::FindPartner()
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
 		AActor* const client = Level->Players[i]->mo;
-		if (Level->PlayerInGame(i) && _player != Level->Players[i]
+		if (Level->PlayerInGame(i) && _player != Level->Players[i] && Level->Players[i]->Bot == nullptr
 			&& Level->Players[i]->health > 0 && _player->mo->IsTeammate(client))
 		{
 			const double dist = _player->mo->Distance3DSquared(client);
@@ -169,15 +170,11 @@ AActor* DBot::FindTarget(const DAngle& fov)
 // Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
 // of the Actor type is intentionally kept lazy since more robust solutions can be written from
 // ZScript.
-bool DBot::CheckMissileTrajectory(const DVector3& dest, const double minDistance, const double maxDistance)
+bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, const double minDistance, const double maxDistance)
 {
-	if (_player->ReadyWeapon == nullptr)
-		return false;
-
 	const PClassActor* missileType = nullptr;
-	const FEntityProperties* const weapInfo = DBotManager::GetEntityInfo(_player->ReadyWeapon->GetClass()->TypeName, NAME_Weapon);
-	if (weapInfo != nullptr)
-		missileType = PClass::FindActor(weapInfo->GetString("ProjectileType"));
+	if (projectileType != NAME_None)
+		missileType = PClass::FindActor(projectileType);
 
 	double radius = 0.0, height = 0.0;
 	const bool isProjectile = missileType != nullptr;

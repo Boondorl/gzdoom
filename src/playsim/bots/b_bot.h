@@ -281,9 +281,9 @@ private:
 	static FBotDefinition& ParseBot(FScanner& sc, FBotDefinition& def);				// Function that parses a bot block in BOTDEFS.
 	static FEntityProperties& ParseEntity(FScanner& sc, FEntityProperties& props);	// Function that parses a weapon block in BOTDEFS.
 
-	DBotManager(); // Don't instantiate it.
-
 public:
+	DBotManager() = delete;
+
 	static inline cycle_t BotThinkCycles = {};							// For tracking think time of bots specifically.
 	static inline TMap<FName, FBotDefinition> BotDefinitions = {};		// Default properties and userinfo to give when spawning a bot. Stored by bot ID.
 	static inline TMap<FName, FEntityProperties> BotEntityInfo = {};	// Key information about how bots should use each weapon. Stored by weapon class name.
@@ -311,7 +311,7 @@ private:
 
 	void NormalizeSpeed(short& cmd, const int* const speeds, const bool running);	// Ensure that speeds adhere to running properly.
 	void SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng);	// Convert a delta angle into a valid turn command.
-	bool TryWalk(const bool doJump = true);											// Same as Move but also sets a turn cool down when moving.
+	bool TryWalk(const bool running = true, const bool doJump = true);				// Same as Move but also sets a turn cool down when moving.
 
 public:
 	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
@@ -332,16 +332,15 @@ public:
 	
 	// Boon TODO: Clean up all these const functions
 	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle60);	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* const mo, const double maxDistance = 320.0, const bool doJump = true);							// Checks to see if a valid movement can be made towards the target.
-	bool CheckMissileTrajectory(const DVector3& dest, const double minDistance = 0.0, const double maxDistance = 320.0);	// Checks if anything is blocking the ReadyWeapon missile's path.
+	bool CanReach(AActor* const mo, const double maxDistance = 320.0, const bool doJump = true); // Checks to see if a valid movement can be made towards the target.
+	bool CheckShotPath(const DVector3& dest, const FName& projectileType = NAME_None, const double minDistance = 0.0, const double maxDistance = 320.0); // Checks if anything is blocking the ReadyWeapon missile's path.
 	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
 	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
 	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
 	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
-	bool Move(const bool doJump = true);								// Check to see if a movement is valid in the current moveDir.
-	EBotMoveDirection PickStrafeDirection(const EBotMoveDirection startDir = MDIR_NONE, const bool doJump = true); // Picks a valid strafe direction to move. Can also jump.
-	void NewMoveDirection(AActor* const goal = nullptr, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
+	bool Move(const bool running = true, const bool doJump = true);		// Check to see if a movement is valid in the current moveDir.
+	void NewMoveDirection(AActor* const goal = nullptr, const bool running = true, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
 	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
 	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
 	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.

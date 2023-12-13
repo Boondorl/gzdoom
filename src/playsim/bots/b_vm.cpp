@@ -365,21 +365,22 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, IsActorInView, IsActorInView)
 	ACTION_RETURN_INT(IsActorInView(self, mo, fov));
 }
 
-static int CheckMissileTrajectory(DBot* const self, const double x, const double y, const double z, const double minDistance, const double maxDistance)
+static int CheckShotPath(DBot* const self, const double x, const double y, const double z, const int projType, const double minDistance, const double maxDistance)
 {
-	return self->CheckMissileTrajectory({ x, y, z }, minDistance, maxDistance);
+	return self->CheckShotPath({ x, y, z }, ENamedName(projType), minDistance, maxDistance);
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckMissileTrajectory, CheckMissileTrajectory)
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckShotPath, CheckShotPath)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_FLOAT(x);
 	PARAM_FLOAT(y);
 	PARAM_FLOAT(z);
+	PARAM_INT(projType);
 	PARAM_FLOAT(minDist);
 	PARAM_FLOAT(maxDist);
 
-	ACTION_RETURN_INT(CheckMissileTrajectory(self, x, y, z, minDist, maxDist));
+	ACTION_RETURN_INT(CheckShotPath(self, x, y, z, projType, minDist, maxDist));
 }
 
 static AActor* FindTarget(DBot* const self, const double fov)
@@ -477,44 +478,32 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckMove, CheckMove)
 	ACTION_RETURN_INT(CheckMove(self, x, y, jump));
 }
 
-static int Move(DBot* const self, const int jump)
+static int Move(DBot* const self, const int running, const int jump)
 {
-	return self->Move(jump);
+	return self->Move(running, jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, Move, Move)
 {
 	PARAM_SELF_PROLOGUE(DBot);
+	PARAM_INT(running);
 	PARAM_INT(jump);
 
-	ACTION_RETURN_INT(Move(self, jump));
+	ACTION_RETURN_INT(Move(self, running, jump));
 }
 
-static void NewMoveDirection(DBot* const self, AActor* const goal, const int jump)
+static void NewMoveDirection(DBot* const self, AActor* const goal, const int running, const int jump)
 {
-	self->NewMoveDirection(goal, jump);
+	self->NewMoveDirection(goal, running, jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, NewMoveDirection, NewMoveDirection)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_POINTER(mo, AActor);
+	PARAM_INT(running)
 	PARAM_INT(jump);
 
-	NewMoveDirection(self, mo, jump);
+	NewMoveDirection(self, mo, running, jump);
 	return 0;
-}
-
-static int PickStrafeDirection(DBot* const self, const int startDir, const int jump)
-{
-	return self->PickStrafeDirection(static_cast<EBotMoveDirection>(startDir), jump);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(DBot, PickStrafeDirection, PickStrafeDirection)
-{
-	PARAM_SELF_PROLOGUE(DBot);
-	PARAM_INT(startDir);
-	PARAM_INT(jump);
-
-	ACTION_RETURN_INT(PickStrafeDirection(self, startDir, jump));
 }

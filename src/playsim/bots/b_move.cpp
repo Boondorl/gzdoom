@@ -201,7 +201,7 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
 }
 
 // Try and move the bot in its current movedir.
-bool DBot::Move(const bool doJump)
+bool DBot::Move(const bool running, const bool doJump)
 {
 	if (_player->mo->movedir >= DI_NODIR)
 	{
@@ -209,7 +209,7 @@ bool DBot::Move(const bool doJump)
 		return false;
 	}
 
-    const DVector2 pos = { _player->mo->X() + _player->mo->Vel.X, _player->mo->Y() + _player->mo->Vel.Y };
+    const DVector2 pos = { _player->mo->X() + _player->mo->radius, _player->mo->Y() + _player->mo->radius};
 	if (!CheckMove(pos, doJump))
         return false;
 
@@ -228,22 +228,22 @@ bool DBot::Move(const bool doJump)
     if (forw == MDIR_FORWARDS && absAng > 90.0)
         forw = MDIR_BACKWARDS;
 
-    SetMove(forw, side);
+    SetMove(forw, side, MDIR_NO_CHANGE, running);
     return true;
 }
 
 // Similar to Move() but will also set a cool down on the random turning if it could move.
 // Only used when trying to pick a new direction to move.
-bool DBot::TryWalk(const bool doJump)
+bool DBot::TryWalk(const bool running, const bool doJump)
 {
-    if (!Move(doJump))
+    if (!Move(running, doJump))
         return false;
 
     _player->mo->movecount = pr_bottrywalk() % TICRATE;
     return true;
 }
 
-void DBot::NewMoveDirection(AActor* const goal, const bool doJump)
+void DBot::NewMoveDirection(AActor* const goal, const bool running, const bool doJump)
 {
     int baseDir = 0;
     if (goal != nullptr)
@@ -267,55 +267,37 @@ void DBot::NewMoveDirection(AActor* const goal, const bool doJump)
         baseDir = ((pr_botnewchasedir() & 1) * 2 - 1 + baseDir) % 8;
 
     _player->mo->movedir = baseDir;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir + 1) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir - 1) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir + 2) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir - 2) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir + 3) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir - 3) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     _player->mo->movedir = (baseDir + 4) % 8;
-    if (TryWalk(doJump))
+    if (TryWalk(running, doJump))
         return;
 
     // Couldn't move at all.
     _player->mo->movedir = DI_NODIR;
-}
-
-// Choose whether to strafe left or right. Will also allow for jumps in those directions.
-EBotMoveDirection DBot::PickStrafeDirection(const EBotMoveDirection startDir, const bool doJump)
-{
-    const DVector2 facing = _player->mo->Angles.Yaw.ToVector(_player->mo->radius * 2.0);
-
-    int dir = startDir != MDIR_NONE ? startDir : 2 * (pr_botpickstrafedir() & 1) - 1; // Pick a random starting direction.
-    DVector2 offset = DVector2(facing.Y * -dir, facing.X * dir);
-    if (!CheckMove(_player->mo->Pos().XY() + offset, doJump))
-    {
-        dir = -dir;
-        offset = -offset;
-        if (!CheckMove(_player->mo->Pos().XY() + offset, doJump))
-            dir = 0;
-    }
-
-    return static_cast<EBotMoveDirection>(dir);
 }
