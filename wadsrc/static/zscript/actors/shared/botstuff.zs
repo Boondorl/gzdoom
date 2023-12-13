@@ -413,7 +413,7 @@ class Bot : Thinker native
 
 		if (--pawn.moveCount < 0 || !Move())
 		{
-			if (partner && partner == goal && !pawn.CheckSight(partner, 15))
+			if (partner && partner == goal && !pawn.CheckSight(partner, SF_IGNOREVISIBILITY|SF_SEEPASTSHOOTABLELINES|SF_IGNOREWATERBOUNDARY))
 				NewMoveDirection(null);
 			else
 				NewMoveDirection(goal);

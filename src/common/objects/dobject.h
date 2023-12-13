@@ -244,6 +244,7 @@ public:
 	inline FString &StringVar(FName field);
 	template<class T> T*& PointerVar(FName field);
 	inline int* IntArray(FName field);
+	inline double* FloatArray(FName field);
 
 	// This is only needed for swapping out PlayerPawns and absolutely nothing else!
 	virtual size_t PointerSubstitution (DObject *old, DObject *notOld);
@@ -437,6 +438,11 @@ inline int &DObject::IntVar(FName field)
 inline int* DObject::IntArray(FName field)
 {
 	return (int*)ScriptVar(field, nullptr);
+}
+
+inline double* DObject::FloatArray(FName field)
+{
+	return (double*)ScriptVar(field, nullptr);
 }
 
 inline FTextureID &DObject::TextureIDVar(FName field)

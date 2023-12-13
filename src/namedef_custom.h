@@ -57,6 +57,8 @@ xx(SkyCamCompat)
 xx(BasicArmorBonus)
 xx(BasicArmorPickup)
 xx(SaveAmount)
+xx(MaxSaveAmount)
+xx(BonusMax)
 xx(SavePercent)
 xx(MaxAbsorb)
 xx(MaxFullAbsorb)
@@ -85,9 +87,10 @@ xx(Ironlich)
 xx(Minotaur)
 xx(Sorcerer2)
 
-// Bots check this
+// Bots check these
 xx(Megasphere)
 xx(MegasphereHealth)
+xx(BlueArmorForMegasphere)
 xx(ItemFlags)
 
 // Standard player classes

@@ -38,6 +38,36 @@
 
 extern int P_GetRealMaxHealth(AActor* actor, int max);
 
+static bool IsHexenArmorValid(AActor* const mo, AActor* const item)
+{
+	const auto hexenArmor = mo->FindInventory(NAME_HexenArmor);
+	if (hexenArmor != nullptr)
+	{
+		const int slot = item->IntVar(NAME_Health);
+		if (slot < 0 || slot > 3)
+			return false;
+
+		const double* const slots = hexenArmor->FloatArray(NAME_Slots);
+		const double* const increments = hexenArmor->FloatArray(NAME_SlotsIncrement);
+		if (item->IntVar(NAME_Amount) <= 0)
+		{
+			if (slots[slot] < increments[slot])
+				return true;
+		}
+		else
+		{
+			const double total = slots[0] + slots[1] + slots[2] + slots[3] + slots[4];
+			const double max = increments[0] + increments[1] + increments[2] + increments[3] + slots[4] + 20.0;
+			if (total < max)
+				return true;
+		}
+
+		return false;
+	}
+
+	return true;
+}
+
 // Check to see if the bot is capable of picking up a given item.
 bool DBot::IsValidItem(AActor* const item)
 {
@@ -45,7 +75,6 @@ bool DBot::IsValidItem(AActor* const item)
 	if (item == nullptr || !(item->flags & MF_SPECIAL) || !item->IsKindOf(NAME_Inventory))
 		return false;
 
-	constexpr int bIsHealth = 1 << 22;
 	if (item->IsKindOf(NAME_Weapon))
 	{
 		const auto heldWeapon = _player->mo->FindInventory(item->GetClass());
@@ -84,18 +113,54 @@ bool DBot::IsValidItem(AActor* const item)
 		if (heldAmmo != nullptr && heldAmmo->IntVar(NAME_Amount) >= heldAmmo->IntVar(NAME_MaxAmount))
 			return false;
 	}
-	else if (item->IntVar(NAME_ItemFlags) & bIsHealth) // Boon TODO: Make sure this works
+	else
 	{
-		// Unfortunately this has to be checked manually since Megaspheres are horribly set up.
-		const auto testItem = item->GetClass()->TypeName == NAME_Megasphere
-								? GetDefaultByName(NAME_MegasphereHealth)
-								: item;
-
-		if (testItem != nullptr)
+		constexpr int bIsArmor = 1 << 21;
+		constexpr int bIsHealth = 1 << 22;
+		
+		const int itemFlags = item->IntVar(NAME_ItemFlags);
+		if (itemFlags & bIsHealth)
 		{
-			const int maxHealth = P_GetRealMaxHealth(_player->mo, testItem->IntVar(NAME_MaxAmount));
-			if (_player->health >= maxHealth)
-				return false;
+			// Unfortunately this has to be checked manually since Megaspheres are set up like this.
+			const auto testItem = item->GetClass()->TypeName == NAME_Megasphere
+									? GetDefaultByName(NAME_MegasphereHealth)
+									: item;
+
+			if (testItem != nullptr)
+			{
+				const int maxHealth = P_GetRealMaxHealth(_player->mo, testItem->IntVar(NAME_MaxAmount));
+				if (_player->health >= maxHealth)
+					return false;
+			}
+		}
+		
+		if (itemFlags & bIsArmor)
+		{
+			const auto testItem = item->GetClass()->TypeName == NAME_Megasphere
+									? GetDefaultByName(NAME_BlueArmorForMegasphere)
+									: item;
+
+			if (testItem != nullptr)
+			{
+				const auto basicArmor = _player->mo->FindInventory(NAME_BasicArmor);
+				if (basicArmor != nullptr)
+				{
+					int total = basicArmor->IntVar(NAME_Amount);
+
+					// Decide more carefully how to pick up armor in case it's a downgrade.
+					if (testItem->IsKindOf(NAME_BasicArmorPickup)
+						&& total * basicArmor->FloatVar(NAME_SavePercent) >= testItem->IntVar(NAME_SaveAmount) * testItem->FloatVar(NAME_SavePercent))
+					{
+						return false;
+					}
+
+					if (testItem->IsKindOf(NAME_BasicArmorBonus) && total >= testItem->IntVar(NAME_MaxSaveAmount) + testItem->IntVar(NAME_BonusMax))
+						return false;
+				}
+
+				if (testItem->IsKindOf(NAME_HexenArmor) && !IsHexenArmorValid(_player->mo, testItem))
+					return false;
+			}
 		}
 	}
 
@@ -108,7 +173,7 @@ bool DBot::IsActorInView(AActor* const mo, const DAngle& fov)
 	const DAngle viewFOV = fov <= nullAngle ? DAngle180 : fov;
 	return mo != nullptr
 			&& absangle(_player->mo->Angles.Yaw, _player->mo->AngleTo(mo)) <= viewFOV
-			&& P_CheckSight(_player->mo, mo, SF_SEEPASTSHOOTABLELINES | SF_SEEPASTBLOCKEVERYTHING | SF_IGNOREWATERBOUNDARY);
+			&& P_CheckSight(_player->mo, mo, SF_SEEPASTSHOOTABLELINES | SF_IGNOREWATERBOUNDARY);
 }
 
 // Sets the bot's FriendPlayer value to the player index it wants to stick with. Ignores bots
