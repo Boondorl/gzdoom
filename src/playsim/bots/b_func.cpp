@@ -78,19 +78,16 @@ bool DBot::IsValidItem(AActor* const item)
 	if (item->IsKindOf(NAME_Weapon))
 	{
 		const auto heldWeapon = _player->mo->FindInventory(item->GetClass());
-		if (heldWeapon != nullptr)
-		{
-			if ((!alwaysapplydmflags && !deathmatch) || (dmflags & DF_WEAPONS_STAY))
-				return false;
+		if (heldWeapon == nullptr)
+			return true;
 
-			const auto ammo1 = heldWeapon->PointerVar<AActor>(NAME_Ammo1);
-			const auto ammo2 = heldWeapon->PointerVar<AActor>(NAME_Ammo2);
-			if ((ammo1 == nullptr || ammo1->IntVar(NAME_Amount) >= ammo1->IntVar(NAME_MaxAmount))
-				&& (ammo2 == nullptr || ammo2->IntVar(NAME_Amount) >= ammo2->IntVar(NAME_MaxAmount)))
-			{
-				return false;
-			}
-		}
+		if ((!alwaysapplydmflags && !deathmatch) || (dmflags & DF_WEAPONS_STAY))
+			return false;
+
+		const auto ammo1 = heldWeapon->PointerVar<AActor>(NAME_Ammo1);
+		const auto ammo2 = heldWeapon->PointerVar<AActor>(NAME_Ammo2);
+		return (ammo1 != nullptr && ammo1->IntVar(NAME_Amount) < ammo1->IntVar(NAME_MaxAmount))
+				|| (ammo2 != nullptr && ammo2->IntVar(NAME_Amount) < ammo2->IntVar(NAME_MaxAmount));
 	}
 	else if (item->IsKindOf(NAME_Ammo))
 	{
@@ -110,8 +107,16 @@ bool DBot::IsValidItem(AActor* const item)
 		if (parent != nullptr)
 			heldAmmo = _player->mo->FindInventory(parent);
 
-		if (heldAmmo != nullptr && heldAmmo->IntVar(NAME_Amount) >= heldAmmo->IntVar(NAME_MaxAmount))
-			return false;
+		return heldAmmo == nullptr || heldAmmo->IntVar(NAME_Amount) < heldAmmo->IntVar(NAME_MaxAmount);
+	}
+	else if (item->IsKindOf(NAME_PowerupGiver))
+	{
+		const auto powerup = item->PointerVar<PClassActor>(NAME_PowerupType);
+		return powerup != nullptr && _player->mo->FindInventory(powerup) == nullptr;
+	}
+	else if (item->IsKindOf(NAME_Key) || item->IsKindOf(NAME_PuzzleItem) || item->IsKindOf(NAME_WeaponPiece))
+	{
+		return _player->mo->FindInventory(item->GetClass()->TypeName) == nullptr;
 	}
 	else
 	{
@@ -119,7 +124,7 @@ bool DBot::IsValidItem(AActor* const item)
 		constexpr int bIsHealth = 1 << 22;
 		
 		const int itemFlags = item->IntVar(NAME_ItemFlags);
-		if (itemFlags & bIsHealth)
+		if ((itemFlags & bIsHealth) && !item->IsKindOf(NAME_HealthPickup))
 		{
 			// Unfortunately this has to be checked manually since Megaspheres are set up like this.
 			const auto testItem = item->GetClass()->TypeName == NAME_Megasphere
@@ -132,6 +137,8 @@ bool DBot::IsValidItem(AActor* const item)
 				if (_player->health >= maxHealth)
 					return false;
 			}
+
+			return true;
 		}
 		
 		if (itemFlags & bIsArmor)
@@ -161,10 +168,13 @@ bool DBot::IsValidItem(AActor* const item)
 				if (testItem->IsKindOf(NAME_HexenArmor) && !IsHexenArmorValid(_player->mo, testItem))
 					return false;
 			}
+
+			return true;
 		}
 	}
 
-	return true;
+	const auto heldItem = _player->mo->FindInventory(item->GetClass());
+	return heldItem == nullptr || heldItem->IntVar(NAME_Amount) < heldItem->IntVar(NAME_MaxAmount);
 }
 
 // Simple check to see if a given Actor is within view of the bot.
