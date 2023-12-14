@@ -158,7 +158,7 @@ void DBot::SetAngle(const DAngle& dest, const EBotAngleCmd type)
 			break;
 
 		case ACMD_PITCH:
-			SetAngleCommand(_player->cmd.ucmd.pitch, _player->mo->Angles.Pitch, dest);
+			SetAngleCommand(_player->cmd.ucmd.pitch, dest, _player->mo->Angles.Pitch);
 			break;
 
 		case ACMD_ROLL:

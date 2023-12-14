@@ -45,7 +45,7 @@ class Bot : Thinker native
 	const MAX_ANGLE = 180.0;
 	const MAX_TURN_SPEED = 3.0;
 	const MAX_TURN_SPEED_BONUS = MAX_TURN_SPEED * 4.0;
-	const MAX_FIRE_ANGLE = 5.0;
+	const MAX_FIRE_ANGLE = 7.5;
 	const MIN_FIRE_ANGLE_RANGE = 32.0;
 	const MAX_FIRE_ANGLE_RANGE = 320.0;
 	const MAX_FIRE_TRACKING_RANGE = 256.0;
@@ -56,6 +56,7 @@ class Bot : Thinker native
 
 	Actor Evade;
 
+	protected Vector3 aimPos;
 	protected int targetCoolDown;
 	protected int evadeCoolDown;
 	protected int goalCoolDown;
@@ -144,6 +145,7 @@ class Bot : Thinker native
 		
 		AdjustAngles();
 		HandleMovement();
+		TryFire();
 	}
 
 	virtual void BotDeathThink()
@@ -451,6 +453,7 @@ class Bot : Thinker native
 
 	virtual void AdjustAngles()
 	{
+		let player = GetPlayer();
 		let pawn = GetPawn();
 
 		Vector3 destPos;
@@ -461,6 +464,26 @@ class Bot : Thinker native
 		if (target && (lastSeenCoolDown > 0 || IsActorInView(target)))
 		{
 			destPos = target.Pos.PlusZ(target.Height * 0.75 - target.FloorClip);
+
+			class<Actor> proj;
+			let weapInfo = player.ReadyWeapon ? GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon') : null;
+			if (weapInfo)
+				proj = weapInfo.GetString('ProjectileType');
+
+			double dist = level.Vec3Diff(viewPos, destPos).Length();
+			if (proj && dist < MAX_FIRE_TRACKING_RANGE)
+			{
+				let def = GetDefaultByType(proj);
+				if (def.Speed > 0.0)
+				{
+					int tics = int(dist / def.Speed);
+					double multi = 1.0 - dist / MAX_FIRE_TRACKING_RANGE;
+					destPos.XY = level.Vec2Offset(destPos.XY, target.Vel.XY * tics * multi);
+					destPos.Z += target.Vel.Z * 0.2 * multi;
+				}
+			}
+
+			aimPos = destPos;
 		}
 		else if (goal is "Inventory")
 		{
@@ -476,19 +499,25 @@ class Bot : Thinker native
 		if (!(diff ~== (0.0, 0.0, 0.0)))
 		{
 			double delta = Actor.DeltaAngle(pawn.Angle, diff.XY.Angle());
-			double bonus = MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
-			double turn = Clamp(delta, -MAX_TURN_SPEED - bonus, MAX_TURN_SPEED + bonus);
+			double maxTurn = MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
+			if (player.AttackDown)
+				maxTurn *= 0.8;
+
+			double turn = Clamp(delta, -maxTurn, maxTurn);
 			SetAngle(pawn.Angle + turn);
 
-			turn = Clamp(Actor.DeltaAngle(pawn.Pitch, -Atan2(diff.Z, diff.XY.Length())), -MAX_TURN_SPEED, MAX_TURN_SPEED);
-			SetPitch(pawn.Pitch - turn);
+			delta = Actor.DeltaAngle(pawn.Pitch, -Atan2(diff.Z, diff.XY.Length()));
+			maxTurn = MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
+			if (player.AttackDown)
+				maxTurn *= 0.8;
+
+			turn = Clamp(delta, -maxTurn, maxTurn);
+			SetPitch(pawn.Pitch + turn);
 		}
 	}
 
 	virtual void HandleMovement()
 	{
-		TryFire();
-
 		let partner = GetPartner();
 		Actor goal = GetGoal();
 
@@ -518,13 +547,12 @@ class Bot : Thinker native
 
 		let player = GetPlayer();
 		Actor target = GetTarget();
-		if (!target || !player.ReadyWeapon || player.AttackDown || !IsActorInView(target))
+		if (!target || !player.ReadyWeapon || !IsActorInView(target))
 			return false;
 
 		let pawn = GetPawn();
 		Vector3 origPos = pawn.Pos.PlusZ(pawn.ViewHeight - pawn.FloorClip);
-		Vector3 destPos = target.Pos.PlusZ(target.Height * 0.75 - target.FloorClip);
-		Vector3 dir = level.Vec3Diff(origPos, destPos);
+		Vector3 dir = level.Vec3Diff(origPos, aimPos);
 		double dist = dir.Length();
 
 		double minRange, maxRange;
@@ -550,23 +578,9 @@ class Bot : Thinker native
 				return false;
 		}
 
-		if (proj && dist < MAX_FIRE_TRACKING_RANGE)
-		{
-			double speed = Actor.GetDefaultSpeed(proj);
-			if (speed > 0.0)
-			{
-				int tics = int(dist / speed);
-				double multi = 1.0 - dist / MAX_FIRE_TRACKING_RANGE;
-				destPos.XY = level.Vec2Offset(destPos.XY, target.Vel.XY * tics * multi);
-				destPos.Z += target.Vel.Z * 0.2 * multi;
-			}
-		}
-
-		if (!CheckShotPath(destPos, proj ? proj.GetClassName() : 'None', minRange))
+		if (!CheckShotPath(aimPos, proj ? proj.GetClassName() : 'None', minRange))
 			return false;
 
-		dir = level.Vec3Diff(origPos, destPos);
-		SetAngle(dir.XY.Angle() + FRandom[BotAccuracy](-5.0, 5.0));
 		SetButtons(BT_ATTACK, true);
 		return true;
 	}
@@ -576,8 +590,12 @@ class Bot : Thinker native
 		SetTarget(null);
 
 		let player = GetPlayer();
+		let pawn = GetPawn();
+
 		player.ReadyWeapon = null;
-		player.PendingWeapon = GetPawn().PickNewWeapon(null);
+		player.PendingWeapon = pawn.PickNewWeapon(null);
+
+		pawn.MoveDir = int(pawn.Angle / 45.0);
 	}
 
 	virtual int BotDamaged(Actor inflictor, Actor source, int damage, Name damageType, EDmgFlags flags = 0, double angle = 0.0)
