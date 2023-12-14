@@ -256,7 +256,9 @@ void DBot::NewMoveDirection(AActor* const goal, const bool runAway, const bool r
     }
     else
     {
-        baseDir = pr_botnewchasedir() & 7;
+        baseDir = _player->mo->movedir;
+        if (baseDir == DI_NODIR)
+            baseDir = pr_botnewchasedir() & 7;
     }
 
     // Try and walk straight towards the goal, slowly shifting sides unless it needs to
