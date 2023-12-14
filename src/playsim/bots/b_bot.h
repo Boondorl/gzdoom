@@ -332,8 +332,8 @@ public:
 	
 	// Boon TODO: Clean up all these const functions
 	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle60);	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* const mo, const double maxDistance = 320.0, const bool doJump = true); // Checks to see if a valid movement can be made towards the target.
-	bool CheckShotPath(const DVector3& dest, const FName& projectileType = NAME_None, const double minDistance = 0.0, const double maxDistance = 320.0); // Checks if anything is blocking the ReadyWeapon missile's path.
+	bool CanReach(AActor* const mo, const bool doJump = true); // Checks to see if a valid movement can be made towards the target.
+	bool CheckShotPath(const DVector3& dest, const FName& projectileType = NAME_None, const double minDistance = 0.0); // Checks if anything is blocking the ReadyWeapon missile's path.
 	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
 	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
 	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.

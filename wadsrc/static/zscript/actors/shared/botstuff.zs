@@ -45,7 +45,9 @@ class Bot : Thinker native
 	const MAX_ANGLE = 180.0;
 	const MAX_TURN_SPEED = 3.0;
 	const MAX_TURN_SPEED_BONUS = MAX_TURN_SPEED * 4.0;
-	const MAX_FIRE_ANGLE = Cos(5.0);
+	const MAX_FIRE_ANGLE = 5.0;
+	const MIN_FIRE_ANGLE_RANGE = 32.0;
+	const MAX_FIRE_ANGLE_RANGE = 320.0;
 	const MAX_FIRE_TRACKING_RANGE = 256.0;
 	const MIN_RESPAWN_TIME = int(0.5 * TICRATE);
 	const MAX_RESPAWN_TIME = int(1.5 * TICRATE);
@@ -72,13 +74,13 @@ class Bot : Thinker native
 	native void SetRoll(double destRoll);
 
 	native bool IsActorInView(Actor mo, double fov = 60.0);
-	native bool CheckShotPath(Vector3 dest, Name projectileType = 'None', double minDistance = 0.0, double maxDistance = 320.0);
+	native bool CheckShotPath(Vector3 dest, Name projectileType = 'None', double minDistance = 0.0);
 	native Actor FindTarget(double fov = 60.0);
 	native uint FindPartner();
 	native bool IsValidItem(Inventory item);
 
 	native bool FakeCheckPosition(Vector2 dest, out FCheckPosition tm = null, bool actorsOnly = false);
-	native bool CanReach(Actor mo, double maxDistance = 320.0, bool jump = true);
+	native bool CanReach(Actor mo, bool jump = true);
 	native bool CheckMove(Vector2 dest, bool jump = true);
 	native bool Move(bool running = true, bool jump = true);
 	native void NewMoveDirection(Actor goal = null, bool runAway = false, bool running = true, bool jump = true);
@@ -96,7 +98,11 @@ class Bot : Thinker native
 	clearscope PlayerPawn GetPartner() const
 	{
 		let pawn = GetPawn();
-		return pawn.FriendPlayer > 0u && pawn.FriendPlayer <= MAXPLAYERS ? Players[pawn.FriendPlayer - 1u].Mo : null;
+		let partner = pawn.FriendPlayer > 0u && pawn.FriendPlayer <= MAXPLAYERS ? Players[pawn.FriendPlayer - 1u].Mo : null;
+		if (partner == pawn)
+			partner = null;
+
+		return partner;
 	}
 
 	clearscope Actor GetGoal() const
@@ -111,7 +117,11 @@ class Bot : Thinker native
 
 	void SetPartner(uint pNum)
 	{
-		GetPawn().FriendPlayer = pNum > MAXPLAYERS ? 0u : pNum;
+		let pawn = GetPawn();
+		if (!pNum || pNum > MAXPLAYERS)
+			pawn.FriendPlayer = pawn.PlayerNumber() + 1;
+		else
+			pawn.FriendPlayer = pNum;
 	}
 
 	void SetGoal(Actor goal)
@@ -144,9 +154,6 @@ class Bot : Thinker native
 
 	virtual void SearchForPartner()
 	{
-		if (GetPartner() == GetPawn())
-			SetPartner(0u);
-
 		let partner = GetPartner();
 		if (partner)
 		{
@@ -539,8 +546,11 @@ class Bot : Thinker native
 
 		if (!(dist ~== 0.0))
 		{
+			double multi = 1.0 - (clamp(dist, MIN_FIRE_ANGLE_RANGE, MAX_FIRE_ANGLE_RANGE) - MIN_FIRE_ANGLE_RANGE) / (MAX_FIRE_ANGLE_RANGE - MIN_FIRE_ANGLE_RANGE);
+			multi *= 2.0 + 1.0;
+
 			Vector3 facing = (pawn.Angle.ToVector() * Cos(pawn.Pitch), -Sin(pawn.Pitch));
-			if (facing dot (dir / dist) < MAX_FIRE_ANGLE)
+			if (facing dot (dir / dist) < Cos(MAX_FIRE_ANGLE * multi))
 				return false;
 		}
 
@@ -568,6 +578,10 @@ class Bot : Thinker native
 	virtual void BotRespawned()
 	{
 		SetTarget(null);
+
+		let player = GetPlayer();
+		player.ReadyWeapon = null;
+		player.PendingWeapon = GetPawn().PickNewWeapon(null);
 	}
 
 	virtual int BotDamaged(Actor inflictor, Actor source, int damage, Name damageType, EDmgFlags flags = 0, double angle = 0.0)

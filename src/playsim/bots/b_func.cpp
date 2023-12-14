@@ -190,7 +190,7 @@ bool DBot::IsActorInView(AActor* const mo, const DAngle& fov)
 // since that can cause them to swarm around each other like a hive of angry bees.
 unsigned int DBot::FindPartner()
 {
-	unsigned int newFriend = 0u;
+	unsigned int newFriend = Level->PlayerNum(_player) + 1;
 	double closest = std::numeric_limits<double>::infinity();
 	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
 	{
@@ -245,7 +245,7 @@ AActor* DBot::FindTarget(const DAngle& fov)
 // Fires off a series of tracers to emulate a missile moving down along a path. Collision checking
 // of the Actor type is intentionally kept lazy since more robust solutions can be written from
 // ZScript.
-bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, const double minDistance, const double maxDistance)
+bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, const double minDistance)
 {
 	const PClassActor* missileType = nullptr;
 	if (projectileType != NAME_None)
@@ -269,8 +269,6 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 	const double dist = dir.Length();
 	if (minDistance >= EQUAL_EPSILON && dist <= minDistance)
 		return false;
-	if (radius > 0.0 && dist <= radius * 2.0)
-		return true;
 
 	// The trajectory check here fires off a series of five line traces in a cross pattern:
 	// * One from the center. If not a projectile, stops here.
@@ -279,7 +277,6 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 	// * One from the top/back center.
 	
 	const DAngle yaw = dir.Angle();
-	const double range = maxDistance >= EQUAL_EPSILON && dist > maxDistance ? maxDistance : dist;
 	const DAngle pitch = dir.Pitch();
 	const double middle = height * 0.5;
 
@@ -289,8 +286,9 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 
 	FLineTraceData data = {};
 	DVector3 pos = origin.plusZ(middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance) 
+			|| _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
 	}
@@ -304,15 +302,17 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 	const DVector2 offset = cs * projRadius;
 
 	pos = origin + DVector3(offset.Y, -offset.X, middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+			|| _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
 	}
 
 	pos = origin + DVector3(-offset.Y, offset.X, middle);
-	if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-		&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+	if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+		&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+			|| _player->mo->IsFriend(data.HitActor)))
 	{
 		return false;
 	}
@@ -322,15 +322,17 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 	if (fabs(pitch.Degrees()) <= PitchLimit)
 	{
 		pos = origin;
-		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+				|| _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}
 
 		pos = origin.plusZ(height);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+				|| _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}
@@ -338,15 +340,17 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 	else
 	{
 		pos = origin + DVector3(offset.X, offset.Y, middle);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+				|| _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}
 
 		pos = origin + DVector3(-offset.X, -offset.Y, middle);
-		if (P_LineTrace(_player->mo, yaw, range, pitch, flags, pos.Z, pos.X, pos.Y, &data)
-			&& (data.HitType != TRACE_HitActor || _player->mo->IsFriend(data.HitActor)))
+		if (P_LineTrace(_player->mo, yaw, dist, pitch, flags, pos.Z, pos.X, pos.Y, &data)
+			&& (data.HitType != TRACE_HitActor || (minDistance >= EQUAL_EPSILON && data.Distance <= minDistance)
+				|| _player->mo->IsFriend(data.HitActor)))
 		{
 			return false;
 		}

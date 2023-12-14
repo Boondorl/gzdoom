@@ -80,7 +80,7 @@ bool DBot::FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool
 // Checks to see if the bot is capable of reaching a target actor taking
 // level geometry into account. This is mostly for stepping up stairs and
 // avoiding running directly into hazards, but won't take large dropoffs into account.
-bool DBot::CanReach(AActor* const mo, const double maxDistance, const bool doJump)
+bool DBot::CanReach(AActor* const mo, const bool doJump)
 {
     if (mo == nullptr)
         return false;
@@ -91,17 +91,10 @@ bool DBot::CanReach(AActor* const mo, const double maxDistance, const bool doJum
     if (mo->ceilingz - mo->floorz < _player->mo->Height)
         return false;
 
-    DVector3 dir = _player->mo->Vec3To(mo);
-    const double dist = dir.XY().Length();
-    if (fabs(dir.Z) <= _player->mo->Height && dist <= _player->mo->radius * 2.0)
-        return true;
-
-    if (maxDistance >= EQUAL_EPSILON && dist > maxDistance)
-        dir *= maxDistance / dist;
-
     // Intentionally ignore portals here.
+    const DVector3 dir = _player->mo->Vec3To(mo);
     const DVector2 dest = _player->mo->Pos().XY() + dir.XY();
-    const double jumpHeight = doJump ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
+    const double jumpHeight = doJump && Level->IsJumpingAllowed() ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
     constexpr int MaxBlocks = 3;
 
     int blockCounter = 0;
@@ -181,7 +174,7 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
     if (_player->mo->flags & MF_NOCLIP)
         return true;
 
-    const double jumpHeight = doJump ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
+    const double jumpHeight = doJump && Level->IsJumpingAllowed() ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
     FCheckPosition tm = {};
     if (!FakeCheckPosition(pos, tm)
         || tm.ceilingz - tm.floorz < _player->mo->Height

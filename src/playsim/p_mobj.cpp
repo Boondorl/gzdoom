@@ -5289,7 +5289,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 		P_FindFloorCeiling(mobj, FFCF_SAMESECTOR | FFCF_ONLY3DFLOORS | FFCF_3DRESTRICT);
 	}
 
-	mobj->FriendPlayer = isBot ? 0 : playernum + 1;	// [RH] players are their own friends
+	mobj->FriendPlayer = playernum + 1;	// [RH] players are their own friends
 	oldactor = p->mo;
 	p->mo = mobj;
 	mobj->player = p;

@@ -365,9 +365,9 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, IsActorInView, IsActorInView)
 	ACTION_RETURN_INT(IsActorInView(self, mo, fov));
 }
 
-static int CheckShotPath(DBot* const self, const double x, const double y, const double z, const int projType, const double minDistance, const double maxDistance)
+static int CheckShotPath(DBot* const self, const double x, const double y, const double z, const int projType, const double minDistance)
 {
-	return self->CheckShotPath({ x, y, z }, ENamedName(projType), minDistance, maxDistance);
+	return self->CheckShotPath({ x, y, z }, ENamedName(projType), minDistance);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckShotPath, CheckShotPath)
@@ -378,9 +378,8 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, CheckShotPath, CheckShotPath)
 	PARAM_FLOAT(z);
 	PARAM_INT(projType);
 	PARAM_FLOAT(minDist);
-	PARAM_FLOAT(maxDist);
 
-	ACTION_RETURN_INT(CheckShotPath(self, x, y, z, projType, minDist, maxDist));
+	ACTION_RETURN_INT(CheckShotPath(self, x, y, z, projType, minDist));
 }
 
 static AActor* FindTarget(DBot* const self, const double fov)
@@ -448,19 +447,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, FakeCheckPosition, FakeCheckPosition)
 	ACTION_RETURN_INT(FakeCheckPosition(self, x, y, tm, actorsOnly));
 }
 
-static int CanReach(DBot* const self, AActor* const mo, const double maxDist, const int jump)
+static int CanReach(DBot* const self, AActor* const mo, const int jump)
 {
-	return self->CanReach(mo, maxDist, jump);
+	return self->CanReach(mo, jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, CanReach, CanReach)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_POINTER(mo, AActor);
-	PARAM_FLOAT(maxDist);
 	PARAM_INT(jump);
 
-	ACTION_RETURN_INT(CanReach(self, mo, maxDist, jump));
+	ACTION_RETURN_INT(CanReach(self, mo, jump));
 }
 
 static int CheckMove(DBot* const self, const double x, const double y, const int jump)
