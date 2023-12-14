@@ -101,7 +101,6 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 
 	ThinkCount = 0;
 	ThinkCycles.Reset();
-	DBotManager::BotThinkCycles.Reset(); // Boon TODO: This probably shouldn't be here? Might be called too late
 	ActionCycles.Reset();
 
 	ThinkCycles.Clock();

@@ -209,8 +209,8 @@ bool DBot::Move(const bool running, const bool doJump)
 		return false;
 	}
 
-    const DVector2 pos = { _player->mo->X() + 8.0 * xspeed[_player->mo->movedir],
-                            _player->mo->Y() + 8.0 * yspeed[_player->mo->movedir] };
+    const DVector2 pos = { _player->mo->X() + (_player->mo->radius - 1.0) * xspeed[_player->mo->movedir],
+                            _player->mo->Y() + (_player->mo->radius - 1.0) * yspeed[_player->mo->movedir] };
 
 	if (!CheckMove(pos, doJump))
         return false;
@@ -241,7 +241,8 @@ bool DBot::TryWalk(const bool running, const bool doJump)
     if (!Move(running, doJump))
         return false;
 
-    _player->mo->movecount = pr_bottrywalk() % TICRATE;
+    constexpr int CoolDown = TICRATE;
+    _player->mo->movecount = pr_bottrywalk() % CoolDown;
     return true;
 }
 

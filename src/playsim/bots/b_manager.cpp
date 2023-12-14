@@ -680,7 +680,7 @@ CVAR(Int, bot_next_color, 0, 0)
 ADD_STAT(bots)
 {
 	FString out = {};
-	out.Format("think = %04.1f ms", DBotManager::BotThinkCycles.TimeMS());
+	out.Format("think = %04.2f ms", DBotManager::BotThinkCycles.TimeMS());
 	return out;
 }
 

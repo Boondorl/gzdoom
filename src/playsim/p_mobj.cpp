@@ -5414,8 +5414,6 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	// [BC] Handle temporary invulnerability when respawned
 	if (state == PST_REBORN || state == PST_ENTER)
 	{
-		const bool isRespawning = state == PST_REBORN;
-
 		IFVIRTUALPTRNAME(p->mo, NAME_PlayerPawn, OnRespawn)
 		{
 			VMValue param = p->mo;
@@ -5425,21 +5423,10 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 		// Let the bot thinker know its pawn (re)spawned.
 		if (isBot)
 		{
-			if (isRespawning)
+			IFVIRTUALPTR(p->Bot, DBot, BotRespawned)
 			{
-				IFVIRTUALPTR(p->Bot, DBot, BotRespawned)
-				{
-					VMValue params[] = { p->Bot.Get() };
-					VMCall(func, params, 1, nullptr, 0);
-				}
-			}
-			else
-			{
-				IFVIRTUALPTR(p->Bot, DBot, BotSpawned)
-				{
-					VMValue params[] = { p->Bot.Get() };
-					VMCall(func, params, 1, nullptr, 0);
-				}
+				VMValue params[] = { p->Bot.Get() };
+				VMCall(func, params, 1, nullptr, 0);
 			}
 		}
 	}

@@ -162,6 +162,7 @@ void P_Ticker (void)
 
 		P_ThinkParticles(Level);	// [RH] make the particles think
 
+		DBotManager::BotThinkCycles.Reset();
 		for (i = 0; i < MAXPLAYERS; i++)
 			if (Level->PlayerInGame(i))
 				P_PlayerThink(Level->Players[i]);

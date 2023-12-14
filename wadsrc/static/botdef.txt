@@ -1,74 +1,113 @@
-// GZDoom Bots
-abstract Bot DefaultGZDoomBot
+// Bots
+Bot GZDoomBot1
 {
-	Warn "PlasmaBall,HornStaffFX1,Ripper"
+	Name Graf
 }
 
-Bot GZDoomBot1 : DefaultGZDoomBot
+Bot GZDoomBot2
 {
-	Name "Graf Zhal"
+	Name Nash
+}
+
+Bot GZDoomBot3
+{
+	Name Nooblord
+}
+
+Bot GZDoomBot4
+{
+	Name "John Marine"
+}
+
+Bot GZDoomBot5
+{
+	Name "Sunglasses McAwesome"
+}
+
+Bot GZDoomBot6
+{
+	Name Ricardo
+}
+
+Bot GZDoomBot7
+{
+	Name Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch
 }
 
 // Doom weapons
 Entity Fist
 {
-	CombatRange 48
-	bMelee true
-	bInstantReaction true
+	ChaseRange 128
+	MaxCombatRange 48
 }
 
 Entity Chainsaw
 {
-	CombatRange 48
-	bMelee true
-	bInstantReaction true
+	ChaseRange 128
+	MaxCombatRange 48
 }
 
 Entity Pistol
 {
-	CombatRange 384
+	MinCombatRange 96
+	MaxCombatRange 384
 }
 
 Entity Shotgun
 {
-	CombatRange 320
+	MinCombatRange 32
+	MaxCombatRange 320
 }
 
 Entity SuperShotgun
 {
-	CombatRange 320
+	MinCombatRange 32
+	MaxCombatRange 320
 }
 
 Entity Chaingun
 {
-	CombatRange 544
+	MinCombatRange 128
+	MaxCombatRange 544
 }
 
 Entity RocketLauncher
 {
 	ProjectileType Rocket
-	CombatRange 800
-	ExplosiveRange 256
-	bInstantReaction true
-	bExplosive true
+	MinCombatRange 256
+	MaxCombatRange 800
+	ExplosiveRange 192
+	FrightenRange 384
+}
+
+Entity Rocket
+{
+	FrightenRange 192
 }
 
 Entity PlasmaRifle
 {
 	ProjectileType PlasmaBall
-	CombatRange 960
+	MinCombatRange 128
+	MaxCombatRange 960
 }
 
 Entity PlasmaBall
 {
-	bWarn true
+	FrightenRange 96
 }
 
 Entity BFG9000
 {
 	ProjectileType BFGBall
-	CombatRange 640
-	bBFG true
+	MinCombatRange 32
+	MaxCombatRange 640
+	FrightenRange 384
+}
+
+Entity BFGBall
+{
+	FrightenRange 192
 }
 
 // Heretic weapons
