@@ -5242,6 +5242,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	}
 
 	p = Players[playernum];
+	const bool isBot = p->Bot != nullptr;
 
 	PlayerSpawnPickClass(playernum);
 
@@ -5288,7 +5289,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 		P_FindFloorCeiling(mobj, FFCF_SAMESECTOR | FFCF_ONLY3DFLOORS | FFCF_3DRESTRICT);
 	}
 
-	mobj->FriendPlayer = playernum + 1;	// [RH] players are their own friends
+	mobj->FriendPlayer = isBot ? 0 : playernum + 1;	// [RH] players are their own friends
 	oldactor = p->mo;
 	p->mo = mobj;
 	mobj->player = p;
@@ -5330,7 +5331,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 		mobj->sprite = Skins[p->userinfo.GetSkin()].sprite;
 	}
 
-	p->DesiredFOV = p->FOV = fov;
+	p->DesiredFOV = p->FOV = isBot ? 90.0f : fov; // Needed to make sure fov is always synched
 	p->camera = p->mo;
 	p->playerstate = PST_LIVE;
 	p->refire = 0;
@@ -5351,10 +5352,18 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	p->lastkilltime = 0;
 	p->BlendR = p->BlendG = p->BlendB = p->BlendA = 0.f;
 	p->Uncrouch();
-	p->MinPitch = p->MaxPitch = nullAngle;	// will be filled in by PostBeginPlay()/netcode
 	p->MUSINFOactor = nullptr;
 	p->MUSINFOtics = -1;
 	p->Vel.Zero();	// killough 10/98: initialize bobbing to 0.
+	if (isBot)
+	{
+		p->MinPitch = -DAngle90;
+		p->MaxPitch = DAngle90;
+	}
+	else
+	{
+		p->MinPitch = p->MaxPitch = nullAngle;	// will be filled in by PostBeginPlay()/netcode
+	}
 
 	IFVIRTUALPTRNAME(p->mo, NAME_PlayerPawn, ResetAirSupply)
 	{
@@ -5405,10 +5414,33 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	// [BC] Handle temporary invulnerability when respawned
 	if (state == PST_REBORN || state == PST_ENTER)
 	{
+		const bool isRespawning = state == PST_REBORN;
+
 		IFVIRTUALPTRNAME(p->mo, NAME_PlayerPawn, OnRespawn)
 		{
 			VMValue param = p->mo;
 			VMCall(func, &param, 1, nullptr, 0);
+		}
+
+		// Let the bot thinker know its pawn (re)spawned.
+		if (isBot)
+		{
+			if (isRespawning)
+			{
+				IFVIRTUALPTR(p->Bot, DBot, BotRespawned)
+				{
+					VMValue params[] = { p->Bot.Get() };
+					VMCall(func, params, 1, nullptr, 0);
+				}
+			}
+			else
+			{
+				IFVIRTUALPTR(p->Bot, DBot, BotSpawned)
+				{
+					VMValue params[] = { p->Bot.Get() };
+					VMCall(func, params, 1, nullptr, 0);
+				}
+			}
 		}
 	}
 

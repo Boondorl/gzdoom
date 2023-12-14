@@ -492,18 +492,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, Move, Move)
 	ACTION_RETURN_INT(Move(self, running, jump));
 }
 
-static void NewMoveDirection(DBot* const self, AActor* const goal, const int running, const int jump)
+static void NewMoveDirection(DBot* const self, AActor* const goal, const int runAway, const int running, const int jump)
 {
-	self->NewMoveDirection(goal, running, jump);
+	self->NewMoveDirection(goal, runAway, running, jump);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(DBot, NewMoveDirection, NewMoveDirection)
 {
 	PARAM_SELF_PROLOGUE(DBot);
 	PARAM_POINTER(mo, AActor);
+	PARAM_INT(runAway);
 	PARAM_INT(running)
 	PARAM_INT(jump);
 
-	NewMoveDirection(self, mo, running, jump);
+	NewMoveDirection(self, mo, runAway, running, jump);
 	return 0;
 }

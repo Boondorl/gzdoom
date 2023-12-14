@@ -38,7 +38,8 @@ class Bot : Thinker native
 	const TARGET_COOL_DOWN_TICS = int(3.0 * TICRATE);
 	const EVADE_RANGE_SQ = 640.0 * 640.0;
 	const EVADE_COOL_DOWN_TICS = int(1.0 * TICRATE);
-	const ITEM_RANGE_SQ = 480.0 * 480.0;
+	const ITEM_RANGE = 480.0;
+	const ITEM_RANGE_SQ = ITEM_RANGE * ITEM_RANGE;
 	const GOAL_COOL_DOWN_TICS = int(5.0 * TICRATE);
 	const PARTNER_WALK_RANGE_SQ = 320.0 * 320.0;
 	const PARTNER_BACK_OFF_RANGE_SQ = 128.0 * 128.0;
@@ -81,7 +82,7 @@ class Bot : Thinker native
 	native bool CanReach(Actor mo, double maxDistance = 320.0, bool jump = true);
 	native bool CheckMove(Vector2 dest, bool jump = true);
 	native bool Move(bool running = true, bool jump = true);
-	native void NewMoveDirection(Actor goal = null, bool running = true, bool jump = true);
+	native void NewMoveDirection(Actor goal = null, bool runAway = false, bool running = true, bool jump = true);
 
 	clearscope PlayerPawn GetPawn() const
 	{
@@ -144,6 +145,9 @@ class Bot : Thinker native
 
 	virtual void SearchForPartner()
 	{
+		if (GetPartner() == GetPawn())
+			SetPartner(0u);
+
 		let partner = GetPartner();
 		if (partner && partner.health > 0)
 			return;
@@ -189,61 +193,114 @@ class Bot : Thinker native
 
 	virtual void CheckEvade()
 	{
-		if (!Evade || !Evade.bMissile)
+		let player = GetPlayer();
+		let pawn = GetPawn();
+		Actor partner = GetPartner();
+		Actor target = GetTarget();
+
+		if (Evade)
 		{
-			Evade = null;
-			evadeCoolDown = 0;
+			if (Evade.Default.bMissile && !Evade.bMissile)
+			{
+				Evade = null;
+			}
+			else if (Evade == target)
+			{
+				double minRange = EVADE_RANGE_SQ;
+				let weapInfo = player.ReadyWeapon ? GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon') : null;
+				if (weapInfo)
+				{
+					minRange = weapInfo.GetDouble('MinCombatRange');
+					minRange *= minRange;
+				}
+
+				if (minRange <= 0.0 || pawn.Distance3DSquared(target) > minRange)
+					Evade = null;
+			}
+			else if (Evade == partner && pawn.Distance3DSquared(partner) > PARTNER_BACK_OFF_RANGE_SQ)
+			{
+				Evade = null;
+			}
 		}
+
+		if (!Evade)
+			evadeCoolDown = 0;
 
 		if (evadeCoolDown > 0)
 		{
 			--evadeCoolDown;
-			return;
 		}
-
-		let pawn = GetPawn();
-
-		Actor mo;
-		Actor closest;
-		double closestDist = double.infinity;
-		let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
-		while (mo = Actor(it.Next()))
+		else
 		{
-			if (!mo.bMissile || (mo.target && pawn.IsFriend(mo.target)))
-				continue;
-
-			let entity = GetEntityInfo(mo.GetClassName());
-			if (!entity || !entity.GetBool('bWarn'))
-				continue;
-
-			double dist = pawn.Distance3DSquared(mo);
-			if (dist <= EVADE_RANGE_SQ && dist < closestDist && IsActorInView(mo))
+			Actor mo;
+			Actor closest;
+			double closestDist = double.infinity;
+			let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
+			while (mo = Actor(it.Next()))
 			{
-				closestDist = dist;
-				closest = mo;
+				if (!mo.bMissile || (mo.Target && pawn.IsFriend(mo.Target)))
+					continue;
+
+				let entity = GetEntityInfo(mo.GetClassName());
+				if (!entity || !entity.GetBool('bWarn'))
+					continue;
+
+				double dist = pawn.Distance3DSquared(mo);
+				if (dist <= EVADE_RANGE_SQ && dist < closestDist && IsActorInView(mo))
+				{
+					closestDist = dist;
+					closest = mo;
+				}
+			}
+
+			if (closest)
+			{
+				Evade = closest;
+				evadeCoolDown = EVADE_COOL_DOWN_TICS;
+				NewMoveDirection(Evade, true);
 			}
 		}
 
-		if (closest)
+		if (Evade)
+			return;
+
+		if (target)
 		{
-			Evade = closest;
-			evadeCoolDown = EVADE_COOL_DOWN_TICS;
+			double minRange = EVADE_RANGE_SQ;
+			let weapInfo = player.ReadyWeapon ? GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon') : null;
+			if (weapInfo)
+			{
+				minRange = weapInfo.GetDouble('MinCombatRange');
+				minRange *= minRange;
+			}
+
+			if (minRange > 0.0 && pawn.Distance3DSquared(target) <= minRange)
+			{
+				Evade = target;
+				evadeCoolDown = 0;
+				NewMoveDirection(Evade, true);
+				return;
+			}
+		}
+
+		if (partner && pawn.Distance3DSquared(partner) <= PARTNER_BACK_OFF_RANGE_SQ)
+		{
+			Evade = partner;
+			evadeCoolDown = 0;
 		}
 	}
 
 	virtual void UpdateGoal()
 	{
-		Actor goal = GetGoal();
-		if (!goal)
-			goalCoolDown = 0;
-
-		let curItem = Inventory(goal);
-		if (curItem && !curItem.bSpecial)
+		let curItem = Inventory(GetGoal());
+		if (!IsValidItem(curItem))
 		{
 			SetGoal(null);
 			curItem = null;
-			goalCoolDown = 0;
 		}
+
+		if (!GetGoal())
+			goalCoolDown = 0;
 
 		if (goalCoolDown > 0)
 		{
@@ -257,12 +314,15 @@ class Bot : Thinker native
 		if (curItem && curItem.bIsHealth && isLowHealth)
 			return;
 
-		Inventory item;
 		Inventory closest;
 		double closestDist = double.infinity;
-		let it = ThinkerIterator.Create("Inventory", STAT_DEFAULT);
-		while (item = Inventory(it.Next()))
+		let it = BlockThingsIterator.Create(pawn, ITEM_RANGE);
+		while (it.Next())
 		{
+			Inventory item = Inventory(it.thing);
+			if (!item)
+				continue;
+
 			double dist = pawn.Distance3DSquared(item);
 			if (item.bIsHealth && isLowHealth)
 				dist *= 0.75;
@@ -283,32 +343,34 @@ class Bot : Thinker native
 		}
 
 		Actor target = GetTarget();
-		if (target && player.readyWeapon)
+		if (target && player.ReadyWeapon)
 		{
 			bool isMelee;
 			double combatRange;
-			let weapInfo = GetEntityInfo(player.readyWeapon.GetClassName(), 'Weapon');
+			let weapInfo = GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon');
 			if (weapInfo)
 			{
 				isMelee = weapInfo.GetBool('Melee');
 				combatRange = weapInfo.GetDouble('MaxCombatRange');
+				combatRange *= combatRange;
 			}
 
 			if (combatRange > 0.0)
 			{
-				double dist = pawn.Distance3D(target);
+				double dist = pawn.Distance3DSquared(target);
 				if ((!isMelee && dist > combatRange)
 					|| (isMelee && dist < combatRange * 2.0 && CanReach(target)))
 				{
 					SetGoal(target);
-					goalCoolDown = GOAL_COOL_DOWN_TICS;
+					goalCoolDown = 0;
 					return;
 				}
 			}
 		}
 
 		Actor partner = GetPartner();
-		if (partner)
+		if (partner && pawn.CheckSight(partner, SF_IGNOREVISIBILITY|SF_SEEPASTSHOOTABLELINES|SF_IGNOREWATERBOUNDARY)
+			&& CanReach(partner))
 		{
 			SetGoal(partner);
 			goalCoolDown = 0;
@@ -316,7 +378,6 @@ class Bot : Thinker native
 		}
 
 		SetGoal(null);
-		goalCoolDown = 0;
 	}
 
 	virtual void AdjustAngles()
@@ -349,11 +410,11 @@ class Bot : Thinker native
 		if (!(diff ~== (0.0, 0.0, 0.0)))
 		{
 			double delta = Actor.DeltaAngle(pawn.angle, diff.xy.Angle());
-			double bonus = MAX_TURN_SPEED_BONUS * abs(delta) / MAX_ANGLE;
-			double turn = clamp(delta, -MAX_TURN_SPEED - bonus, MAX_TURN_SPEED + bonus);
+			double bonus = MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
+			double turn = Clamp(delta, -MAX_TURN_SPEED - bonus, MAX_TURN_SPEED + bonus);
 			SetAngle(pawn.angle + turn);
 
-			turn = clamp(Actor.DeltaAngle(pawn.pitch, -atan2(diff.z, diff.xy.Length())), -MAX_TURN_SPEED, MAX_TURN_SPEED);
+			turn = Clamp(Actor.DeltaAngle(-Atan2(diff.z, diff.xy.Length()), pawn.pitch), -MAX_TURN_SPEED, MAX_TURN_SPEED);
 			SetPitch(pawn.pitch + turn);
 		}
 	}
@@ -362,72 +423,36 @@ class Bot : Thinker native
 	{
 		TryFire();
 
-		// Dodging takes priority
-		let pawn = GetPawn();
-		if (Evade)
-		{
-			double dir = pawn.AngleTo(Evade);
-			pawn.moveDir = (int(dir / 45.0) + 4) % 8;
-			pawn.moveCount = 0;
-
-			Move();
-			return;
-		}
-
-		// Too close
-		// TODO: Put these in the evade check
 		let partner = GetPartner();
-		Actor target = GetTarget();
 		Actor goal = GetGoal();
-		if (partner && partner == goal)
-		{
-			if (!target && pawn.Distance3DSquared(partner) <= PARTNER_BACK_OFF_RANGE_SQ)
-			{
-				double dir = pawn.AngleTo(partner);
-				pawn.moveDir = (int(dir / 45.0) + 4) % 8;
-				pawn.moveCount = 0;
 
-				Move();
-				return;
-			}
+		bool running = true;
+		if (partner && partner == goal && !Evade && !GetTarget()
+			&& GetPawn().Distance3DSquared(partner) <= PARTNER_WALK_RANGE_SQ)
+		{
+			running = false;
 		}
 
-		let player = GetPlayer();
-		if (target && player.ReadyWeapon)
+		if (--GetPawn().moveCount < 0 || !Move(running))
 		{
-			double minRange;
-			let weapInfo = GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon');
-			if (weapInfo)
-				minRange = weapInfo.GetDouble('MinCombatRange');
-
-			if (minRange > 0.0 && pawn.Distance3DSquared(target) <= minRange)
-			{
-				double dir = pawn.AngleTo(target);
-				pawn.moveDir = (int(dir / 45.0) + 4) % 8;
-				pawn.moveCount = 0;
-
-				Move();
-				return;
-			}
-		}
-
-		if (--pawn.moveCount < 0 || !Move())
-		{
-			if (partner && partner == goal && !pawn.CheckSight(partner, SF_IGNOREVISIBILITY|SF_SEEPASTSHOOTABLELINES|SF_IGNOREWATERBOUNDARY))
-				NewMoveDirection(null);
+			if (Evade)
+				NewMoveDirection(Evade, true);
 			else
-				NewMoveDirection(goal);
+				NewMoveDirection(goal, running: running);
 		}
 	}
 
 	virtual bool TryFire()
 	{
 		if (reactionCoolDown > 0)
+		{
 			--reactionCoolDown;
+			return false;
+		}
 
 		let player = GetPlayer();
 		Actor target = GetTarget();
-		if (!target || reactionCoolDown > 0 || !player.ReadyWeapon || player.AttackDown || !IsActorInView(target))
+		if (!target || !player.ReadyWeapon || player.AttackDown || !IsActorInView(target))
 			return false;
 
 		let pawn = GetPawn();
@@ -472,15 +497,12 @@ class Bot : Thinker native
 			return false;
 
 		dir = level.Vec3Diff(origPos, destPos);
-		SetAngle(dir.XY.Angle() + FRandom[BotAccuracy](-2.5, 2.5));
+		SetAngle(dir.XY.Angle() + FRandom[BotAccuracy](-5.0, 5.0));
 		SetButtons(BT_ATTACK, true);
 		return true;
 	}
 
-	virtual void BotSpawned()
-	{
-		SetPartner(-1);
-	}
+	virtual void BotSpawned() {}
 
 	virtual void BotRespawned()
 	{
@@ -489,18 +511,21 @@ class Bot : Thinker native
 
 	virtual int BotDamaged(Actor inflictor, Actor source, int damage, Name damageType, EDmgFlags flags = 0, double angle = 0.0)
 	{
-		if (source == GetTarget())
+		Actor target = GetTarget();
+		if (source == target)
 			lastSeenCoolDown = SIGHT_COOL_DOWN_TICS;
+		else if (!target && !GetPawn().IsFriend(source))
+			SetTarget(source);
 
 		return damage;
 	}
 
 	virtual void BotDied(Actor source, Actor inflictor, EDmgFlags dmgFlags = 0, Name meansOfDeath = 'None')
 	{
-		evadeCoolDown = targetCoolDown = goalCoolDown = reactionCoolDown = 0;
+		evadeCoolDown = targetCoolDown = goalCoolDown = reactionCoolDown = lastSeenCoolDown = 0;
 		Evade = null;
 		SetGoal(null);
-		SetPartner(-1);
+		SetPartner(0u);
 		GetPlayer().respawn_time += Random[BotRespawn](MIN_RESPAWN_TIME, MAX_RESPAWN_TIME);
 	}
 }

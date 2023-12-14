@@ -1434,27 +1434,6 @@ void FLevelLocals::PlayerReborn (int player)
 		}
 		p->ReadyWeapon = p->PendingWeapon;
 	}
-
-	// Let the bot thinker know its pawn (re)spawned.
-	if (p->Bot != nullptr)
-	{
-		if (isRespawning)
-		{
-			IFVIRTUALPTR(p->Bot, DBot, BotRespawned)
-			{
-				VMValue params[] = { p->Bot.Get() };
-				VMCall(func, params, 1, nullptr, 0);
-			}
-		}
-		else
-		{
-			IFVIRTUALPTR(p->Bot, DBot, BotSpawned)
-			{
-				VMValue params[] = { p->Bot.Get() };
-				VMCall(func, params, 1, nullptr, 0);
-			}
-		}
-	}
 }
 
 //

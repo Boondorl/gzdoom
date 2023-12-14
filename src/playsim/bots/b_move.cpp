@@ -209,7 +209,9 @@ bool DBot::Move(const bool running, const bool doJump)
 		return false;
 	}
 
-    const DVector2 pos = { _player->mo->X() + _player->mo->radius, _player->mo->Y() + _player->mo->radius};
+    const DVector2 pos = { _player->mo->X() + 8.0 * xspeed[_player->mo->movedir],
+                            _player->mo->Y() + 8.0 * yspeed[_player->mo->movedir] };
+
 	if (!CheckMove(pos, doJump))
         return false;
 
@@ -243,18 +245,20 @@ bool DBot::TryWalk(const bool running, const bool doJump)
     return true;
 }
 
-void DBot::NewMoveDirection(AActor* const goal, const bool running, const bool doJump)
+void DBot::NewMoveDirection(AActor* const goal, const bool runAway, const bool running, const bool doJump)
 {
     int baseDir = 0;
     if (goal != nullptr)
     {
         constexpr double AngToDir = 1.0 / 45.0;
 
-        double desired = _player->mo->AngleTo(_player->mo->goal).Degrees();
+        double desired = _player->mo->AngleTo(goal).Degrees();
         while (desired < 0.0)
             desired += 360.0;
 
         baseDir = static_cast<int>(desired * AngToDir);
+        if (runAway)
+            baseDir = (baseDir + 4) % 8;
     }
     else
     {

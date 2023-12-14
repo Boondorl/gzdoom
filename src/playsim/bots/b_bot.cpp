@@ -136,9 +136,17 @@ void DBot::SetButtons(const int cmds, const bool set)
 void DBot::SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng)
 {
 	constexpr double AngToCmd = 65536.0 / 360.0;
+	constexpr int MaxAngleCmd = 32768;
 
 	const DAngle delta = deltaangle(curAng, destAng);
-	cmd = static_cast<int>(delta.Degrees() * AngToCmd);
+	int angleCmd = static_cast<int>(delta.Degrees() * AngToCmd);
+	if (angleCmd >= MaxAngleCmd)
+		angleCmd = MaxAngleCmd - 1;
+	else if (angleCmd <= -MaxAngleCmd) // This usually has a special meaning, so avoid it.
+		angleCmd = -MaxAngleCmd + 1;
+
+
+	cmd = angleCmd;
 }
 
 void DBot::SetAngle(const DAngle& dest, const EBotAngleCmd type)

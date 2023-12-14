@@ -340,7 +340,7 @@ public:
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
 	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
 	bool Move(const bool running = true, const bool doJump = true);		// Check to see if a movement is valid in the current moveDir.
-	void NewMoveDirection(AActor* const goal = nullptr, const bool running = true, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
+	void NewMoveDirection(AActor* const goal = nullptr, const bool runAway = false, const bool running = true, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
 	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
 	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
 	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.
