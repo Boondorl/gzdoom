@@ -37,7 +37,7 @@ Bot GZDoomBot7
 // Doom weapons
 Entity Fist
 {
-	ChaseRange 128
+	ChaseRange 96
 	MaxCombatRange 48
 }
 
@@ -50,34 +50,37 @@ Entity Chainsaw
 Entity Pistol
 {
 	MinCombatRange 96
-	MaxCombatRange 384
+	MaxCombatRange 1024
+	MaxRefire 4
 }
 
 Entity Shotgun
 {
-	MinCombatRange 32
-	MaxCombatRange 320
+	MinCombatRange 64
+	MaxCombatRange 512
 }
 
 Entity SuperShotgun
 {
-	MinCombatRange 32
-	MaxCombatRange 320
+	MinCombatRange 48
+	MaxCombatRange 448
+	FrightenRange 96
 }
 
 Entity Chaingun
 {
-	MinCombatRange 128
-	MaxCombatRange 544
+	MinCombatRange 96
+	MaxCombatRange 896
+	MaxRefire 12
 }
 
 Entity RocketLauncher
 {
 	ProjectileType Rocket
 	MinCombatRange 256
-	MaxCombatRange 800
+	MaxCombatRange 896
 	ExplosiveRange 192
-	FrightenRange 384
+	FrightenRange 256
 }
 
 Entity Rocket
@@ -88,21 +91,22 @@ Entity Rocket
 Entity PlasmaRifle
 {
 	ProjectileType PlasmaBall
-	MinCombatRange 128
-	MaxCombatRange 960
+	MinCombatRange 96
+	MaxCombatRange 1024
+	MaxRefire 20
 }
 
 Entity PlasmaBall
 {
-	FrightenRange 96
+	FrightenRange 64
 }
 
 Entity BFG9000
 {
 	ProjectileType BFGBall
-	MinCombatRange 32
+	MinCombatRange 64
 	MaxCombatRange 640
-	FrightenRange 384
+	FrightenRange 256
 }
 
 Entity BFGBall
@@ -119,4 +123,129 @@ Entity GoldWand
 Entity GoldWandPowered
 {
 	CombatRange 384
+}
+
+// Hexen weapons
+Entity CWeapMace
+{
+	ChaseRange 192
+	MaxCombatRange 96
+}
+
+Entity CWeapStaff
+{
+	MaxCombatRange 512
+	FrightenRange 64
+	MaxRefire 10
+}
+
+Entity CStaffMissile
+{
+	FrightenRange 64
+}
+
+Entity CWeapFlame
+{
+	ProjectileType CFlameMissile
+	MinCombatRange 96
+	MaxCombatRange 992
+	MaxRefire 3
+}
+
+Entity CWeapWraithverge
+{
+	MinCombatRange 128
+	MaxCombatRange 640
+	FrightenRange 128
+	MaxRefire 0
+}
+
+Entity HolySpirit
+{
+	FrightenRange 96
+}
+
+Entity FWeapFist
+{
+	ChaseRange 192
+	MaxCombatRange 96
+}
+
+Entity FWeapAxe
+{
+	ChaseRange 192
+	MaxCombatRange 96
+}
+
+Entity FWeapHammer
+{
+	MaxCombatRange 512
+}
+
+Entity HammerMissile
+{
+	FrightenRange 192
+}
+
+Entity FWeapQuietus
+{
+	MinCombatRange 48
+	MaxCombatRange 512
+	FrightenRange 128
+}
+
+Entity FSwordMissile
+{
+	FrightenRange 64
+}
+
+Entity MWeapWand
+{
+	MinCombatRange 96
+	MaxCombatRange 1024
+	MaxRefire 6
+}
+
+Entity FWeapFrost
+{
+	ChaseRange 64
+	MaxCombatRange 256
+	FrightenRange 64
+	MaxRefire 3
+}
+
+Entity FrostMissile
+{
+	FrightenRange 48
+}
+
+Entity MWeapLightning
+{
+	MinCombatRange 64
+	MaxCombatRange 512
+	FrightenRange 96
+	MaxRefire 3
+}
+
+Entity LightningFloor
+{
+	FrightenRange 96
+}
+
+Entity LightningCeiling
+{
+	FrightenRange 96
+}
+
+Entity MWeapBloodscourge
+{
+	MinCombatRange 64
+	MaxCombatRange 800
+	FrightenRange 128
+	MaxRefire 3
+}
+
+Entity MageStaffFX2
+{
+	FrightenRange 128
 }

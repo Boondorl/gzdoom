@@ -290,7 +290,7 @@ class Bot : Thinker native
 			while (mo = Actor(it.Next()))
 			{
 				if ((!mo.bIsMonster && !mo.Player && !mo.bMissile)
-					|| (!mo.bMissile && pawn.IsFriend(mo)))
+					|| ((!mo.bMissile && pawn.IsFriend(mo)) || (mo.bMissile && mo.target && (mo.target == pawn || pawn.IsFriend(mo.target)))))
 				{
 					continue;
 				}
