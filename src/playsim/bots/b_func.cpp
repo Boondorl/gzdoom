@@ -75,6 +75,19 @@ bool DBot::IsValidItem(AActor* const item)
 	if (item == nullptr || !(item->flags & MF_SPECIAL) || !item->IsKindOf(NAME_Inventory))
 		return false;
 
+	// Check for class restrictions.
+	IFVIRTUALPTRNAME(item, NAME_Inventory, CanPickup)
+	{
+		int res = true;
+		VMValue params[] = { item, _player->mo };
+		VMReturn ret[] = { &res };
+
+		VMCall(func, params, 2, ret, 1);
+		if (!res)
+			return false;
+	}
+
+	// The rest of these have specific conditions to check for.
 	if (item->IsKindOf(NAME_Weapon))
 	{
 		const auto heldWeapon = _player->mo->FindInventory(item->GetClass());
@@ -173,6 +186,7 @@ bool DBot::IsValidItem(AActor* const item)
 		}
 	}
 
+	// If a generic item, check the bot isn't holding the maximum.
 	const auto heldItem = _player->mo->FindInventory(item->GetClass());
 	return heldItem == nullptr || heldItem->IntVar(NAME_Amount) < heldItem->IntVar(NAME_MaxAmount);
 }
@@ -252,6 +266,7 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 		missileType = PClass::FindActor(projectileType);
 
 	double radius = 0.0, height = 0.0;
+	bool ripper = false;
 	const bool isProjectile = missileType != nullptr;
 	if (isProjectile)
 	{
@@ -262,6 +277,7 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 
 		radius = def->radius;
 		height = def->Height;
+		ripper = def->flags2 & MF2_RIP;
 	}
 
 	const DVector3 origin = _player->mo->PosAtZ(_player->mo->Center() - _player->mo->Floorclip + _player->mo->AttackOffset());
@@ -282,7 +298,11 @@ bool DBot::CheckShotPath(const DVector3& dest, const FName& projectileType, cons
 
 	int flags = TRF_ABSPOSITION;
 	if (isProjectile)
+	{
 		flags |= (TRF_THRUHITSCAN | TRF_SOLIDACTORS);
+		if (ripper)
+			flags |= TRF_THRUACTORS;
+	}
 
 	FLineTraceData data = {};
 	DVector3 pos = origin.plusZ(middle);

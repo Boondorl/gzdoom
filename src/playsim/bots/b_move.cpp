@@ -43,6 +43,20 @@ static FRandom pr_botpickstrafedir("BotPickStrafeDir");
 
 extern bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
 
+double DBot::GetJumpHeight() const
+{
+    const double gravity = _player->mo->GetGravity();
+    const double jumpZ = _player->mo->FloatVar(NAME_JumpZ);
+    if (jumpZ < EQUAL_EPSILON || (_player->mo->flags & MF_NOGRAVITY) || (_player->mo->flags2 & MF2_FLY) || gravity < EQUAL_EPSILON
+        || _player->mo->waterlevel >= 3 || !Level->IsJumpingAllowed())
+    {
+        return 0.0;
+    }
+
+    // Don't get the full height to account for bots not being exactly against the wall.
+    return (jumpZ * jumpZ) / (2.0 * gravity) * 0.75;
+}
+
 // Checks if a sector contains a hazard.
 bool DBot::IsSectorDangerous(const sector_t* const sec)
 {
@@ -94,7 +108,7 @@ bool DBot::CanReach(AActor* const mo, const bool doJump)
     // Intentionally ignore portals here.
     const DVector3 dir = _player->mo->Vec3To(mo);
     const DVector2 dest = _player->mo->Pos().XY() + dir.XY();
-    const double jumpHeight = doJump && Level->IsJumpingAllowed() ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
+    const double jumpHeight = doJump ? GetJumpHeight() : 0.0;
     constexpr int MaxBlocks = 3;
 
     int blockCounter = 0;
@@ -174,7 +188,7 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
     if (_player->mo->flags & MF_NOCLIP)
         return true;
 
-    const double jumpHeight = doJump && Level->IsJumpingAllowed() ? max(_player->mo->FloatVar(NAME_JumpZ), 0.0) : 0.0;
+    const double jumpHeight = doJump ? GetJumpHeight() : 0.0;
     FCheckPosition tm = {};
     if (!FakeCheckPosition(pos, tm)
         || tm.ceilingz - tm.floorz < _player->mo->Height

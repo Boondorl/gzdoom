@@ -337,6 +337,7 @@ public:
 	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
 	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
 	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
+	double GetJumpHeight() const;
 	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
 	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
 	bool Move(const bool running = true, const bool doJump = true);		// Check to see if a movement is valid in the current moveDir.

@@ -79,6 +79,7 @@ class Bot : Thinker native
 	native uint FindPartner();
 	native bool IsValidItem(Inventory item);
 
+	native double GetJumpHeight() const;
 	native bool FakeCheckPosition(Vector2 dest, out FCheckPosition tm = null, bool actorsOnly = false);
 	native bool CanReach(Actor mo, bool jump = true);
 	native bool CheckMove(Vector2 dest, bool jump = true);
@@ -507,8 +508,9 @@ class Bot : Thinker native
 		Vector3 diff = level.Vec3Diff(viewPos, destPos);
 		if (!(diff ~== (0.0, 0.0, 0.0)))
 		{
+			double speed = Max(pawn.Speed, 1.0);
 			double delta = Actor.DeltaAngle(pawn.Angle, diff.XY.Angle());
-			double maxTurn = MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
+			double maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed;
 			if (player.AttackDown)
 				maxTurn *= 0.8;
 
@@ -516,7 +518,7 @@ class Bot : Thinker native
 			SetAngle(pawn.Angle + turn);
 
 			delta = Actor.DeltaAngle(pawn.Pitch, -Atan2(diff.Z, diff.XY.Length()));
-			maxTurn = MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE;
+			maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed;
 			if (player.AttackDown)
 				maxTurn *= 0.8;
 

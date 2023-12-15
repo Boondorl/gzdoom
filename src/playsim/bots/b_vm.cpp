@@ -447,6 +447,18 @@ DEFINE_ACTION_FUNCTION_NATIVE(DBot, FakeCheckPosition, FakeCheckPosition)
 	ACTION_RETURN_INT(FakeCheckPosition(self, x, y, tm, actorsOnly));
 }
 
+static double GetJumpHeight(DBot* const self)
+{
+	return self->GetJumpHeight();
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DBot, GetJumpHeight, GetJumpHeight)
+{
+	PARAM_SELF_PROLOGUE(DBot);
+
+	ACTION_RETURN_FLOAT(GetJumpHeight(self));
+}
+
 static int CanReach(DBot* const self, AActor* const mo, const int jump)
 {
 	return self->CanReach(mo, jump);
