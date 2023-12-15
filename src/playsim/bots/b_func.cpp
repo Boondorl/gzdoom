@@ -78,7 +78,7 @@ bool DBot::IsValidItem(AActor* const item)
 	// Check for class restrictions.
 	IFVIRTUALPTRNAME(item, NAME_Inventory, CanPickup)
 	{
-		int res = true;
+		int res = false;
 		VMValue params[] = { item, _player->mo };
 		VMReturn ret[] = { &res };
 
@@ -88,6 +88,7 @@ bool DBot::IsValidItem(AActor* const item)
 	}
 
 	// The rest of these have specific conditions to check for.
+	const int itemFlags = item->IntVar(NAME_ItemFlags);
 	if (item->IsKindOf(NAME_Weapon))
 	{
 		const auto heldWeapon = _player->mo->FindInventory(item->GetClass());
@@ -124,19 +125,26 @@ bool DBot::IsValidItem(AActor* const item)
 	}
 	else if (item->IsKindOf(NAME_PowerupGiver))
 	{
+		constexpr int bAutoActivate = 1 << 1;
+
 		const auto powerup = item->PointerVar<PClassActor>(NAME_PowerupType);
-		return powerup != nullptr && _player->mo->FindInventory(powerup) == nullptr;
+		if (powerup == nullptr)
+			return false;
+
+		if (itemFlags & bAutoActivate)
+			return _player->mo->FindInventory(powerup) == nullptr;
+
+		// If it doesn't auto activate, check against the max amount.
 	}
 	else if (item->IsKindOf(NAME_Key) || item->IsKindOf(NAME_PuzzleItem) || item->IsKindOf(NAME_WeaponPiece))
 	{
-		return _player->mo->FindInventory(item->GetClass()->TypeName) == nullptr;
+		return _player->mo->FindInventory(item->GetClass()) == nullptr;
 	}
 	else
 	{
 		constexpr int bIsArmor = 1 << 21;
 		constexpr int bIsHealth = 1 << 22;
 		
-		const int itemFlags = item->IntVar(NAME_ItemFlags);
 		if ((itemFlags & bIsHealth) && !item->IsKindOf(NAME_HealthPickup))
 		{
 			// Unfortunately this has to be checked manually since Megaspheres are set up like this.

@@ -115,14 +115,130 @@ Entity BFGBall
 }
 
 // Heretic weapons
+Entity Staff
+{
+	ChaseRange 96
+	MaxCombatRange 48
+}
+
+Entity StaffPowered
+{
+	ChaseRange 128
+	MaxCombatRange 64
+}
+
+// Gantlets
+Entity Gauntlets
+{
+	ChaseRange 96
+	MaxCombatRange 48
+}
+
+Entity GauntletsPowered
+{
+	ChaseRange 384
+	MaxCombatRange 192
+}
+
 Entity GoldWand
 {
-	CombatRange 640
+	MinCombatRange 96
+	CombatRange 1024
+	MaxRefire 8
 }
 
 Entity GoldWandPowered
 {
-	CombatRange 384
+	MinCombatRange 64
+	MaxCombatRange 512
+	MaxRefire 5
+}
+
+Entity Crossbow
+{
+	MinCombatRange 64
+	MaxCombatRange 512
+}
+
+Entity CrossbowPowered : Crossbow
+{
+
+}
+
+Entity Blaster
+{
+	MinCombatRange 96
+	MaxCombatRange 800
+	MaxRefire 15
+}
+
+Entity BlasterPowered
+{
+	MinCombatRange 96
+	MaxCombatRange 640
+	MaxRefire 4
+}
+
+Entity SkullRod
+{
+	MinCombatRange 64
+	MaxCombatRange 800
+	MaxRefire 20
+}
+
+Entity SkullRodPowered
+{
+	MinCombatRange 64
+	MaxCombatRange 640
+	MaxRefire 2
+}
+
+Entity PhoenixRod
+{
+	ProjectileType PhoenixFX1
+	MinCombatRange 256
+	MaxCombatRange 896
+	ExplosiveRange 192
+	FrightenRange 192
+	MaxRefire 3
+}
+
+Entity PhoenixFX1
+{
+	FrightenRange 192
+}
+
+Entity PhoenixRodPowered
+{
+	MinCombatRange 48
+	MaxCombatRange 192
+	FrightenRange 96
+}
+
+Entity Mace
+{
+	MinCombatRange 48
+	MaxCombatRange 256
+}
+
+Entity MacePowered
+{
+	ProjectileType MaceFX4
+	MinCombatRange 64
+	MaxCombatRange 256
+	FrightenRange 96
+	MaxRefire 3
+}
+
+Entity Beak
+{
+	ChaseRange 96
+	MaxCombatRange 64
+}
+
+Entity BeakPowered : Beak
+{
+
 }
 
 // Hexen weapons
@@ -237,6 +353,11 @@ Entity LightningCeiling
 	FrightenRange 96
 }
 
+Entity LightningZap
+{
+	FrightenRange 64
+}
+
 Entity MWeapBloodscourge
 {
 	MinCombatRange 64
@@ -248,4 +369,56 @@ Entity MWeapBloodscourge
 Entity MageStaffFX2
 {
 	FrightenRange 128
+}
+
+Entity Snout
+{
+	ChaseRange 96
+	MaxCombatRange 48
+}
+
+// Hexen items
+Entity ThrowingBomb
+{
+	FrightenRange 192
+}
+
+Entity FireBomb
+{
+	FrightenRange 192
+}
+
+Entity PoisonBag
+{
+	FrightenRange 192
+}
+
+Entity PoisonCloud
+{
+	FrightenRange 192
+}
+
+Entity TelOtherFX1
+{
+	FrightenRange 96
+}
+
+Entity TelOtherFX2 : TelOtherFX1
+{
+
+}
+
+Entity TelOtherFX3 : TelOtherFX1
+{
+
+}
+
+Entity TelOtherFX4 : TelOtherFX1
+{
+
+}
+
+Entity PorkFX
+{
+	FrightenRange 96
 }
