@@ -34,20 +34,19 @@ enum EBotMoveDirection
 class Bot : Thinker native
 {
 	const SIGHT_COOL_DOWN_TICS = int(2.0 * TICRATE);
-	const REACTION_TICS = int(0.3 * TICRATE);
+	const REACTION_TICS = int(0.25 * TICRATE);
 	const TARGET_COOL_DOWN_TICS = int(3.0 * TICRATE);
 	const EVADE_COOL_DOWN_TICS = int(1.0 * TICRATE);
 	const ITEM_RANGE = 480.0;
 	const ITEM_RANGE_SQ = ITEM_RANGE * ITEM_RANGE;
 	const GOAL_COOL_DOWN_TICS = int(5.0 * TICRATE);
 	const PARTNER_WALK_RANGE_SQ = 320.0 * 320.0;
-	const PARTNER_BACK_OFF_RANGE_SQ = 128.0 * 128.0;
+	const PARTNER_BACK_OFF_RANGE_SQ = 96.0 * 96.0;
 	const MAX_ANGLE = 180.0;
 	const MAX_TURN_SPEED = 3.0;
 	const MAX_TURN_SPEED_BONUS = MAX_TURN_SPEED * 4.0;
-	const MAX_FIRE_ANGLE = 7.5;
-	const MIN_FIRE_ANGLE_RANGE = 32.0;
-	const MAX_FIRE_ANGLE_RANGE = 320.0;
+	const BASE_IMPRECISION = 7.5;
+	const BURST_DELAY_TICS = int(0.15 * TICRATE);
 	const MAX_FIRE_TRACKING_RANGE = 256.0;
 	const MIN_RESPAWN_TIME = int(0.5 * TICRATE);
 	const MAX_RESPAWN_TIME = int(1.5 * TICRATE);
@@ -164,6 +163,10 @@ class Bot : Thinker native
 
 			if (partner == GetGoal())
 				SetGoal(null);
+			if (partner == Evade)
+				Evade = null;
+
+			SetPartner(0u);
 		}
 
 		if (!deathmatch || teamplay)
@@ -175,22 +178,24 @@ class Bot : Thinker native
 		if (lastSeenCoolDown > 0)
 			--lastSeenCoolDown;
 		else
-			reactionCoolDown = REACTION_TICS;
+			reactionCoolDown = Properties.GetInt('ReactionTime', REACTION_TICS);
 
 		let pawn = GetPawn();
 		Actor target = GetTarget();
 		if (target && (target.Health <= 0 || !target.bShootable || pawn.IsFriend(target)
-						|| (lastSeenCoolDown <= 0 && !IsActorInView(target))))
+						|| (lastSeenCoolDown <= 0 && !IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0)))))
 		{
 			if (target == GetGoal())
 				SetGoal(null);
+			if (target == Evade)
+				Evade = null;
 
 			SetTarget(null);
 			targetCoolDown = 0;
 		}
 
 		target = GetTarget();
-		if (target && IsActorInView(target))
+		if (target && IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0)))
 			lastSeenCoolDown = SIGHT_COOL_DOWN_TICS;
 
 		if (targetCoolDown > 0)
@@ -203,7 +208,7 @@ class Bot : Thinker native
 			if (attacker && attacker.Health > 0 && attacker.bShootable && !pawn.IsFriend(attacker))
 				target = attacker;
 			else
-				target = FindTarget();
+				target = FindTarget(Properties.GetDouble('ViewFOV', 60.0));
 
 			if (target)
 			{
@@ -224,6 +229,7 @@ class Bot : Thinker native
 		let partner = GetPartner();
 		Actor target = GetTarget();
 
+		double evasiveness = Properties.GetDouble('Evasiveness', 1.0);
 		if (Evade)
 		{
 			if (Evade == target)
@@ -232,7 +238,7 @@ class Bot : Thinker native
 				let weapInfo = player.ReadyWeapon ? GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon') : null;
 				if (weapInfo)
 				{
-					minRange = weapInfo.GetDouble('MinCombatRange');
+					minRange = weapInfo.GetDouble('MinCombatRange') * Properties.GetDouble('Timidness', 1.0);
 					minRange *= minRange;
 				}
 
@@ -240,7 +246,7 @@ class Bot : Thinker native
 				weapInfo = target.Player && target.Player.ReadyWeapon ? GetEntityInfo(target.Player.ReadyWeapon.GetClassName(), 'Weapon') : null;
 				if (weapInfo)
 				{
-					runRange = weapInfo.GetDouble('FrightenRange');
+					runRange = weapInfo.GetDouble('FrightenRange') * evasiveness;
 					runRange *= runRange;
 				}
 
@@ -258,7 +264,7 @@ class Bot : Thinker native
 				let entInfo = GetEntityInfo(Evade.GetClassName());
 				if (entInfo)
 				{
-					runRange = entInfo.GetDouble('FrightenRange');
+					runRange = entInfo.GetDouble('FrightenRange') * evasiveness;
 					runRange *= runRange;
 				}
 
@@ -279,6 +285,7 @@ class Bot : Thinker native
 			Actor mo;
 			Actor closest;
 			double closestDist = double.infinity;
+			double viewFOV = Properties.GetDouble('ViewFOV');
 			let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
 			while (mo = Actor(it.Next()))
 			{
@@ -292,7 +299,7 @@ class Bot : Thinker native
 				let entity = GetEntityInfo(mo.GetClassName());
 				if (entity)
 				{
-					runRange = entity.GetDouble('FrightenRange');
+					runRange = entity.GetDouble('FrightenRange') * evasiveness;
 					runRange *= runRange;
 				}
 
@@ -300,7 +307,7 @@ class Bot : Thinker native
 					continue;
 
 				double dist = pawn.Distance3DSquared(mo);
-				if (dist < closestDist && dist <= runRange && IsActorInView(mo))
+				if (dist < closestDist && dist <= runRange && IsActorInView(mo, viewFOV))
 				{
 					closestDist = dist;
 					closest = mo;
@@ -324,7 +331,7 @@ class Bot : Thinker native
 			let weapInfo = player.ReadyWeapon ? GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon') : null;
 			if (weapInfo)
 			{
-				minRange = weapInfo.GetDouble('MinCombatRange');
+				minRange = weapInfo.GetDouble('MinCombatRange') * Properties.GetDouble('Timidness', 1.0);
 				minRange *= minRange;
 			}
 
@@ -332,7 +339,7 @@ class Bot : Thinker native
 			weapInfo = target.Player && target.Player.ReadyWeapon ? GetEntityInfo(target.Player.ReadyWeapon.GetClassName(), 'Weapon') : null;
 			if (weapInfo)
 			{
-				runRange = weapInfo.GetDouble('FrightenRange');
+				runRange = weapInfo.GetDouble('FrightenRange') * evasiveness;
 				runRange *= runRange;
 			}
 
@@ -375,10 +382,10 @@ class Bot : Thinker native
 			let weapInfo = GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon');
 			if (weapInfo)
 			{
-				chaseRange = weapInfo.GetDouble('ChaseRange');
+				chaseRange = weapInfo.GetDouble('ChaseRange') * Properties.GetDouble('Aggressiveness', 1.0);
 				chaseRange *= chaseRange;
 
-				combatRange = weapInfo.GetDouble('MaxCombatRange');
+				combatRange = weapInfo.GetDouble('MaxCombatRange') * Properties.GetDouble('Confidence', 1.0);
 				combatRange *= combatRange;
 			}
 
@@ -406,6 +413,7 @@ class Bot : Thinker native
 		{
 			Inventory closest;
 			double closestDist = double.infinity;
+			double viewFOV = Properties.GetDouble('ViewFOV', 60.0);
 			let it = BlockThingsIterator.Create(pawn, ITEM_RANGE);
 			while (it.Next())
 			{
@@ -418,7 +426,7 @@ class Bot : Thinker native
 					dist *= 0.75;
 
 				if (dist <= ITEM_RANGE_SQ && dist < closestDist && IsValidItem(item)
-					&& IsActorInView(item) && CanReach(item))
+					&& IsActorInView(item, viewFOV) && CanReach(item))
 				{
 					closestDist = dist;
 					closest = item;
@@ -461,7 +469,7 @@ class Bot : Thinker native
 
 		Actor target = GetTarget();
 		Actor goal = GetGoal();
-		if (target && (lastSeenCoolDown > 0 || IsActorInView(target)))
+		if (target && (lastSeenCoolDown > 0 || IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0))))
 		{
 			destPos = target.Pos.PlusZ(target.Height * 0.75 - target.FloorClip);
 
@@ -471,13 +479,14 @@ class Bot : Thinker native
 				proj = weapInfo.GetString('ProjectileType');
 
 			double dist = level.Vec3Diff(viewPos, destPos).Length();
-			if (proj && dist < MAX_FIRE_TRACKING_RANGE)
+			double maxTrackingRange = MAX_FIRE_TRACKING_RANGE * Properties.GetDouble('Predictiveness', 1.0);
+			if (proj && maxTrackingRange > 0.0 && dist < maxTrackingRange)
 			{
 				let def = GetDefaultByType(proj);
 				if (def.Speed > 0.0)
 				{
 					int tics = int(dist / def.Speed);
-					double multi = 1.0 - dist / MAX_FIRE_TRACKING_RANGE;
+					double multi = 1.0 - dist / maxTrackingRange;
 					destPos.XY = level.Vec2Offset(destPos.XY, target.Vel.XY * tics * multi);
 					destPos.Z += target.Vel.Z * 0.2 * multi;
 				}
@@ -547,7 +556,7 @@ class Bot : Thinker native
 
 		let player = GetPlayer();
 		Actor target = GetTarget();
-		if (!target || !player.ReadyWeapon || !IsActorInView(target))
+		if (!target || !player.ReadyWeapon || !IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0)))
 			return false;
 
 		let pawn = GetPawn();
@@ -557,12 +566,20 @@ class Bot : Thinker native
 
 		double minRange, maxRange;
 		class<Actor> proj;
+		int maxRefire = -1;
 		let weapInfo = GetEntityInfo(player.ReadyWeapon.GetClassName(), 'Weapon');
 		if (weapInfo)
 		{
+			maxRefire = int(weapInfo.GetInt('MaxRefire', -1) * Properties.GetDouble('Aggressiveness', 1.0));
 			minRange = weapInfo.GetDouble('ExplosiveRange');
-			maxRange = weapInfo.GetDouble('MaxCombatRange');
+			maxRange = weapInfo.GetDouble('MaxCombatRange') * Properties.GetDouble('Confidence', 1.0);
 			proj = weapInfo.GetString('ProjectileType');
+		}
+
+		if (maxRefire >= 0 && player.Refire >= maxRefire)
+		{
+			reactionCoolDown = BURST_DELAY_TICS;
+			return false;
 		}
 
 		if ((minRange > 0.0 && dist <= minRange) || (maxRange > 0.0 && dist > maxRange))
@@ -570,11 +587,17 @@ class Bot : Thinker native
 
 		if (!(dist ~== 0.0))
 		{
-			double multi = 1.0 - (clamp(dist, MIN_FIRE_ANGLE_RANGE, MAX_FIRE_ANGLE_RANGE) - MIN_FIRE_ANGLE_RANGE) / (MAX_FIRE_ANGLE_RANGE - MIN_FIRE_ANGLE_RANGE);
-			multi *= 2.0 + 1.0;
+			// By making this value larger, bots will start shooting before they've aligned
+			// their shots, causing them to miss. They're also more likely to keep spraying
+			// causing accuracy loss from refiring.
+			double imprecisionMulti = 1.0;
+			if (target.CurSector.GetLightLevel() <= 50)
+				imprecisionMulti += 1.0;
+			if (target.bShadow)
+				imprecisionMulti += 2.0;
 
 			Vector3 facing = (pawn.Angle.ToVector() * Cos(pawn.Pitch), -Sin(pawn.Pitch));
-			if (facing dot (dir / dist) < Cos(MAX_FIRE_ANGLE * multi))
+			if (facing dot (dir / dist) < Cos((BASE_IMPRECISION + Properties.GetDouble('Imprecision')) * imprecisionMulti))
 				return false;
 		}
 
@@ -608,6 +631,7 @@ class Bot : Thinker native
 
 	virtual void BotDied(Actor source, Actor inflictor, EDmgFlags dmgFlags = 0, Name meansOfDeath = 'None')
 	{
+		aimPos = (0.0, 0.0, 0.0);
 		evadeCoolDown = targetCoolDown = goalCoolDown = reactionCoolDown = lastSeenCoolDown = 0;
 		Evade = null;
 		SetGoal(null);
