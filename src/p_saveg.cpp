@@ -704,15 +704,15 @@ void FLevelLocals::ReadOnePlayer(FSerializer &arc, bool fromHub)
 			}
 			else
 			{
-				if (Players[i]->mo != nullptr)
-				{
-					Players[i]->mo->Destroy();
-					Players[i]->mo = nullptr;
-				}
 				if (Players[i]->Bot != nullptr)
 				{
 					Players[i]->Bot->Destroy();
 					Players[i]->Bot = nullptr;
+				}
+				if (Players[i]->mo != nullptr)
+				{
+					Players[i]->mo->Destroy();
+					Players[i]->mo = nullptr;
 				}
 			}
 		}
@@ -825,15 +825,15 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 		{
 			if (slotOpen[i])
 			{
-				if (Players[i]->mo != nullptr)
-				{
-					Players[i]->mo->Destroy();
-					Players[i]->mo = nullptr;
-				}
 				if (Players[i]->Bot != nullptr)
 				{
 					Players[i]->Bot->Destroy();
 					Players[i]->Bot = nullptr;
+				}
+				if (Players[i]->mo != nullptr)
+				{
+					Players[i]->mo->Destroy();
+					Players[i]->mo = nullptr;
 				}
 			}
 		}
@@ -844,13 +844,13 @@ void FLevelLocals::ReadMultiplePlayers(FSerializer &arc, int numPlayers, bool fr
 		{
 			if (!playerAssigned[i])
 			{
-				playerInfos[i].mo->Destroy();
-				playerInfos[i].mo = nullptr;
 				if (playerInfos[i].Bot != nullptr)
 				{
 					playerInfos[i].Bot->Destroy();
 					playerInfos[i].Bot = nullptr;
 				}
+				playerInfos[i].mo->Destroy();
+				playerInfos[i].mo = nullptr;
 			}
 		}
 	}

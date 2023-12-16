@@ -226,6 +226,10 @@ extend class PlayerPawn
 			eflash.target = morphed;
 		PostMorph(morphed, false);		// No longer the current body
 		morphed.PostMorph(self, true);	// This is the current body
+
+		if (p.Bot)
+			p.Bot.Morphed();
+
 		return true;
 	}
 	
@@ -424,6 +428,10 @@ extend class PlayerPawn
 		{
 			hxarmor.Slots[4] = altmo.HexenArmor[0];
 		}
+
+		if (player.Bot)
+			player.Bot.Unmorphed();
+			
 		return true;
 	}
 

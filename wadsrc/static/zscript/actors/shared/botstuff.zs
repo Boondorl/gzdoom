@@ -111,6 +111,24 @@ class Bot : Thinker native
 		return GetPawn().Goal;
 	}
 
+	clearscope bool IsTargetValid(Actor target) const
+	{
+		let pawn = GetPawn();
+		return target && target != pawn && target.Health > 0 && target.bShootable && pawn.IsHostile(target);
+	}
+
+	clearscope bool IsTargetDamageable(Actor target) const
+	{
+		return target && !target.bNonshootable && !target.bInvulnerable && !target.bNoDamage
+				&& (!target.Player || !(target.Player.Cheats & (CF_GODMODE | CF_GODMODE2)));
+	}
+
+	clearscope bool IsPartnerValid(Actor partner) const
+	{
+		let pawn = GetPawn();
+		return partner && partner != pawn && partner.Health > 0 && pawn.IsFriend(partner);
+	}
+
 	void SetTarget(Actor target)
 	{
 		GetPawn().Target = target;
@@ -159,7 +177,7 @@ class Bot : Thinker native
 		let partner = GetPartner();
 		if (partner)
 		{
-			if (partner.Health > 0)
+			if (IsPartnerValid(partner))
 				return;
 
 			if (partner == GetGoal())
@@ -183,7 +201,7 @@ class Bot : Thinker native
 
 		let pawn = GetPawn();
 		Actor target = GetTarget();
-		if (target && (target.Health <= 0 || !target.bShootable || pawn.IsFriend(target)
+		if (target && (!IsTargetValid(target)
 						|| (lastSeenCoolDown <= 0 && !IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0)))))
 		{
 			if (target == GetGoal())
@@ -203,10 +221,10 @@ class Bot : Thinker native
 			--targetCoolDown;
 
 		let player = GetPlayer();
-		Actor attacker = player.Attacker;
-		if (!target || ((attacker || (deathmatch && target.Player)) && targetCoolDown <= 0))
+		Actor attacker = IsTargetValid(player.Attacker) ? player.Attacker : null;
+		if (!target || (targetCoolDown <= 0 && (attacker || (deathmatch && target.Player))) || !IsTargetDamageable(target))
 		{
-			if (attacker && attacker.Health > 0 && attacker.bShootable && !pawn.IsFriend(attacker))
+			if (attacker)
 				target = attacker;
 			else
 				target = FindTarget(Properties.GetDouble('ViewFOV', 60.0));
@@ -643,6 +661,13 @@ class Bot : Thinker native
 		SetPartner(0u);
 		GetPlayer().Respawn_Time += Random[BotRespawn](MIN_RESPAWN_TIME, MAX_RESPAWN_TIME);
 	}
+
+	virtual void AddedInventory(Inventory item) {}
+	virtual void RemovedInventory(Inventory item) {}
+	virtual void UsedInventory(Inventory item, bool useFailed) {}
+	virtual void Morphed() {}
+	virtual void Unmorphed() {}
+	virtual void FiredWeapon(bool altFire) {}
 }
 
 // Deprecated: Bots no longer use this.
