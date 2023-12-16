@@ -155,8 +155,9 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	else
 		Printf("%s joined the game\n", level->Players[playerIndex]->userinfo.GetName());
 
-	// Boon TODO: double check the enter function is firing off
+	// PlayerSpawned needs to be called before PlayerEntered
 	level->DoReborn(playerIndex);
+	level->localEventManager->PlayerEntered(playerIndex, false);
 	return true;
 }
 
