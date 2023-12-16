@@ -37,14 +37,14 @@ Bot GZDoomBot7
 // Doom weapons
 Entity Fist
 {
-	ChaseRange 96
-	MaxCombatRange 48
+	ChaseRange 128
+	MaxCombatRange 64
 }
 
 Entity Chainsaw
 {
 	ChaseRange 128
-	MaxCombatRange 48
+	MaxCombatRange 64
 }
 
 Entity Pistol
@@ -116,29 +116,28 @@ Entity BFGBall
 // Heretic weapons
 Entity Staff
 {
-	ChaseRange 96
-	MaxCombatRange 48
+	ChaseRange 128
+	MaxCombatRange 64
 }
 
 Entity StaffPowered
 {
 	ChaseRange 128
 	MaxCombatRange 64
-	FrightenRange 64
 }
 
 // Gantlets
 Entity Gauntlets
 {
-	ChaseRange 96
-	MaxCombatRange 48
+	ChaseRange 128
+	MaxCombatRange 64
 }
 
 Entity GauntletsPowered
 {
 	ChaseRange 384
-	MaxCombatRange 192
-	FrightenRange 256
+	MaxCombatRange 256
+	FrightenRange 320
 }
 
 Entity GoldWand
@@ -305,7 +304,7 @@ Entity MaceFX4
 
 Entity Beak
 {
-	ChaseRange 96
+	ChaseRange 128
 	MaxCombatRange 64
 }
 
@@ -329,7 +328,7 @@ Entity ActivatedTimeBomb
 Entity CWeapMace
 {
 	ChaseRange 192
-	MaxCombatRange 96
+	MaxCombatRange 128
 }
 
 Entity CWeapStaff
@@ -368,13 +367,13 @@ Entity HolySpirit
 Entity FWeapFist
 {
 	ChaseRange 192
-	MaxCombatRange 96
+	MaxCombatRange 128
 }
 
 Entity FWeapAxe
 {
 	ChaseRange 192
-	MaxCombatRange 96
+	MaxCombatRange 128
 }
 
 Entity FWeapHammer
@@ -408,8 +407,8 @@ Entity MWeapWand
 
 Entity FWeapFrost
 {
-	ChaseRange 64
-	MaxCombatRange 256
+	ChaseRange 96
+	MaxCombatRange 384
 	FrightenRange 64
 	MaxRefire 3
 }
@@ -457,8 +456,8 @@ Entity MageStaffFX2
 
 Entity Snout
 {
-	ChaseRange 96
-	MaxCombatRange 48
+	ChaseRange 128
+	MaxCombatRange 64
 }
 
 // Hexen items

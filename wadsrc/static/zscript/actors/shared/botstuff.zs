@@ -40,11 +40,11 @@ class Bot : Thinker native
 	const ITEM_RANGE = 480.0;
 	const ITEM_RANGE_SQ = ITEM_RANGE * ITEM_RANGE;
 	const GOAL_COOL_DOWN_TICS = int(5.0 * TICRATE);
-	const PARTNER_WALK_RANGE_SQ = 320.0 * 320.0;
-	const PARTNER_BACK_OFF_RANGE_SQ = 96.0 * 96.0;
+	const PARTNER_WALK_RANGE_SQ = 640.0 * 640.0;
+	const PARTNER_BACK_OFF_RANGE_SQ = 128.0 * 128.0;
 	const MAX_ANGLE = 180.0;
-	const MAX_TURN_SPEED = 3.0;
-	const MAX_TURN_SPEED_BONUS = MAX_TURN_SPEED * 4.0;
+	const MAX_TURN_SPEED = 6.0;
+	const MAX_TURN_SPEED_BONUS = MAX_TURN_SPEED * 2.0;
 	const BASE_IMPRECISION = 7.5;
 	const BURST_DELAY_TICS = int(0.15 * TICRATE);
 	const MAX_FIRE_TRACKING_RANGE = 256.0;
@@ -358,6 +358,7 @@ class Bot : Thinker native
 		{
 			Evade = partner;
 			evadeCoolDown = 0;
+			NewMoveDirection(Evade, true, false);
 		}
 	}
 
@@ -446,7 +447,8 @@ class Bot : Thinker native
 		Actor goal = GetGoal();
 		if (partner && (!goal || partner == goal))
 		{
-			if (pawn.CheckSight(partner, SF_IGNOREVISIBILITY|SF_SEEPASTSHOOTABLELINES|SF_IGNOREWATERBOUNDARY)
+			if (pawn.Distance3DSquared(partner) > PARTNER_WALK_RANGE_SQ
+				&& pawn.CheckSight(partner, SF_IGNOREVISIBILITY|SF_SEEPASTSHOOTABLELINES|SF_IGNOREWATERBOUNDARY)
 				&& CanReach(partner))
 			{
 				SetGoal(partner);
@@ -465,6 +467,7 @@ class Bot : Thinker native
 		let player = GetPlayer();
 		let pawn = GetPawn();
 
+		bool aimingAtTarget;
 		Vector3 destPos;
 		Vector3 viewPos = pawn.Pos.PlusZ(pawn.ViewHeight - pawn.FloorClip);
 
@@ -472,6 +475,7 @@ class Bot : Thinker native
 		Actor goal = GetGoal();
 		if (target && (lastSeenCoolDown > 0 || IsActorInView(target, Properties.GetDouble('ViewFOV', 60.0))))
 		{
+			aimingAtTarget = true;
 			destPos = target.Pos.PlusZ(target.Height * 0.75 - target.FloorClip);
 
 			class<Actor> proj;
@@ -509,19 +513,24 @@ class Bot : Thinker native
 		if (!(diff ~== (0.0, 0.0, 0.0)))
 		{
 			double speed = Max(pawn.Speed, 1.0);
-			double delta = Actor.DeltaAngle(pawn.Angle, diff.XY.Angle());
-			double maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed;
+			double turnMulti = 1.0;
 			if (player.AttackDown)
-				maxTurn *= 0.8;
+				turnMulti *= 0.5;
+			if (aimingAtTarget)
+			{
+				if (target.bShadow)
+					turnMulti *= 0.5;
+				if (target.CurSector.GetLightLevel() <= 50)
+					turnMulti *= 0.5;
+			}
 
+			double delta = Actor.DeltaAngle(pawn.Angle, diff.XY.Angle());
+			double maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed * turnMulti;
 			double turn = Clamp(delta, -maxTurn, maxTurn);
 			SetAngle(pawn.Angle + turn);
 
 			delta = Actor.DeltaAngle(pawn.Pitch, -Atan2(diff.Z, diff.XY.Length()));
-			maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed;
-			if (player.AttackDown)
-				maxTurn *= 0.8;
-
+			maxTurn = (MAX_TURN_SPEED + MAX_TURN_SPEED_BONUS * Abs(delta) / MAX_ANGLE) * speed * turnMulti;
 			turn = Clamp(delta, -maxTurn, maxTurn);
 			SetPitch(pawn.Pitch + turn);
 		}
@@ -529,20 +538,14 @@ class Bot : Thinker native
 
 	virtual void HandleMovement()
 	{
-		let partner = GetPartner();
 		Actor goal = GetGoal();
 
-		bool running = true;
-		if (!Evade && !GetTarget()
-			&& (!goal || (partner == goal && GetPawn().Distance3DSquared(partner) <= PARTNER_WALK_RANGE_SQ)))
-		{
-			running = false;
-		}
-
+		bool running = Evade || goal || GetTarget();
 		if (--GetPawn().MoveCount < 0 || !Move(running))
 		{
-			if (Evade)
-				NewMoveDirection(Evade, true, Evade != partner);
+			bool avoidingPartner = Evade == GetPartner();
+			if (Evade && (!avoidingPartner || !goal))
+				NewMoveDirection(Evade, true, !avoidingPartner);
 			else
 				NewMoveDirection(goal, running: running);
 		}
