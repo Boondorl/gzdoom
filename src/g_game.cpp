@@ -1398,7 +1398,6 @@ void FLevelLocals::PlayerReborn (int player)
 	chasecam = p->cheats & CF_CHASECAM;
 	Bot = p->Bot;			//Added by MC:
 	const bool settings_controller = p->settings_controller;
-	const bool isRespawning = p->playerstate == PST_REBORN;
 
 	// Reset player structure to its defaults
 	p->~player_t();

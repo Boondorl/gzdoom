@@ -338,6 +338,26 @@ static bool GetBotDef(const FName& cls, const FName& base)
 	return true;
 }
 
+class FInheritenceError
+{
+private:
+	FString _error = {};
+
+public:
+	FInheritenceError() = default;
+	FInheritenceError(const FString& _error) : _error(_error) {}
+
+	const char* GetError() const
+	{
+		return _error.GetChars();
+	}
+
+	bool HasError() const
+	{
+		return !_error.IsEmpty();
+	}
+};
+
 struct FTreeNode
 {
 private:
@@ -357,7 +377,7 @@ public:
 
 	bool CouldPotentiallyLoop() const
 	{
-		return  _parent != NAME_None && _children.Size() && !WasVisited();
+		return _parent != NAME_None && _children.Size() && !WasVisited();
 	}
 
 	bool WasVisited() const
@@ -377,6 +397,9 @@ public:
 
 	void Validate(const FName& cls, const FName& parent, bool (*action)(const FName&, const FName&))
 	{
+		if (!IsInvalid())
+			return;
+
 		if (cls != NAME_None && action != nullptr)
 		{
 			_cls = cls;
@@ -391,16 +414,20 @@ public:
 			_children.Push(child);
 	}
 
-	bool ParseChildren(TMap<FName, FTreeNode>& nodes)
+	FInheritenceError ParseChildren(TMap<FName, FTreeNode>& nodes)
 	{
 		if (_parent != NAME_None)
 		{
 			if (_nodeAction == nullptr)
-				return false;
+				return { "Class node had no function definition for how to inherit." };
 
 			bool res = _nodeAction(_cls, _parent);
 			if (!res)
-				return false;
+			{
+				FString e = {};
+				e.Format("%s failed to inherit from %s.", _cls.GetChars(), _parent.GetChars());
+				return { e };
+			}
 		}
 
 		for (const auto& cls : _children)
@@ -409,11 +436,12 @@ public:
 			if (node == nullptr)
 				continue;
 
-			if (!node->ParseChildren(nodes))
-				return false;
+			FInheritenceError error = node->ParseChildren(nodes);
+			if (error.HasError())
+				return error;
 		}
 
-		return true;
+		return {};
 	}
 };
 
@@ -433,7 +461,7 @@ public:
 	// Make sure no loops exist. These can't be childless or parentless
 	// by definition, so those nodes can be skipped. Nodes that were already
 	// visited are also safe.
-	bool ValidateNodes()
+	FInheritenceError ValidateNodes()
 	{
 		TMap<FName, FTreeNode>::Pair* pair = nullptr;
 		TMap<FName, FTreeNode>::Iterator it = { _nodeList };
@@ -441,7 +469,11 @@ public:
 		{
 			// Class that never got defined.
 			if (pair->Value.IsInvalid())
-				return false;
+			{
+				FString e = {};
+				e.Format("Class %s was inherited from but never defined.", pair->Key.GetChars());
+				return { e };
+			}
 
 			if (pair->Value.CouldPotentiallyLoop())
 			{
@@ -453,7 +485,11 @@ public:
 				{
 					// Recursion detected.
 					if (traversed.Find(parent) < traversed.Size())
-						return false;
+					{
+						FString e = {};
+						e.Format("Class %s has no root class (inherits recursively).", pair->Key.GetChars());
+						return { e };
+					}
 
 					const auto node = _nodeList.CheckKey(parent);
 					// Must have been found in a valid path previously.
@@ -469,13 +505,14 @@ public:
 			pair->Value.SetVisited();
 		}
 
-		return true;
+		return {};
 	}
 
-	bool GenerateData()
+	FInheritenceError GenerateData()
 	{
-		if (!ValidateNodes())
-			return false;
+		FInheritenceError error = ValidateNodes();
+		if (error.HasError())
+			return error;
 
 		for (const auto& cls : _roots)
 		{
@@ -484,11 +521,12 @@ public:
 				continue;
 
 			// Something went wrong in the class definition updating.
-			if (!node->ParseChildren(_nodeList))
-				return false;
+			FInheritenceError e = node->ParseChildren(_nodeList);
+			if (e.HasError())
+				return e;
 		}
 
-		return true;
+		return {};
 	}
 
 	void InsertNode(const FName& cls, const FName& parent, bool (*action)(const FName&, const FName&))
@@ -571,7 +609,7 @@ void DBotManager::ParseBotDefinitions()
 				sc.MustGetString();
 				parent = sc.String;
 				if (parent == key)
-					sc.ScriptError("Definition '%s' tried to inherit from itself.", key);
+					sc.ScriptError("Definition '%s' tried to inherit from itself.", key.GetChars());
 
 				sc.MustGetString();
 			}
@@ -593,7 +631,7 @@ void DBotManager::ParseBotDefinitions()
 			if(isBot)
 			{
 				if (botTree.IsInvalidClass(key))
-					sc.ScriptError("Bot '%s' already exists.", key);
+					sc.ScriptError("Bot '%s' already exists.", key.GetChars());
 
 				FBotDefinition def = {};
 				BotDefinitions.Insert(key, ParseBot(sc, def));
@@ -607,7 +645,7 @@ void DBotManager::ParseBotDefinitions()
 			else
 			{
 				if (entTree.IsInvalidClass(key))
-					sc.ScriptError("Weapon '%s' already exists.", key);
+					sc.ScriptError("Weapon '%s' already exists.", key.GetChars());
 
 				FEntityProperties props = {};
 				BotEntityInfo.Insert(key, ParseEntity(sc, props));
@@ -621,12 +659,15 @@ void DBotManager::ParseBotDefinitions()
 		}
 	}
 
-	// Boon TODO: Needs an error code
+	// Boon TODO: Error handling definitely needs to be reworked.
 	// Now that we've done an initial pass, start inheriting.
-	if (!entTree.GenerateData())
-		; // Class didn't exist, looped
-	if (!botTree.GenerateData())
-		; // Class didn't exist, looped
+	FInheritenceError error = entTree.GenerateData();
+	if (error.HasError())
+		I_Error("BOTDEF - %s\n", error.GetError());
+
+	error = botTree.GenerateData();
+	if (error.HasError())
+		I_Error("BOTDEF - %s\n", error.GetError());
 
 	for (const auto& def : abstractBots)
 	{

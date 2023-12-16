@@ -59,7 +59,7 @@ class Bot : Thinker native
 	protected int targetCoolDown;
 	protected int evadeCoolDown;
 	protected int goalCoolDown;
-	protected int reactionCoolDown;
+	protected int fireCoolDown;
 	protected int lastSeenCoolDown;
 
 	native clearscope static EntityProperties GetEntityInfo(Name entity, Name baseClass = 'Actor');
@@ -197,7 +197,7 @@ class Bot : Thinker native
 		if (lastSeenCoolDown > 0)
 			--lastSeenCoolDown;
 		else
-			reactionCoolDown = Properties.GetInt('ReactionTime', REACTION_TICS);
+			fireCoolDown = Properties.GetInt('ReactionTime', REACTION_TICS);
 
 		let pawn = GetPawn();
 		Actor target = GetTarget();
@@ -234,7 +234,7 @@ class Bot : Thinker native
 				SetTarget(target);
 				targetCoolDown = TARGET_COOL_DOWN_TICS;
 				lastSeenCoolDown = SIGHT_COOL_DOWN_TICS;
-				reactionCoolDown = 0;
+				fireCoolDown = 0;
 			}
 		}
 
@@ -308,8 +308,8 @@ class Bot : Thinker native
 			let it = ThinkerIterator.Create("Actor", STAT_DEFAULT);
 			while (mo = Actor(it.Next()))
 			{
-				if ((!mo.bIsMonster && !mo.Player && !mo.bMissile)
-					|| ((!mo.bMissile && pawn.IsFriend(mo)) || (mo.bMissile && mo.target && (mo.target == pawn || pawn.IsFriend(mo.target)))))
+				if ((!mo.bIsMonster && !mo.bMissile)
+					|| ((mo.bIsMonster && pawn.IsFriend(mo)) || (mo.bMissile && mo.target && (mo.target == pawn || pawn.IsFriend(mo.target)))))
 				{
 					continue;
 				}
@@ -571,9 +571,9 @@ class Bot : Thinker native
 
 	virtual bool TryFire()
 	{
-		if (reactionCoolDown > 0)
+		if (fireCoolDown > 0)
 		{
-			--reactionCoolDown;
+			--fireCoolDown;
 			return false;
 		}
 
@@ -601,7 +601,7 @@ class Bot : Thinker native
 
 		if (maxRefire >= 0 && player.Refire >= maxRefire)
 		{
-			reactionCoolDown = BURST_DELAY_TICS;
+			fireCoolDown = BURST_DELAY_TICS;
 			return false;
 		}
 
@@ -655,7 +655,7 @@ class Bot : Thinker native
 	virtual void BotDied(Actor source, Actor inflictor, EDmgFlags dmgFlags = 0, Name meansOfDeath = 'None')
 	{
 		aimPos = (0.0, 0.0, 0.0);
-		evadeCoolDown = targetCoolDown = goalCoolDown = reactionCoolDown = lastSeenCoolDown = 0;
+		evadeCoolDown = targetCoolDown = goalCoolDown = fireCoolDown = lastSeenCoolDown = 0;
 		Evade = null;
 		SetGoal(null);
 		SetPartner(0u);
