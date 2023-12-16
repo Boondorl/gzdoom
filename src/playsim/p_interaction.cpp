@@ -611,16 +611,6 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 		// [GRB] Clear extralight. When you killed yourself with weapon that
 		// called A_Light1/2 before it called A_Light0, extraligh remained.
 		player->extralight = 0;
-
-		// Let the bot know its player just died.
-		if (player->Bot != nullptr)
-		{
-			IFVIRTUALPTR(player->Bot, DBot, BotDied)
-			{
-				VMValue params[] = { player->Bot.Get(), source, inflictor, dmgflags, MeansOfDeath.GetIndex() };
-				VMCall(func, params, 5, nullptr, 0);
-			}
-		}
 	}
 
 	// [RH] If this is the unmorphed version of another monster, destroy this
@@ -733,6 +723,25 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 	else if (player == nullptr)
 	{
 		Destroy();
+	}
+
+	if (player != nullptr && player->Bot != nullptr)
+	{
+		IFVIRTUALPTR(player->Bot, DBot, BotDied)
+		{
+			VMValue params[] = { player->Bot.Get(), source, inflictor, dmgflags, MeansOfDeath.GetIndex() };
+			VMCall(func, params, 5, nullptr, 0);
+		}
+	}
+
+	if (source != nullptr && source->player != nullptr && source->player->Bot != nullptr)
+	{
+		IFVIRTUALPTR(source->player->Bot, DBot, BotKilled)
+		{
+			VMValue params[] = { source->player->Bot.Get(), this };
+
+			VMCall(func, params, 2, nullptr, 0);
+		}
 	}
 }
 

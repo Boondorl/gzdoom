@@ -662,6 +662,7 @@ class Bot : Thinker native
 		GetPlayer().Respawn_Time += Random[BotRespawn](MIN_RESPAWN_TIME, MAX_RESPAWN_TIME);
 	}
 
+	virtual void BotKilled(Actor mo) {}
 	virtual void AddedInventory(Inventory item) {}
 	virtual void RemovedInventory(Inventory item) {}
 	virtual void UsedInventory(Inventory item, bool useFailed) {}
