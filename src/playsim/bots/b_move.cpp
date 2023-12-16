@@ -248,7 +248,7 @@ bool DBot::TryWalk(const bool running, const bool doJump)
     if (!Move(running, doJump))
         return false;
 
-    constexpr int CoolDown = TICRATE;
+    constexpr int CoolDown = TICRATE / 2;
     _player->mo->movecount = pr_bottrywalk() % CoolDown;
     return true;
 }
@@ -277,7 +277,7 @@ void DBot::NewMoveDirection(AActor* const goal, const bool runAway, const bool r
 
     // Try and walk straight towards the goal, slowly shifting sides unless it needs to
     // turn around entirely.
-    if (baseDir == _player->mo->movedir && (pr_botnewchasedir() & 1))
+    if (baseDir == _player->mo->movedir && !(pr_botnewchasedir() & 3))
         baseDir = ((pr_botnewchasedir() & 1) * 2 - 1 + baseDir) % 8;
 
     _player->mo->movedir = baseDir;

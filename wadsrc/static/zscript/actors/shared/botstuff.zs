@@ -423,8 +423,8 @@ class Bot : Thinker native
 					continue;
 
 				double dist = pawn.Distance3DSquared(item);
-				if (item.bIsHealth && isLowHealth)
-					dist *= 0.75;
+				if (item.bBigPowerup || (item.bIsHealth && isLowHealth))
+					dist *= 0.5625; // 0.75 * 0.75
 
 				if (dist <= ITEM_RANGE_SQ && dist < closestDist && IsValidItem(item)
 					&& IsActorInView(item, viewFOV) && CanReach(item))

@@ -90,7 +90,6 @@ Entity Rocket
 
 Entity PlasmaRifle
 {
-	ProjectileType PlasmaBall
 	MinCombatRange 96
 	MaxCombatRange 1024
 	MaxRefire 20
@@ -125,6 +124,7 @@ Entity StaffPowered
 {
 	ChaseRange 128
 	MaxCombatRange 64
+	FrightenRange 64
 }
 
 // Gantlets
@@ -138,6 +138,7 @@ Entity GauntletsPowered
 {
 	ChaseRange 384
 	MaxCombatRange 192
+	FrightenRange 256
 }
 
 Entity GoldWand
@@ -154,15 +155,36 @@ Entity GoldWandPowered
 	MaxRefire 5
 }
 
+Entity GoldWandFX2
+{
+	FrightenRange 64
+}
+
 Entity Crossbow
 {
 	MinCombatRange 64
 	MaxCombatRange 512
+	FrightenRange 96
+}
+
+Entity CrossbowFX1
+{
+	FrightenRange 64
+}
+
+Entity CrossbowFX3
+{
+	FrightenRange 48
 }
 
 Entity CrossbowPowered : Crossbow
 {
 
+}
+
+Entity CrossbowFX2 : CrossbowFX3
+{
+	
 }
 
 Entity Blaster
@@ -179,6 +201,16 @@ Entity BlasterPowered
 	MaxRefire 4
 }
 
+Entity BlasterFX1
+{
+	FrightenRange 64
+}
+
+Entity Ripper
+{
+	FrightenRange 64
+}
+
 Entity SkullRod
 {
 	MinCombatRange 64
@@ -186,11 +218,27 @@ Entity SkullRod
 	MaxRefire 20
 }
 
+Entity HornRodFX1
+{
+	FrightenRange 64
+}
+
 Entity SkullRodPowered
 {
 	MinCombatRange 64
 	MaxCombatRange 640
+	FrightenRange 96
 	MaxRefire 2
+}
+
+Entity HornRodFX2
+{
+	FrightenRange 96
+}
+
+Entity RainPillar
+{
+	FrightenRange 48
 }
 
 Entity PhoenixRod
@@ -215,10 +263,30 @@ Entity PhoenixRodPowered
 	FrightenRange 96
 }
 
+Entity PhoenixFX2
+{
+	FrightenRange 64
+}
+
 Entity Mace
 {
 	MinCombatRange 48
 	MaxCombatRange 256
+}
+
+Entity MaceFX1
+{
+	FrightenRange 64
+}
+
+Entity MaceFX2 : MaceFX1
+{
+
+}
+
+Entity MaceFX3
+{
+	FrightenRange 48
 }
 
 Entity MacePowered
@@ -230,6 +298,11 @@ Entity MacePowered
 	MaxRefire 3
 }
 
+Entity MaceFX4
+{
+	FrightenRange 128
+}
+
 Entity Beak
 {
 	ChaseRange 96
@@ -239,6 +312,17 @@ Entity Beak
 Entity BeakPowered : Beak
 {
 
+}
+
+// Heretic items
+Entity EggFX
+{
+	FrightenRange 96
+}
+
+Entity ActivatedTimeBomb
+{
+	FrightenRange 192
 }
 
 // Hexen weapons
