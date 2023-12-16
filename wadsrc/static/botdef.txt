@@ -505,3 +505,175 @@ Entity PorkFX
 {
 	FrightenRange 96
 }
+
+// Strife weapons
+Entity PunchDagger
+{
+	ChaseRange 160
+	MaxCombatRange 80
+}
+
+Entity StrifeCrossbow
+{
+	ProjectileType ElectricBolt
+	MinCombatRange 64
+	MaxCombatRange 512
+	MaxRefire 4
+}
+
+Entity ElectricBolt
+{
+	FrightenRange 64
+}
+
+Entity StrifeCrossbow2 : StrifeCrossbow
+{
+	ProjectileType PoisonBolt
+}
+
+Entity PoisonBolt : ElectricBolt
+{
+
+}
+
+Entity AssaultGun
+{
+	MinCombatRange 64
+	MaxCombatRange 640
+	MaxRefire 10
+}
+
+Entity MiniMissileLauncher
+{
+	ProjectileType MiniMissile
+	MinCombatRange 128
+	MaxCombatRange 640
+	ExplosiveRange 96
+	FrightenRange 128
+	MaxRefire 5
+}
+
+Entity MiniMissile
+{
+	FrightenRange 128
+}
+
+Entity StrifeGrenadeLauncher
+{
+	MinCombatRange 320
+	MaxCombatRange 800
+	ExplosiveRange 256
+	FrightenRange 320
+	MaxRefire 2
+}
+
+Entity HEGrenade
+{
+	FrightenRange 224
+}
+
+Entity StrifeGrenadeLauncher2
+{
+	MinCombatRange 256
+	MaxCombatRange 800
+	ExplosiveRange 192
+	FrightenRange 256
+	MaxRefire 2
+}
+
+Entity PhosphorousGrenade : PhosphorousFire
+{
+	
+}
+
+Entity PhosphorousFire
+{
+	FrightenRange 192
+}
+
+Entity FlameThrower
+{
+	MinCombatRange 48
+	MaxCombatRange 256
+	FrightenRange 96
+	MaxRefire 25
+}
+
+Entity FlameMissile
+{
+	FrightenRange 64
+}
+
+Entity Mauler
+{
+	MinCombatRange 48
+	MaxCombatRange 448
+	FrightenRange 96
+	MaxRefire 4
+}
+
+Entity Mauler2
+{
+	MinCombatRange 64
+	MaxCombatRange 640
+	FrightenRange 96
+	MaxRefire 2
+}
+
+Entity MaulerTorpedo : MaulerTorpedoWave
+{
+
+}
+
+Entity MaulerTorpedoWave
+{
+	FrightenRange 96
+}
+
+Entity Sigil
+{
+	MinCombatRange 64
+	MaxCombatRange 800
+	FrightenRange 96
+	MaxRefire 2
+}
+
+// Sigil1
+Entity SpectralLightningV1
+{
+	FrightenRange 128
+}
+
+Entity SpectralLightningV2
+{
+	FrightenRange 96
+}
+
+// Sigil2
+Entity SpectralLightningH1
+{
+	FrightenRange 96
+}
+
+// Sigil3
+Entity SpectralLightningBall1
+{
+	FrightenRange 96
+}
+
+// Sigil4
+Entity SpectralLightningBigV1
+{
+	FrightenRange 128
+}
+
+// Sigil5
+Entity SpectralLightningBigBall1
+{
+	FrightenRange 128
+}
+
+Entity SpectralLightningH3
+{
+	FrightenRange 64
+}

@@ -426,7 +426,8 @@ private:
 public:
 	bool IsInvalidClass(const FName& cls) const
 	{
-		return _nodeList.CheckKey(cls) != nullptr;
+		const auto node = _nodeList.CheckKey(cls);
+		return node != nullptr && !node->IsInvalid();
 	}
 
 	// Make sure no loops exist. These can't be childless or parentless
