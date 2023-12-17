@@ -188,12 +188,77 @@ public:
 	}
 };
 
+class DBot : public DThinker
+{
+	DECLARE_CLASS(DBot, DThinker)
+
+private:
+	player_t* _player;	// Player info for the bot. This gets reset every time the game loads into a new map.
+	FName _botID;		// Tracks which bot definition it's tied to.
+
+	void NormalizeSpeed(short& cmd, const int* const speeds, const bool running);	// Ensure that speeds adhere to running properly.
+	void SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng);	// Convert a delta angle into a valid turn command.
+	bool TryWalk(const bool running = true, const bool doJump = true);				// Same as Move but also sets a turn cool down when moving.
+
+public:
+	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
+
+	FEntityProperties Properties; // Stores current information about the bot. Uses the properties from its bot ID as defaults.
+
+	static bool IsSectorDangerous(const sector_t* const sec); // Checks if the sector is dangerous to the bot.
+
+	void Construct(player_t* const player, const FName& index);	// Set the default values of the class fields when the Thinker is created.
+	void OnDestroy() override;									// Clear the Properties map.
+	void Serialize(FSerializer& arc);							// Only serialize the bot id and properties.
+
+	inline player_t* GetPlayer() const { return _player; }
+	inline const FName& GetBotID() const { return _botID; }
+	inline void ResetPlayer(player_t* const player) { _player = player; } // This should only be called when deserializing.
+
+	void CallBotThink(); // Handles overall thinking logic. Called directly before PlayerThink.
+
+	// Boon TODO: Clean up all these const functions
+	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle60);	// Check if the bot has sight of the Actor within a view cone.
+	bool CanReach(AActor* const mo, const bool doJump = true); // Checks to see if a valid movement can be made towards the target.
+	bool CheckShotPath(const DVector3& dest, const FName& projectileType = NAME_None, const double minDistance = 0.0); // Checks if anything is blocking the ReadyWeapon missile's path.
+	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
+	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
+	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
+	double GetJumpHeight() const;
+	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
+	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
+	bool Move(const bool running = true, const bool doJump = true);		// Check to see if a movement is valid in the current moveDir.
+	void NewMoveDirection(AActor* const goal = nullptr, const bool runAway = false, const bool running = true, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
+	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
+	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
+	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.
+};
+
 // Info about bots in the BOTDEF files.
 struct FBotDefinition
 {
 private:
+	static inline FName _userInfoProperties[] =
+	{
+		NAME_Autoaim, NAME_Name, NAME_Team, NAME_ColorSet, NAME_Color,
+		NAME_NeverSwitchOnPickup, NAME_MoveBob, NAME_FViewBob, NAME_StillBob,
+		NAME_WBobSpeed, NAME_WBobFire, NAME_PlayerClass, NAME_ClassicFlight,
+		NAME_Skin, NAME_Wi_NoAutostartMap
+	};
+
 	FEntityProperties _properties = {};
 	FString _userInfo = {};
+
+	static bool IsUserProperty(const FName& property)
+	{
+		for (const auto& prop : _userInfoProperties)
+		{
+			if (prop == property)
+				return true;
+		}
+
+		return false;
+	}
 
 public:
 	// Just in case.
@@ -204,21 +269,32 @@ public:
 	}
 
 	// This is needed so that the player's userinfo values get set correctly.
-	void GenerateUserInfo()
+	uint8_t* GenerateUserInfo(DBot* const bot)
 	{
 		// Reset it if it's being regenerated.
 		_userInfo = FString{};
 
+		if (bot == nullptr)
+			return nullptr;
+
 		TMap<FName, FString>::ConstPair* pair = nullptr;
 		TMap<FName, FString>::ConstIterator it = { _properties.GetProperties() };
 		while (it.NextPair(pair))
-			_userInfo.AppendFormat("\\%s\\%s", pair->Key.GetChars(), pair->Value.GetChars());
-	}
+		{
+			if (!IsUserProperty(pair->Key))
+				continue;
 
-	// Note: This is only meant to be used directly with the function that parses
-	// the user info as a byte stream.
-	uint8_t* GetUserInfo() const
-	{
+			FString value = pair->Value;
+			IFVIRTUALPTR(bot, DBot, ModifySpawnProperty)
+			{
+				VMValue params[] = { bot, pair->Key.GetIndex(), &value };
+				VMReturn ret[] = { &value };
+				VMCall(func, params, 3, ret, 1);
+			}
+
+			_userInfo.AppendFormat("\\%s\\%s", pair->Key.GetChars(), value.GetChars());
+		}
+
 		return reinterpret_cast<uint8_t*>(const_cast<char*>(_userInfo.GetChars()));
 	}
 
@@ -299,52 +375,6 @@ public:
 	static bool TryAddBot(FLevelLocals* const level, const unsigned int playerIndex, const FName& botID);	// Parses the network message to try and add a bot.
 	static void RemoveBot(FLevelLocals* const level, const unsigned int botNum);							// Removes the bot and makes it emulate a player leaving the game.
 	static void RemoveAllBots(FLevelLocals* const level);													// Removes all bots from the game.
-};
-
-class DBot : public DThinker
-{
-	DECLARE_CLASS(DBot, DThinker)
-
-private:
-	player_t* _player;	// Player info for the bot. This gets reset every time the game loads into a new map.
-	FName _botID;		// Tracks which bot definition it's tied to.
-
-	void NormalizeSpeed(short& cmd, const int* const speeds, const bool running);	// Ensure that speeds adhere to running properly.
-	void SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destAng);	// Convert a delta angle into a valid turn command.
-	bool TryWalk(const bool running = true, const bool doJump = true);				// Same as Move but also sets a turn cool down when moving.
-
-public:
-	static const int DEFAULT_STAT = STAT_BOT; // Needed so the Thinker creator knows what stat to put it in.
-
-	FEntityProperties Properties; // Stores current information about the bot. Uses the properties from its bot ID as defaults.
-
-	static bool IsSectorDangerous(const sector_t* const sec); // Checks if the sector is dangerous to the bot.
-
-	void Construct(player_t* const player, const FName& index);	// Set the default values of the class fields when the Thinker is created.
-	void OnDestroy() override;									// Clear the Properties map.
-	void Serialize(FSerializer &arc);							// Only serialize the bot id and properties.
-
-	inline player_t* GetPlayer() const { return _player; }
-	inline const FName& GetBotID() const { return _botID; }
-	inline void ResetPlayer(player_t* const player) { _player = player; } // This should only be called when deserializing.
-
-	void CallBotThink(); // Handles overall thinking logic. Called directly before PlayerThink.
-	
-	// Boon TODO: Clean up all these const functions
-	bool IsActorInView(AActor* const mo, const DAngle& fov = DAngle60);	// Check if the bot has sight of the Actor within a view cone.
-	bool CanReach(AActor* const mo, const bool doJump = true); // Checks to see if a valid movement can be made towards the target.
-	bool CheckShotPath(const DVector3& dest, const FName& projectileType = NAME_None, const double minDistance = 0.0); // Checks if anything is blocking the ReadyWeapon missile's path.
-	AActor* FindTarget(const DAngle& fov = DAngle60);					// Tries to find a target.
-	unsigned int FindPartner();											// Looks for a player to stick near, bot or real.
-	bool IsValidItem(AActor* const item);								// Checks to see if the item is able to be picked up.
-	double GetJumpHeight() const;
-	bool FakeCheckPosition(const DVector2& pos, FCheckPosition& tm, const bool actorsOnly = false); // Same as CheckPosition but prevent picking up items.
-	bool CheckMove(const DVector2& pos, const bool doJump = true);		// Check if a valid movement can be made to the given position. Also jumps if needed if that move is valid.
-	bool Move(const bool running = true, const bool doJump = true);		// Check to see if a movement is valid in the current moveDir.
-	void NewMoveDirection(AActor* const goal = nullptr, const bool runAway = false, const bool running = true, const bool doJump = true); // Attempts to get a new direction to move towards the bot's goal.
-	void SetMove(const EBotMoveDirection forward = MDIR_NO_CHANGE, const EBotMoveDirection side = MDIR_NO_CHANGE, const EBotMoveDirection up = MDIR_NO_CHANGE, const bool running = true); // Sets the move commands.
-	void SetButtons(const int cmd, const bool set);						// Sets the button commands.
-	void SetAngle(const DAngle& dest, const EBotAngleCmd type);			// Sets the angle commands.
 };
 
 #endif

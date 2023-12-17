@@ -131,10 +131,6 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 		return false;
 	}
 
-	bot->GenerateUserInfo(); // This can change to account for team.
-	uint8_t* stream = bot->GetUserInfo();
-	D_ReadUserInfoStrings(playerIndex, &stream, false);
-
 	const auto defClass = PClass::FindClass("Bot");
 	const auto& cls = bot->GetString("BotClass", "Bot");
 	auto botClass = PClass::FindClass(cls);
@@ -148,7 +144,10 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	playeringame[playerIndex] = true;
 	level->Players[playerIndex]->Bot = static_cast<DBot*>(level->CreateThinker(botClass, DBot::DEFAULT_STAT));
 	level->Players[playerIndex]->Bot->Construct(level->Players[playerIndex], botID);
-	level->Players[playerIndex]->playerstate = PST_ENTER;
+
+	uint8_t* stream = bot->GenerateUserInfo(level->Players[playerIndex]->Bot);
+	if (stream != nullptr)
+		D_ReadUserInfoStrings(playerIndex, &stream, false);
 
 	if (teamplay)
 		Printf("%s joined the %s team\n", level->Players[playerIndex]->userinfo.GetName(), Teams[level->Players[playerIndex]->userinfo.GetTeam()].GetName());
@@ -156,6 +155,7 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 		Printf("%s joined the game\n", level->Players[playerIndex]->userinfo.GetName());
 
 	// PlayerSpawned needs to be called before PlayerEntered
+	level->Players[playerIndex]->playerstate = PST_ENTER;
 	level->DoReborn(playerIndex);
 	level->localEventManager->PlayerEntered(playerIndex, false);
 	return true;
