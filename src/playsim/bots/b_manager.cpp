@@ -145,7 +145,7 @@ bool DBotManager::TryAddBot(FLevelLocals* const level, const unsigned int player
 	level->Players[playerIndex]->Bot = static_cast<DBot*>(level->CreateThinker(botClass, DBot::DEFAULT_STAT));
 	level->Players[playerIndex]->Bot->Construct(level->Players[playerIndex], botID);
 
-	uint8_t* stream = bot->GenerateUserInfo(level->Players[playerIndex]->Bot);
+	uint8_t* stream = bot->GenerateUserInfo(level->Players[playerIndex]->userinfo, level->Players[playerIndex]->Bot);
 	if (stream != nullptr)
 		D_ReadUserInfoStrings(playerIndex, &stream, false);
 

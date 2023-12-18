@@ -238,27 +238,8 @@ public:
 struct FBotDefinition
 {
 private:
-	static inline FName _userInfoProperties[] =
-	{
-		NAME_Autoaim, NAME_Name, NAME_Team, NAME_ColorSet, NAME_Color,
-		NAME_NeverSwitchOnPickup, NAME_MoveBob, NAME_FViewBob, NAME_StillBob,
-		NAME_WBobSpeed, NAME_WBobFire, NAME_PlayerClass, NAME_ClassicFlight,
-		NAME_Skin, NAME_Wi_NoAutostartMap
-	};
-
 	FEntityProperties _properties = {};
 	FString _userInfo = {};
-
-	static bool IsUserProperty(const FName& property)
-	{
-		for (const auto& prop : _userInfoProperties)
-		{
-			if (prop == property)
-				return true;
-		}
-
-		return false;
-	}
 
 public:
 	// Just in case.
@@ -269,7 +250,7 @@ public:
 	}
 
 	// This is needed so that the player's userinfo values get set correctly.
-	uint8_t* GenerateUserInfo(DBot* const bot)
+	uint8_t* GenerateUserInfo(const TMap<FName, FBaseCVar*>& info, DBot* const bot)
 	{
 		// Reset it if it's being regenerated.
 		_userInfo = FString{};
@@ -277,22 +258,24 @@ public:
 		if (bot == nullptr)
 			return nullptr;
 
-		TMap<FName, FString>::ConstPair* pair = nullptr;
-		TMap<FName, FString>::ConstIterator it = { _properties.GetProperties() };
+		FString value = {};
+		IFVIRTUALPTR(bot, DBot, ModifySpawnProperty);
+		VMValue params[] = { bot, {}, &value };
+		VMReturn ret[] = { &value };
+
+		TMap<FName, FBaseCVar*>::ConstPair* pair = nullptr;
+		TMap<FName, FBaseCVar*>::ConstIterator it = { info };
 		while (it.NextPair(pair))
 		{
-			if (!IsUserProperty(pair->Key))
-				continue;
-
-			FString value = pair->Value;
-			IFVIRTUALPTR(bot, DBot, ModifySpawnProperty)
+			value = _properties.GetString(pair->Key);
+			if (func != nullptr)
 			{
-				VMValue params[] = { bot, pair->Key.GetIndex(), &value };
-				VMReturn ret[] = { &value };
+				params[1] = pair->Key.GetIndex();
 				VMCall(func, params, 3, ret, 1);
 			}
 
-			_userInfo.AppendFormat("\\%s\\%s", pair->Key.GetChars(), value.GetChars());
+			if (!value.IsEmpty())
+				_userInfo.AppendFormat("\\%s\\%s", pair->Key.GetChars(), value.GetChars());
 		}
 
 		return reinterpret_cast<uint8_t*>(const_cast<char*>(_userInfo.GetChars()));
