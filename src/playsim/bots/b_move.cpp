@@ -39,7 +39,6 @@
 
 static FRandom pr_bottrywalk("BotTryWalk");
 static FRandom pr_botnewchasedir("BotNewChaseDir");
-static FRandom pr_botpickstrafedir("BotPickStrafeDir");
 
 extern bool P_CheckPosition(AActor* thing, const DVector2& pos, FCheckPosition& tm, bool actorsonly);
 
@@ -188,11 +187,31 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
     if (_player->mo->flags & MF_NOCLIP)
         return true;
 
+    const double curZ = _player->mo->Z();
     const double jumpHeight = doJump ? GetJumpHeight() : 0.0;
     FCheckPosition tm = {};
-    if (!FakeCheckPosition(pos, tm)
-        || tm.ceilingz - tm.floorz < _player->mo->Height
-        || tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight + jumpHeight
+    if (!FakeCheckPosition(pos, tm))
+    {
+        // Check for a thing that can be stepped up on.
+        if (!(_player->mo->flags2 & MF2_PASSMOBJ) || (Level->i_compatflags & COMPATF_NO_PASSMOBJ))
+            return false;
+
+        // Don't walk on top of other players.
+        AActor* const blocking = _player->mo->BlockingMobj;
+        if (blocking == nullptr || blocking->player != nullptr)
+            return false;
+
+        // Not enough room or too high to actually step up.
+        const double top = blocking->Top();
+        if (tm.ceilingz - top < _player->mo->Height
+            || (curZ + _player->mo->MaxStepHeight < top))
+        {
+            return false;
+        }
+    }
+
+    if (tm.ceilingz - tm.floorz < _player->mo->Height
+        || tm.floorz > curZ + _player->mo->MaxStepHeight + jumpHeight
         || tm.ceilingz < _player->mo->Top()
         || (!(_player->mo->flags & (MF_DROPOFF | MF_FLOAT)) && tm.floorz - tm.dropoffz > _player->mo->MaxDropOffHeight)
         || (!IsSectorDangerous(_player->mo->Sector) && IsSectorDangerous(tm.sector))) // Only do a hazard check if we're not currently in a hazard zone.
@@ -201,7 +220,7 @@ bool DBot::CheckMove(const DVector2& pos, const bool doJump)
     }
 
     // Check if it's jumpable.
-    if (doJump && tm.floorz > _player->mo->floorz + _player->mo->MaxStepHeight)
+    if (doJump && tm.floorz > curZ + _player->mo->MaxStepHeight)
         SetButtons(BT_JUMP, true);
 
     return true;
