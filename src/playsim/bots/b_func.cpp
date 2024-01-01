@@ -105,21 +105,18 @@ bool DBot::IsValidItem(AActor* const item)
 	}
 	else if (item->IsKindOf(NAME_Ammo))
 	{
-		// Boon TODO: Check this
-		AActor* heldAmmo = nullptr;
-		PClassActor* parent = nullptr;
+		PClass* parent = nullptr;
 		IFVIRTUALPTRNAME(item, NAME_Ammo, GetParentAmmo)
 		{
-			void* retVal = nullptr;
 			VMValue params[] = { item };
-			VMReturn ret[] = { &retVal };
+			VMReturn ret[] = { (void**)&parent };
 
 			VMCall(func, params, 1, ret, 1);
-			parent = static_cast<PClassActor*>(retVal);
 		}
 
+		AActor* heldAmmo = nullptr;
 		if (parent != nullptr)
-			heldAmmo = _player->mo->FindInventory(parent);
+			heldAmmo = _player->mo->FindInventory(parent->TypeName);
 
 		return heldAmmo == nullptr || heldAmmo->IntVar(NAME_Amount) < heldAmmo->IntVar(NAME_MaxAmount);
 	}
@@ -214,7 +211,7 @@ unsigned int DBot::FindPartner()
 {
 	unsigned int newFriend = Level->PlayerNum(_player) + 1;
 	double closest = std::numeric_limits<double>::infinity();
-	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
+	for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 	{
 		AActor* const client = Level->Players[i]->mo;
 		if (Level->PlayerInGame(i) && _player != Level->Players[i] && Level->Players[i]->Bot == nullptr
@@ -244,7 +241,7 @@ AActor* DBot::FindTarget(const DAngle& fov)
 
 	AActor *target = nullptr;
 	double closest = std::numeric_limits<double>::infinity();
-	for (unsigned int i = 0; i < MAXPLAYERS; ++i)
+	for (unsigned int i = 0u; i < MAXPLAYERS; ++i)
 	{
 		AActor* const client = Level->Players[i]->mo;
 		if (Level->PlayerInGame(i) && _player != Level->Players[i]

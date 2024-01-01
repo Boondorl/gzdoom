@@ -1,17 +1,20 @@
 // Bots
 Bot GZDoomBot1
 {
-	Name Graf
+	Name "The Chickenator"
+	Color E9EC2B
 }
 
 Bot GZDoomBot2
 {
-	Name Nash
+	Name "The Blue Blur"
+	Color 0E3ACF
 }
 
 Bot GZDoomBot3
 {
-	Name Nooblord
+	Name nooblord
+	Color 21BC34
 }
 
 Bot GZDoomBot4
@@ -22,16 +25,25 @@ Bot GZDoomBot4
 Bot GZDoomBot5
 {
 	Name "Sunglasses McAwesome"
+	Color FF9BE5
 }
 
 Bot GZDoomBot6
 {
-	Name Ricardo
+	Name xX_360n0sc0p3z_Xx
+	Color E10F0F
 }
 
 Bot GZDoomBot7
 {
-	Name Llanfairpwllgwyngyllgogerychwyrndrobwllllantysiliogogogoch
+	Name "THE Tom"
+	Color F28415
+}
+
+Bot GZDoomBot8
+{
+	Name "That guy"
+	Color 8D009B
 }
 
 // Doom weapons

@@ -145,7 +145,6 @@ void DBot::SetAngleCommand(short& cmd, const DAngle& curAng, const DAngle& destA
 	else if (angleCmd <= -MaxAngleCmd) // This usually has a special meaning, so avoid it.
 		angleCmd = -MaxAngleCmd + 1;
 
-
 	cmd = angleCmd;
 }
 
@@ -157,6 +156,7 @@ void DBot::SetAngle(const DAngle& dest, const EBotAngleCmd type)
 			SetAngleCommand(_player->cmd.ucmd.yaw, _player->mo->Angles.Yaw, dest);
 			break;
 
+		// This one is intentionally backwards due to how the pitch is applied.
 		case ACMD_PITCH:
 			SetAngleCommand(_player->cmd.ucmd.pitch, dest, _player->mo->Angles.Pitch);
 			break;
