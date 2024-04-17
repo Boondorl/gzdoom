@@ -414,7 +414,6 @@ class Inventory : Actor
 	{
 		Inventory copy;
 
-		Amount = MIN(Amount, MaxAmount);
 		if (GoAway ())
 		{
 			copy = Inventory(Spawn (GetClass()));
