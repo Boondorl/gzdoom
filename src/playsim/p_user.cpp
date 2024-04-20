@@ -128,6 +128,7 @@ CUSTOM_CVAR(Float, fov, 90.f, CVAR_ARCHIVE | CVAR_USERINFO | CVAR_NOINITCALL)
 struct PredictPos
 {
 	int gametic;
+	double viewZ;
 	DVector3 pos;
 	DRotator angles;
 } static PredictionLerpFrom, PredictionLerpResult, PredictionLast;
@@ -1304,6 +1305,7 @@ bool P_LerpCalculate(AActor *pmo, PredictPos from, PredictPos to, PredictPos &re
 	DVector3 delta = vecResult - vecTo;
 
 	result.pos = pmo->Vec3Offset(vecResult - to.pos);
+	result.viewZ = to.viewZ + ((from.viewZ + (to.viewZ - from.viewZ) * scale) - to.viewZ);
 
 	// As a fail safe, assume extrapolation is the threshold.
 	return (delta.LengthSquared() > cl_predict_lerpthreshold && scale <= 1.00f);
@@ -1515,6 +1517,7 @@ void P_PredictPlayer (player_t *player)
 
 		PredictionLast.gametic = maxtic - 1;
 		PredictionLast.pos = player->mo->Pos();
+		PredictionLast.viewZ = player->viewz;
 		//PredictionLast.portalgroup = player->mo->Sector->PortalGroup;
 
 		if (PredictionLerptics > 0)
@@ -1524,6 +1527,7 @@ void P_PredictPlayer (player_t *player)
 			{
 				PredictionLerptics++;
 				player->mo->SetXYZ(PredictionLerpResult.pos);
+				player->viewz = PredictionLerpResult.viewZ;
 			}
 			else
 			{
