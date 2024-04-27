@@ -7767,7 +7767,15 @@ ExpEmit FxStructMember::Emit(VMFunctionBuilder *build)
 
 	if (membervar->BitValue == -1)
 	{
-		build->Emit(membervar->Type->GetLoadOp(), loc.RegNum, obj.RegNum, offsetreg);
+		int loadOp = membervar->Type->GetLoadOp();
+
+		if(build->ForCall)
+		{
+			if(loadOp == OP_LO) loadOp = OP_LNNO;
+			else if(loadOp == OP_LO_R) loadOp = OP_LNNO_R;
+		}
+
+		build->Emit(loadOp, loc.RegNum, obj.RegNum, offsetreg);
 	}
 	else
 	{
@@ -9850,7 +9858,13 @@ ExpEmit FxVMFunctionCall::Emit(VMFunctionBuilder *build)
 	if (Function->Variants[0].Flags & VARF_Method)
 	{
 		assert(Self != nullptr);
+
+		build->ForCall = true;
+
 		selfemit = Self->Emit(build);
+
+		build->ForCall = false;
+
 		assert(selfemit.RegType == REGT_POINTER || selfemit.RegType == REGT_STRING || (selfemit.Fixed && selfemit.Target));
 
 		int innerside = FScopeBarrier::SideFromFlags(Function->Variants[0].Flags);
@@ -13072,6 +13086,12 @@ ExpEmit FxOutVarDereference::Emit(VMFunctionBuilder *build)
 	{
 		regType = SelfType->GetRegType();
 		loadOp = SelfType->GetLoadOp ();
+
+		if(build->ForCall)
+		{
+			if(loadOp == OP_LO) loadOp = OP_LNNO;
+			else if(loadOp == OP_LO_R) loadOp = OP_LNNO_R;
+		}
 	}
 	else if (SelfType->isRealPointer())
 	{

@@ -238,6 +238,26 @@ void JitCompiler::EmitLO_R()
 	EmitReadBarrier();
 }
 
+void JitCompiler::EmitLNNO()
+{
+	EmitNullPointerThrow(B, X_READ_NIL);
+
+	cc.mov(regA[A], asmjit::x86::ptr(regA[B], konstd[C]));
+	EmitReadBarrier();
+	
+	EmitNullPointerThrow(A, X_READ_NIL);
+}
+
+void JitCompiler::EmitLNNO_R()
+{
+	EmitNullPointerThrow(B, X_READ_NIL);
+
+	cc.mov(regA[A], asmjit::x86::ptr(regA[B], regD[C]));
+	EmitReadBarrier();
+
+	EmitNullPointerThrow(A, X_READ_NIL);
+}
+
 #else
 
 static DObject *ReadBarrier(DObject *p)

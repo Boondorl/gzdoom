@@ -110,6 +110,8 @@ public:
 	ExpEmit FramePointer;
 	TArray<FxLocalVariableDeclaration *> ConstructedStructs;
 
+	bool ForCall = false;
+
 private:
 	TArray<FStatementInfo> LineNumbers;
 	TArray<FxExpression *> StatementStack;
