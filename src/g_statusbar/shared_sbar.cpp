@@ -1234,75 +1234,60 @@ void DBaseStatusBar::DrawTopStuff (EHudState state)
 void DBaseStatusBar::DrawConsistancy () const
 {
 	static bool firsttime = true;
-	int i;
-	char conbuff[64], *buff_p;
 
 	if (!netgame)
 		return;
 
-	buff_p = NULL;
-	for (i = 0; i < MAXPLAYERS; i++)
+	bool desync = false;
+	FString text = "Out of sync with:";
+	for (int i = 0; i < MAXPLAYERS; i++)
 	{
 		if (playeringame[i] && players[i].inconsistant)
 		{
-			if (buff_p == NULL)
-			{
-				strcpy (conbuff, "Out of sync with:");
-				buff_p = conbuff + 17;
-			}
-			*buff_p++ = ' ';
-			*buff_p++ = '1' + i;
-			*buff_p = 0;
+			desync = true;
+			text.AppendFormat(" %s (%d)", players[i].userinfo.GetName(10u), i + 1);
 		}
 	}
 
-	if (buff_p != NULL)
+	if (desync)
 	{
 		if (firsttime)
 		{
 			firsttime = false;
 			if (debugfile)
 			{
-				fprintf (debugfile, "%s as of tic %d (%d)\n", conbuff,
+				fprintf (debugfile, "%s as of tic %d (%d)\n", text.GetChars(),
 					players[1-consoleplayer].inconsistant,
 					players[1-consoleplayer].inconsistant/ticdup);
 			}
 		}
 		DrawText(twod, SmallFont, CR_GREEN,
-			(twod->GetWidth() - SmallFont->StringWidth (conbuff)*CleanXfac) / 2,
-			0, conbuff, DTA_CleanNoMove, true, TAG_DONE);
+			(twod->GetWidth() - SmallFont->StringWidth (text)*CleanXfac) / 2,
+			0, text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
 	}
 }
 
 void DBaseStatusBar::DrawWaiting () const
 {
-	int i;
-	char conbuff[64], *buff_p;
-
 	if (!netgame)
 		return;
 
-	buff_p = NULL;
-	for (i = 0; i < MAXPLAYERS; i++)
+	FString text = "Waiting for:";
+	bool isWaiting = false;
+	for (int i = 0; i < MAXPLAYERS; i++)
 	{
 		if (playeringame[i] && players[i].waiting)
 		{
-			if (buff_p == NULL)
-			{
-				strcpy (conbuff, "Waiting for:");
-				buff_p = conbuff + 12;
-			}
-			*buff_p++ = ' ';
-			*buff_p++ = '1' + i;
-			*buff_p = 0;
+			isWaiting = true;
+			text.AppendFormat(" %s (%d)", players[i].userinfo.GetName(10u), i + 1);
 		}
 	}
 
-	if (buff_p != NULL)
+	if (isWaiting)
 	{
 		DrawText(twod, SmallFont, CR_ORANGE,
-			(twod->GetWidth() - SmallFont->StringWidth (conbuff)*CleanXfac) / 2,
-			SmallFont->GetHeight()*CleanYfac, conbuff, DTA_CleanNoMove, true, TAG_DONE);
+			(twod->GetWidth() - SmallFont->StringWidth (text)*CleanXfac) / 2,
+			SmallFont->GetHeight()*CleanYfac, text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
 	}
 }
 
