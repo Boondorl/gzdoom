@@ -34,14 +34,14 @@ class StateProvider : Inventory
 
 		let weapon = player.ReadyWeapon;
 
-		int ReloadCounter = weapon.ReloadCounter;
+		int ReloadCounter = weapon.GetReloadCounter();
 		if (!dontincrement || ReloadCounter != 0)
-			ReloadCounter = (weapon.ReloadCounter+1) % count;
+			weapon.SetReloadCounter((ReloadCounter + 1) % count);
 		else // 0 % 1 = 1?  So how do we check if the weapon was never fired?  We should only do this when we're not incrementing the counter though.
-			ReloadCounter = 1;
+			weapon.SetReloadCounter(1);
 
 		// If we have not made our last shot...
-		if (ReloadCounter != 0)
+		if (weapon.GetReloadCounter() != 0)
 		{
 			// Go back to the refire frames, instead of continuing on to the reload frames.
 			ret = ResolveState(jump);
@@ -51,9 +51,9 @@ class StateProvider : Inventory
 			// We need to reload. However, don't reload if we're out of ammo.
 			weapon.CheckAmmo(false, false);
 		}
-		if (!dontincrement)
+		if (dontincrement)
 		{
-			weapon.ReloadCounter = ReloadCounter;
+			weapon.SetReloadCounter(ReloadCounter);
 		}
 		return ret;
 	}
@@ -67,7 +67,7 @@ class StateProvider : Inventory
 	action void A_ResetReloadCounter()
 	{
 		if (stateinfo != null && stateinfo.mStateType == STATE_Psprite && player != null && player.ReadyWeapon != null)
-			player.ReadyWeapon.ReloadCounter = 0;
+			player.ReadyWeapon.SetReloadCounter(0);
 	}
 
 	
@@ -96,20 +96,22 @@ class StateProvider : Inventory
 			if (!weapon.DepleteAmmo(weapon.bAltFire, true))
 				return;	// out of ammo
 		}
-		
-		if (range == 0)	range = PLAYERMISSILERANGE;
 
 		if (!(flags & FBF_NOFLASH)) pawn.PlayAttacking2 ();
+		if (weapon != NULL)
+		{
+			A_StartSound(weapon.AttackSound, CHAN_WEAPON);
+		}
+
+		if (IsPredicting())
+			return;
+		
+		if (range == 0)	range = PLAYERMISSILERANGE;
 
 		if (!(flags & FBF_NOPITCH)) bslope = BulletSlope();
 		bangle = Angle;
 
 		if (pufftype == NULL) pufftype = 'BulletPuff';
-
-		if (weapon != NULL)
-		{
-			A_StartSound(weapon.AttackSound, CHAN_WEAPON);
-		}
 
 		if ((numbullets == 1 && !player.refire) || numbullets == 0)
 		{
@@ -223,7 +225,7 @@ class StateProvider : Inventory
 				return null, null;	// out of ammo
 		}
 
-		if (missiletype) 
+		if (missiletype && !IsPredicting()) 
 		{
 			double ang = self.Angle - 90;
 			Vector2 ofs = AngleToVector(ang, spawnofs_xy);
@@ -280,11 +282,6 @@ class StateProvider : Inventory
 		FTranslatedLineTarget t;
 		int			actualdamage;
 
-		if (!norandom)
-			damage *= random[cwpunch](1, 8);
-
-		angle = self.Angle + random2[cwpunch]() * (5.625 / 256);
-		if (range == 0) range = DEFMELEERANGE;
 		pitch = AimLineAttack (angle, range, t, 0., ALF_CHECK3D);
 
 		// only use ammo when actually hitting something!
@@ -294,6 +291,14 @@ class StateProvider : Inventory
 				return;	// out of ammo
 		}
 
+		if (IsPredicting())
+			return;
+
+		if (!norandom)
+			damage *= random[cwpunch](1, 8);
+
+		angle = self.Angle + random2[cwpunch]() * (5.625 / 256);
+		if (range == 0) range = DEFMELEERANGE;
 		if (pufftype == NULL)
 			pufftype = 'BulletPuff';
 		int puffFlags = LAF_ISMELEEATTACK | ((flags & CPF_NORANDOMPUFFZ) ? LAF_NORANDOMPUFFZ : 0);
@@ -375,6 +380,9 @@ class StateProvider : Inventory
 			if (!weapon.DepleteAmmo(weapon.bAltFire, true))
 				return;	// out of ammo
 		}
+
+		if (IsPredicting())
+			return;
 
 		if (!(flags & RGF_EXPLICITANGLE))
 		{

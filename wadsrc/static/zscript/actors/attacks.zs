@@ -371,7 +371,7 @@ extend class Actor
 
 	action bool, Actor A_SpawnItem(class<Actor> missile = "Unknown", double distance = 0, double zheight = 0, bool useammo = true, bool transfer_translation = false)
 	{
-		if (missile == NULL)
+		if (missile == NULL || IsPredicting())
 		{
 			return false, null;
 		}
@@ -481,7 +481,7 @@ extend class Actor
 	//===========================================================================
 	action bool, Actor A_ThrowGrenade(class<Actor> missile, double zheight = 0, double xyvel = 0, double zvel = 0, bool useammo = true)
 	{
-		if (missile == NULL)
+		if (missile == NULL || IsPredicting())
 		{
 			return false, null;
 		}

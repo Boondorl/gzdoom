@@ -37,6 +37,7 @@
 
 #include <stdio.h>
 #include "basics.h"
+#include "tarray.h"
 #include "sfmt/SFMTObj.h"
 
 class FSerializer;
@@ -171,6 +172,8 @@ public:
 	static void StaticReadRNGState (FSerializer &arc);
 	static void StaticWriteRNGState (FSerializer &file);
 	static FRandom *StaticFindRNG(const char *name);
+	static void SaveRNGState(TArray<FRandom>& backups);
+	static void RestoreRNGState(TArray<FRandom>& backups);
 
 #ifndef NDEBUG
 	static void StaticPrintSeeds ();

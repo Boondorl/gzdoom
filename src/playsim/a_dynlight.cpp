@@ -793,6 +793,15 @@ void AActor::SetDynamicLights()
 	}
 }
 
+void AActor::UpdateLightLocations()
+{
+	for (auto light : AttachedLights)
+	{
+		if (light->IsActive())
+			light->UpdateLocation();
+	}
+}
+
 //==========================================================================
 //
 //

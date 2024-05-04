@@ -1110,6 +1110,7 @@ public:
 
 	void AttachLight(unsigned int count, const FLightDefaults *lightdef);
 	void SetDynamicLights();
+	void UpdateLightLocations();
 
 // info for drawing
 // NOTE: The first member variable *must* be snext.

@@ -505,6 +505,9 @@ class PlayerPawn : Actor
 	virtual void TickPSprites()
 	{
 		let player = self.player;
+		if (player.ReadyWeapon)
+			player.ReadyWeapon.ResetClientReload();
+
 		let pspr = player.psprites;
 		while (pspr)
 		{
@@ -1348,7 +1351,7 @@ class PlayerPawn : Actor
 				Thrust(sidemove, a);
 			}
 
-			if (!IsPredicting() && (forwardmove != 0 || sidemove != 0))
+			if ((forwardmove != 0 || sidemove != 0) && (cl_predict_states || !IsPredicting()))
 			{
 				PlayRunning ();
 			}
@@ -1691,15 +1694,22 @@ class PlayerPawn : Actor
 		HandleMovement();
 		CalcHeight ();
 
-		if (!IsPredicting())
+		bool predicting = IsPredicting();
+		if (!predicting)
 		{
 			CheckEnvironment();
 			// Note that after this point the PlayerPawn may have changed due to getting unmorphed or getting its skull popped so 'self' is no longer safe to use.
 			// This also must not read mo into a local variable because several functions in this block can change the attached PlayerPawn.
 			player.mo.CheckUse();
 			player.mo.CheckUndoMorph();
-			// Cycle psprites.
+		}
+
+		// Cycle psprites.
+		if (cl_predict_states || !predicting)
 			player.mo.TickPSprites();
+
+		if (!predicting)
+		{
 			// Other Counters
 			if (player.damagecount)	player.damagecount--;
 			if (player.bonuscount) player.bonuscount--;

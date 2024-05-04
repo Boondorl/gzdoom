@@ -246,7 +246,7 @@ void P_NoiseAlert (AActor *emitter, AActor *target, bool splash, double maxdist)
 	if (emitter == NULL)
 		return;
 
-	if (target != NULL && target->player && (target->player->cheats & CF_NOTARGET))
+	if (target != NULL && target->player && ((target->player->cheats & CF_NOTARGET) || IsPredicting(target)))
 		return;
 
 	validcount++;
