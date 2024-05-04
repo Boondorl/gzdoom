@@ -315,9 +315,12 @@ CCMD (slot)
 			// Needs to be redone
 			IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickWeapon)
 			{
+				AActor* pending = nullptr;
 				VMValue param[] = { mo, slot, !(dmflags2 & DF2_DONTCHECKAMMO) };
-				VMReturn ret((void**)&SendItemUse);
+				VMReturn ret((void**)&pending);
 				VMCall(func, param, 3, &ret, 1);
+				SendItemUse = pending;
+				P_AddPredictedWeapon(pending);
 			}
 		}
 
@@ -367,9 +370,12 @@ CCMD (weapnext)
 		// Needs to be redone
 		IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickNextWeapon)
 		{
+			AActor* pending = nullptr;
 			VMValue param[] = { mo };
-			VMReturn ret((void**)&SendItemUse);
+			VMReturn ret((void**)&pending);
 			VMCall(func, param, 1, &ret, 1);
+			SendItemUse = pending;
+			P_AddPredictedWeapon(pending);
 		}
 	}
 
@@ -394,9 +400,12 @@ CCMD (weapprev)
 		// Needs to be redone
 		IFVIRTUALPTRNAME(mo, NAME_PlayerPawn, PickPrevWeapon)
 		{
+			AActor* pending = nullptr;
 			VMValue param[] = { mo };
-			VMReturn ret((void**)&SendItemUse);
+			VMReturn ret((void**)&pending);
 			VMCall(func, param, 1, &ret, 1);
+			SendItemUse = pending;
+			P_AddPredictedWeapon(pending);
 		}
 	}
 

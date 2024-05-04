@@ -521,9 +521,6 @@ inline int GetTics(AActor* actor, FState * newstate)
 
 bool AActor::SetState (FState *newstate, bool nofunction)
 {
-	if (debugfile && IsPredicting(this))
-		fprintf (debugfile, "for pl %d: SetState while predicting!\n", Level->PlayerNum(player));
-	
 	auto oldstate = state;
 	do
 	{
@@ -2396,7 +2393,7 @@ static double P_XYMovement (AActor *mo, DVector2 scroll)
 		// if in a walking frame, stop moving
 		// killough 10/98:
 		// Don't affect main player when voodoo dolls stop:
-		if (player && player->mo == mo && !(player->ClientState & CS_PREDICTING))
+		if (player && player->mo == mo && (cl_predict_states || !(player->ClientState & CS_PREDICTING)))
 		{
 			PlayIdle (player->mo);
 		}
@@ -3266,13 +3263,17 @@ bool AActor::Slam (AActor *thing)
 	Vel.Zero();
 	if (health > 0)
 	{
+		bool predicting = IsPredicting(this);
 		if (!(flags2 & MF2_DORMANT))
 		{
-			int dam = GetMissileDamage (7, 1);
-			int newdam = P_DamageMobj (thing, this, this, dam, NAME_Melee);
-			P_TraceBleed (newdam > 0 ? newdam : dam, thing, this);
+			if (!predicting)
+			{
+				int dam = GetMissileDamage(7, 1);
+				int newdam = P_DamageMobj(thing, this, this, dam, NAME_Melee);
+				P_TraceBleed(newdam > 0 ? newdam : dam, thing, this);
+			}
 			// The charging monster may have died by the target's actions here.
-			if (health > 0)
+			if (health > 0 && (!predicting || cl_predict_states))
 			{
 				FState *slam = FindState(NAME_Slam);
 				if (slam != NULL)
@@ -3283,7 +3284,7 @@ bool AActor::Slam (AActor *thing)
 					SetIdle();
 			}
 		}
-		else
+		else if (!predicting || cl_predict_states)
 		{
 			SetIdle();
 			tics = -1;
@@ -4317,14 +4318,11 @@ void AActor::Tick ()
 
 		UpdateWaterLevel ();
 
-		// [RH] Don't advance if predicting a player
-		if (IsPredicting(this))
-		{
+		if (!cl_predict_states && IsPredicting(this))
 			return;
-		}
 
 		// Check for poison damage, but only once per PoisonPeriod tics (or once per second if none).
-		if (PoisonDurationReceived && (Level->time % (PoisonPeriodReceived ? PoisonPeriodReceived : TICRATE) == 0))
+		if (PoisonDurationReceived && (Level->time % (PoisonPeriodReceived ? PoisonPeriodReceived : TICRATE) == 0) && !IsPredicting(this))
 		{
 			P_DamageMobj(this, NULL, Poisoner, PoisonDamageReceived, PoisonDamageTypeReceived != NAME_None ? PoisonDamageTypeReceived : (FName)NAME_Poison, 0);
 
@@ -5313,6 +5311,7 @@ int MorphPointerSubstitution(AActor* from, AActor* to)
 	// allowed to be changed into other things. Anything being morphed into that's considered a player
 	// is automatically out of the question to ensure modders aren't swapping clients around.
 	if (from == nullptr || to == nullptr || from == to || to->player != nullptr
+		|| IsPredicting(from)
 		|| (from->flags & MF_UNMORPHED)									// Another thing's dummy Actor, unmorphing the wrong way, etc.
 		|| (from->alternative == nullptr && to->alternative != nullptr)	// Morphing into something that's already morphed.
 		|| (from->alternative != nullptr && from->alternative != to))	// Only allow something morphed to unmorph.
@@ -7176,7 +7175,7 @@ AActor *P_SpawnPlayerMissile (AActor *source, double x, double y, double z,
 							  PClassActor *type, DAngle angle, FTranslatedLineTarget *pLineTarget, AActor **pMissileActor,
 							  bool nofreeaim, bool noautoaim, int aimflags)
 {
-	if (source == nullptr || type == nullptr)
+	if (source == nullptr || type == nullptr || IsPredicting(source))
 	{
 		return nullptr;
 	}

@@ -4642,6 +4642,9 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 		*actualdamage = 0;
 	}
 
+	if (IsPredicting(t1))
+		return nullptr;
+
 	double pc = pitch.Cos();
 
 	direction = { pc * angle.Cos(), pc * angle.Sin(), -pitch.Sin() };
@@ -5380,6 +5383,9 @@ void P_RailAttack(FRailParams *p)
 	DVector3 start;
 	FTraceResults trace;
 
+	if (IsPredicting(p->source))
+		return;
+
 	PClassActor *puffclass = p->puff;
 	if (puffclass == NULL)
 	{
@@ -6113,7 +6119,7 @@ int P_GetRadiusDamage(AActor *self, AActor *thing, int damage, double distance, 
 int P_RadiusAttack(AActor *bombspot, AActor *bombsource, int bombdamage, double bombdistance, FName bombmod,
 	int flags, double fulldamagedistance, FName species)
 {
-	if (bombdistance <= 0.0)
+	if (bombdistance <= 0.0 || (bombsource != nullptr && IsPredicting(bombsource)))
 		return 0;
 	fulldamagedistance = clamp<double>(fulldamagedistance, 0.0, bombdistance - 1.0);
 

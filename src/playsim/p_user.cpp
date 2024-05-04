@@ -103,6 +103,7 @@ CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
 // Variables for prediction
 CVAR (Bool, cl_noprediction, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, cl_predict_states, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Very likely to break mods, so off by default.
 // Deprecated
 CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpthreshold, 2.00f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -144,6 +145,21 @@ static AActor *PredictionActor;
 static TArray<uint8_t> PredictionActorBackupArray;
 static TArray<AActor *> PredictionSectorListBackup;
 
+struct PredictionPSprite
+{
+	int ID;
+	TArray<uint8_t> Backup;
+};
+static TArray<PredictionPSprite> PredictionPSprites;
+static bool bDidPSpritePrediction;
+
+struct PredictionWeapon
+{
+	int GameTic;
+	AActor* Pending;
+};
+static TArray<PredictionWeapon> PredictionWeapons;
+
 static TArray<sector_t *> PredictionTouchingSectorsBackup;
 static TArray<msecnode_t *> PredictionTouchingSectors_sprev_Backup;
 
@@ -155,6 +171,8 @@ static TArray<msecnode_t *> PredictionPortalSectors_sprev_Backup;
 
 static TArray<FLinePortal *> PredictionPortalLinesBackup;
 static TArray<portnode_t *> PredictionPortalLines_sprev_Backup;
+
+static TArray<FRandom> PredictionRNG;
 
 struct
 {
@@ -1255,6 +1273,12 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, IsPredicting, IsPredicting)
 	ACTION_RETURN_BOOL(IsPredicting(self));
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, ShouldDoEffect, ShouldDoEffect)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	ACTION_RETURN_BOOL(ShouldDoEffect(self));
+}
+
 //----------------------------------------------------------------------------
 //
 // PROC P_PlayerThink
@@ -1346,6 +1370,24 @@ void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float 
 	diff /= dist;
 	diff *= min<double>(dist * (1.0f - scale), dist - minMove);
 	result = pmo->Vec3Offset(-diff.X, -diff.Y, -diff.Z);
+}
+
+void P_AddPredictedWeapon(AActor* weapon)
+{
+	if (!netgame || weapon == nullptr)
+		return;
+
+	if (PredictionWeapons.Size())
+	{
+		auto& weap = PredictionWeapons.Last();
+		if (weap.GameTic == maketic)
+		{
+			weap.Pending = weapon;
+			return;
+		}
+	}
+
+	PredictionWeapons.Push({ maketic, weapon });
 }
 
 template<class nodetype, class linktype>
@@ -1456,6 +1498,8 @@ void P_PredictPlayer (player_t *player)
 		return;
 	}
 
+	FRandom::SaveRNGState(PredictionRNG);
+
 	// Save original values for restoration later
 	PredictionPlayerBackup.CopyFrom(*player, false);
 
@@ -1464,6 +1508,18 @@ void P_PredictPlayer (player_t *player)
 	PredictionActorBackupArray.Resize(act->GetClass()->Size);
 	memcpy(PredictionActorBackupArray.Data(), &act->snext, act->GetClass()->Size - ((uint8_t *)&act->snext - (uint8_t *)act));
 
+	// Only back these up if we plan on actually predicting them.
+	bDidPSpritePrediction = cl_predict_states;
+	if (bDidPSpritePrediction)
+	{
+		for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
+		{
+			const unsigned int i = PredictionPSprites.Push({ psp->GetID(), {} });
+			PredictionPSprites[i].Backup.Resize(psp->GetClass()->Size);
+			memcpy(PredictionPSprites[i].Backup.Data(), &psp->HAlign, psp->GetClass()->Size - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+		}
+	}
+
 	// Since this is a DObject it needs to have its fields backed up manually for restore, otherwise any changes
 	// to it will be permanent while predicting. This is now auto-created on pawns to prevent creation spam.
 	if (act->ViewPos != nullptr)
@@ -1471,6 +1527,11 @@ void P_PredictPlayer (player_t *player)
 		PredictionViewPosBackup.Pos = act->ViewPos->Offset;
 		PredictionViewPosBackup.Flags = act->ViewPos->Flags;
 	}
+
+	// Clean up any old pending weapons.
+	unsigned int curWeapon = 0u;
+	while (PredictionWeapons.Size() && PredictionWeapons[0].GameTic < gametic)
+		PredictionWeapons.Delete(0);
 
 	act->flags &= ~MF_PICKUP;
 	act->flags2 &= ~MF2_PUSHWALL;
@@ -1518,14 +1579,9 @@ void P_PredictPlayer (player_t *player)
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
 	for (int i = gametic; i < maxtic; ++i)
 	{
-		// Make sure any portal paths have been cleared from the previous movement.
-		R_ClearInterpolationPath();
-		r_NoInterpolate = false;
-		// Because we're always predicting, this will get set by teleporters and then can never unset itself in the renderer properly.
-		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
-
+		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->ClientTic = i;
-		if (i + 1 == maxtic)
+		if (i + 1 == maxtic && maxtic != LastPredictedTic)
 			player->ClientState |= CS_LATEST_TICK;
 
 		// Got snagged on something. Start correcting towards the player's final predicted position. We're
@@ -1544,7 +1600,28 @@ void P_PredictPlayer (player_t *player)
 			}
 		}
 
-		player->cmd = localcmds[i % LOCALCMDTICS];
+		// Play back the weapon select history (this will align with how the netevents execute).
+		if (cl_predict_states && curWeapon < PredictionWeapons.Size() && PredictionWeapons[curWeapon].GameTic == i)
+			player->mo->UseInventory(PredictionWeapons[curWeapon++].Pending);
+
+		// This information is only relevant on the latest tick.
+		R_ClearInterpolationPath();
+		r_NoInterpolate = false;
+		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
+
+		// Reset the PSprite data too if predicting them.
+		if (bDidPSpritePrediction)
+		{
+			for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
+			{
+				// firstTic can only be relevant on the last tick since anything before will
+				// inherently have existed for at least one tick.
+				psp->firstTic = false;
+				psp->processPending = true;
+				psp->ResetInterpolation();
+			}
+		}
+
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
 		P_PlayerThink(player);
@@ -1570,6 +1647,9 @@ void P_PredictPlayer (player_t *player)
 		player->viewz = snapPos.Z + zOfs;
 	}
 
+	// The real ticker will handle any clean up.
+	player->mo->UpdateLightLocations();
+
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
 	// the right spot until it reaches it.
 	LastPredictedTic = maxtic;
@@ -1583,13 +1663,14 @@ void P_UnPredictPlayer ()
 
 	if (player->ClientState & CS_PREDICTING)
 	{
-		unsigned int i;
 		AActor *act = player->mo;
 
 		if (act != PredictionActor)
 		{
 			// Q: Can this happen? If yes, can we continue?
 		}
+
+		FRandom::RestoreRNGState(PredictionRNG);
 
 		AActor *savedcamera = player->camera;
 
@@ -1614,6 +1695,53 @@ void P_UnPredictPlayer ()
 
 		act->UnlinkFromWorld(&ctx);
 		memcpy(&act->snext, PredictionActorBackupArray.Data(), PredictionActorBackupArray.Size() - ((uint8_t *)&act->snext - (uint8_t *)act));
+
+		// The state of the PSprite list needs to be brought back to exactly how it was before predicting.
+		unsigned int i = 0u;
+		if (bDidPSpritePrediction)
+		{
+			const bool hasPSprites = PredictionPSprites.Size();
+			for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
+			{
+				const int id = psp->GetID();
+				if (!hasPSprites || id < PredictionPSprites[i].ID)
+				{
+					psp->Destroy();
+				}
+				else if (id > PredictionPSprites[i].ID)
+				{
+					// Check if the current ID exists later in the list. If it does, don't
+					// destroy it so any previous pointers are preserved.
+					bool found = false;
+					for (unsigned int j = i + 1u; j < PredictionPSprites.Size(); ++j)
+					{
+						if (PredictionPSprites[j].ID == id)
+						{
+							found = true;
+							break;
+						}
+					}
+
+					if (found)
+						psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
+					else
+						psp->Destroy();
+				}
+
+				if (psp->ObjectFlags & OF_EuthanizeMe)
+					continue;
+
+				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+				++i;
+			}
+
+			for (; i < PredictionPSprites.Size(); ++i)
+			{
+				auto psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
+				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+			}
+		}
+		PredictionPSprites.Clear();
 
 		if (act->ViewPos != nullptr)
 		{

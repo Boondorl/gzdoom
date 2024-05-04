@@ -115,6 +115,7 @@ public:
 	std::pair<FRenderStyle, float> GetRenderStyle(FRenderStyle ownerstyle, double owneralpha);
 	float GetYAdjust(bool fullscreen);
 
+	// HAlign must be the first field in DPSprite
 	int HAlign, VAlign;		// Horizontal and vertical alignment
 	DVector2 baseScale;		// Base scale (set by weapon); defaults to (1.0, 1.2) since that's Doom's native aspect ratio
 	DAngle rotation;		// How much rotation to apply.

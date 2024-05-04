@@ -49,6 +49,8 @@
 //Added by MC:
 #include "b_bot.h"
 
+EXTERN_CVAR(Bool, cl_predict_states)
+
 class player_t;
 
 // Standard pre-defined skin colors
@@ -508,9 +510,16 @@ bool P_IsPlayerTotallyFrozen(const player_t *player);
 
 bool P_NoInterpolation(player_t const *player, AActor const *actor);
 
+void P_AddPredictedWeapon(AActor* weapon);
+
 inline int IsPredicting(AActor* self)
 {
 	return self->player != nullptr && self->player->mo == self && (self->player->ClientState & CS_PREDICTING);
+}
+
+inline int ShouldDoEffect(AActor* self)
+{
+	return self->player == nullptr || self->player->mo != self || !cl_predict_states || (self->player->ClientState & CS_LATEST_TICK);
 }
 
 #endif // __D_PLAYER_H__
