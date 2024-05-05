@@ -36,7 +36,8 @@
 
 #define FUDGEFACTOR		10
 
-static FRandom pr_teleport ("Teleport");
+static FRandom pr_teleport ("Teleport", false);
+static FRandom pr_playerteleport("PlayerTeleport", false);
 
 CVAR (Bool, telezoom, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
 
@@ -87,7 +88,7 @@ DEFINE_ACTION_FUNCTION(AActor, SpawnTeleportFog)
 
 bool P_Teleport (AActor *thing, DVector3 pos, DAngle angle, int flags)
 {
-	bool predicting = (thing->player && (thing->player->cheats & CF_PREDICTING));
+	bool predicting = IsPredicting(thing);
 
 	DVector3 old;
 	double aboveFloor;
@@ -271,7 +272,7 @@ DEFINE_ACTION_FUNCTION(AActor, Teleport)
 //
 //-----------------------------------------------------------------------------
 
-AActor *FLevelLocals::SelectTeleDest (int tid, int tag, bool norandom)
+AActor *FLevelLocals::SelectTeleDest (int tid, int tag, bool norandom, bool isPlayer)
 {
 	AActor *searcher;
 
@@ -323,7 +324,8 @@ AActor *FLevelLocals::SelectTeleDest (int tid, int tag, bool norandom)
 		{
 			if (count != 1 && !norandom)
 			{
-				count = 1 + (pr_teleport() % count);
+				// Players get their own RNG seed to reduce likelihood of breaking prediction.
+				count = 1 + ((isPlayer ? pr_playerteleport() : pr_teleport()) % count);
 			}
 			searcher = NULL;
 			while (count > 0)
@@ -385,7 +387,6 @@ bool FLevelLocals::EV_Teleport (int tid, int tag, line_t *line, int side, AActor
 	{ // Teleport function called with an invalid actor
 		return false;
 	}
-	bool predicting = (thing->player && (thing->player->cheats & CF_PREDICTING));
 	if (thing->flags2 & MF2_NOTELEPORT)
 	{
 		return false;
@@ -394,7 +395,7 @@ bool FLevelLocals::EV_Teleport (int tid, int tag, line_t *line, int side, AActor
 	{ // Don't teleport if hit back of line, so you can get out of teleporter.
 		return 0;
 	}
-	searcher = SelectTeleDest(tid, tag, predicting);
+	searcher = SelectTeleDest(tid, tag, false, thing->player != nullptr && thing->player->mo == thing);
 	if (searcher == NULL)
 	{
 		return false;
@@ -446,7 +447,7 @@ bool FLevelLocals::EV_Teleport (int tid, int tag, line_t *line, int side, AActor
 				thing->Vel.Y = vy*c + vx*s;
 			}
 		}
-		if (vx == 0 && vy == 0 && thing->player != NULL && thing->player->mo == thing && !predicting)
+		if (vx == 0 && vy == 0 && (cl_predict_states || !IsPredicting(thing)))
 		{
 			PlayIdle (thing->player->mo);
 		}
