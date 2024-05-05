@@ -94,6 +94,7 @@
 #include "gstrings.h"
 #include "s_music.h"
 #include "d_main.h"
+#include "maps.h"
 
 static FRandom pr_skullpop ("SkullPop", false);
 
@@ -179,6 +180,70 @@ struct
 	DVector3 Pos = {};
 	int Flags = 0;
 } static PredictionViewPosBackup;
+
+static TArray<FActorBackup> PredictionActors;
+
+bool FActorBackup::BackupActor()
+{
+	IFVIRTUALPTRNAME(actor, NAME_Inventory, BackupActor)
+	{
+		VMValue params[] = { actor, this };
+		VMCall(func, params, 2, nullptr, 0);
+	}
+
+	return IntFields.CountUsed() || FloatFields.CountUsed();
+}
+
+void FActorBackup::RestoreActor()
+{
+	// Probably got accidentally destroyed. Don't hardcrash in this case.
+	if (actor == nullptr || (actor->ObjectFlags & OF_EuthanizeMe))
+		return;
+
+	TMap<FName, int>::Iterator intIt = { IntFields };
+	TMap<FName, int>::Pair* iPair = nullptr;
+	while (intIt.NextPair(iPair))
+	{
+		int& ref = actor->IntVar(iPair->Key);
+		ref = iPair->Value;
+	}
+
+	TMap<FName, double>::Iterator floatIt = { FloatFields };
+	TMap<FName, double>::Pair* fPair = nullptr;
+	while (floatIt.NextPair(fPair))
+	{
+		double& ref = actor->FloatVar(fPair->Key);
+		ref = fPair->Value;
+	}
+}
+
+static void NativeSetInt(FActorBackup* self, int field, int value)
+{
+	self->SetInt(ENamedName(field), value);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, SetInt, NativeSetInt)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FActorBackup);
+	PARAM_NAME(field);
+	PARAM_INT(value);
+	self->SetInt(field, value);
+	return 0;
+}
+
+static void NativeSetFloat(FActorBackup* self, int field, double value)
+{
+	self->SetFloat(ENamedName(field), value);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, SetFloat, NativeSetFloat)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FActorBackup);
+	PARAM_NAME(field);
+	PARAM_FLOAT(value);
+	self->SetFloat(field, value);
+	return 0;
+}
 
 // [GRB] Custom player classes
 TArray<FPlayerClass> PlayerClasses;
@@ -1528,6 +1593,13 @@ void P_PredictPlayer (player_t *player)
 		PredictionViewPosBackup.Flags = act->ViewPos->Flags;
 	}
 
+	for (AActor* inv = act->Inventory; inv != nullptr; inv = inv->Inventory)
+	{
+		FActorBackup backup(inv);
+		if (backup.BackupActor())
+			PredictionActors.Push(backup);
+	}
+
 	// Clean up any old pending weapons.
 	unsigned int curWeapon = 0u;
 	while (PredictionWeapons.Size() && PredictionWeapons[0].GameTic < gametic)
@@ -1579,9 +1651,10 @@ void P_PredictPlayer (player_t *player)
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
 	for (int i = gametic; i < maxtic; ++i)
 	{
+		player->oldbuttons = player->cmd.ucmd.buttons;
 		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->ClientTic = i;
-		if (i + 1 == maxtic && maxtic != LastPredictedTic)
+		if (i >= LastPredictedTic)
 			player->ClientState |= CS_LATEST_TICK;
 
 		// Got snagged on something. Start correcting towards the player's final predicted position. We're
@@ -1711,7 +1784,7 @@ void P_UnPredictPlayer ()
 				else if (id > PredictionPSprites[i].ID)
 				{
 					// Check if the current ID exists later in the list. If it does, don't
-					// destroy it so any previous pointers are preserved.
+					// bother destroying it.
 					bool found = false;
 					for (unsigned int j = i + 1u; j < PredictionPSprites.Size(); ++j)
 					{
@@ -1732,6 +1805,7 @@ void P_UnPredictPlayer ()
 					continue;
 
 				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+				psp->firstTic = false;
 				++i;
 			}
 
@@ -1739,6 +1813,7 @@ void P_UnPredictPlayer ()
 			{
 				auto psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
 				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+				psp->firstTic = false;
 			}
 		}
 		PredictionPSprites.Clear();
@@ -1748,6 +1823,10 @@ void P_UnPredictPlayer ()
 			act->ViewPos->Offset = PredictionViewPosBackup.Pos;
 			act->ViewPos->Flags = PredictionViewPosBackup.Flags;
 		}
+
+		for (auto& backup : PredictionActors)
+			backup.RestoreActor();
+		PredictionActors.Clear();
 
 		// The blockmap ordering needs to remain unchanged, too.
 		// Restore sector links and refrences.
@@ -1795,6 +1874,8 @@ void P_UnPredictPlayer ()
 
 		actInvSel = InvSel;
 		player->inventorytics = inventorytics;
+		// Make sure to always unset this since the renderer won't be able to if it's getting backed up.
+		act->renderflags &= ~RF_NOINTERPOLATEVIEW;
 	}
 
 	player->ClientTic = gametic;

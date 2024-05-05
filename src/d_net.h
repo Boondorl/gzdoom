@@ -33,6 +33,8 @@
 #include "d_protocol.h"
 #include "i_net.h"
 
+class AActor;
+
 class FDynamicBuffer
 {
 public:
@@ -128,5 +130,29 @@ class DObject;
 #define NCMD_2TICS				0x02		// packet contains 2 tics
 #define NCMD_1TICS				0x01		// packet contains 1 tic
 #define NCMD_0TICS				0x00		// packet contains 0 tics
+
+struct FActorBackup
+{
+private:
+	AActor* actor = nullptr;
+	TMap<FName, int> IntFields = {};
+	TMap<FName, double> FloatFields = {};
+
+public:
+	FActorBackup(AActor* mo) : actor(mo) {}
+
+	inline void SetInt(const FName& field, int value)
+	{
+		IntFields[field] = value;
+	}
+
+	inline void SetFloat(const FName& field, double value)
+	{
+		FloatFields[field] = value;
+	}
+
+	bool BackupActor();
+	void RestoreActor();
+};
 
 #endif

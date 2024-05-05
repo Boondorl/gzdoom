@@ -58,6 +58,7 @@
 #include "types.h"
 #include "dictionary.h"
 #include "events.h"
+#include "d_net.h"
 
 static TArray<FPropertyInfo*> properties;
 static TArray<AFuncDesc> AFTable;
@@ -747,6 +748,10 @@ void InitThingdef()
 	auto teamstruct = NewStruct("Team", nullptr, true);
 	teamstruct->Size = sizeof(FTeam);
 	teamstruct->Align = alignof(FTeam);
+
+	auto backupstruct = NewStruct("ActorBackup", nullptr, true);
+	backupstruct->Size = sizeof(FActorBackup);
+	backupstruct->Align = alignof(FActorBackup);
 
 	auto terraindefstruct = NewStruct("TerrainDef", nullptr, true);
 	terraindefstruct->Size = sizeof(FTerrainDef);
