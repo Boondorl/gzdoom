@@ -51,7 +51,7 @@ class Ammo : Inventory
 
 	override void BackupActor(ActorBackup backup)
 	{
-		backup.SetInt('Amount', Amount);
+		backup.MarkField('Amount');
 	}
 
 	//===========================================================================
