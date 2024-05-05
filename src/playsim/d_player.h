@@ -141,10 +141,9 @@ typedef enum
 	CS_PREDICTING = 1,			// Client is currently predicting movement (unconfirmed position).
 	CS_LATEST_TICK = 1 << 1,	// Client is on the latest tick taking prediction into account.
 	CS_RUBBERBANDING = 1 << 2,	// Client's misprediction is being corrected.
-	//CS_CONNECTING		= 1 << 3,	// Client is joining the game.
-	//CS_DISCONNECTING	= 1 << 4,	// Client is leaving the game.
+	CS_FRESH_TICK = 1 << 3,		// Client is playing a tick for the first time.
 
-	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING,
+	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING | CS_FRESH_TICK,
 } clientstate_t;
 
 enum
@@ -519,7 +518,7 @@ inline int IsPredicting(AActor* self)
 
 inline int ShouldDoEffect(AActor* self)
 {
-	return self->player == nullptr || self->player->mo != self || (self->player->ClientState & CS_LATEST_TICK) || (!cl_predict_states && (self->flags9 & MF9_IN_STATE));
+	return self->player == nullptr || self->player->mo != self || (self->player->ClientState & CS_FRESH_TICK) || (!cl_predict_states && (self->flags9 & MF9_IN_STATE));
 }
 
 #endif // __D_PLAYER_H__

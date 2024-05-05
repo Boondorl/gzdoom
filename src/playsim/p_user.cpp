@@ -1360,7 +1360,7 @@ void P_PlayerThink (player_t *player)
 	if (!P_CanPredict(player))
 	{
 		player->ClientTic = gametic;
-		player->ClientState |= CS_LATEST_TICK;
+		player->ClientState |= CS_LATEST_TICK | CS_FRESH_TICK;
 	}
 
 	for (unsigned int i = 0u; i < 3u; ++i)
@@ -1657,8 +1657,10 @@ void P_PredictPlayer (player_t *player)
 		player->oldbuttons = player->cmd.ucmd.buttons;
 		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->ClientTic = i;
-		if (i >= LastPredictedTic)
+		if (i + 1 == maxtic)
 			player->ClientState |= CS_LATEST_TICK;
+		if (i >= LastPredictedTic)
+			player->ClientState |= CS_FRESH_TICK;
 
 		// Got snagged on something. Start correcting towards the player's final predicted position. We're
 		// being intentionally generous here by not really caring how the player got to that position, only
