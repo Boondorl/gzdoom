@@ -188,7 +188,8 @@ bool FState::CallAction(AActor *self, AActor *stateowner, FStateParamInfo *info,
 
 			// Build the parameter array. Action functions have never any explicit parameters but need to pass the defaults
 			// and fill in the implicit arguments of the called function.
-
+			const ActorFlags9 curFlag = (self->flags9 & MF9_IN_STATE);
+			self->flags9 |= MF9_IN_STATE;
 			if (ActionFunc->DefaultArgs.Size() > 0)
 			{
 				auto defs = ActionFunc->DefaultArgs;
@@ -216,6 +217,7 @@ bool FState::CallAction(AActor *self, AActor *stateowner, FStateParamInfo *info,
 				VMValue params[3] = { self, stateowner, VMValue(info) };
 				VMCallAction(ActionFunc, params, ActionFunc->ImplicitArgs, &ret, stateret != nullptr);
 			}
+			self->flags9 &= (~MF9_IN_STATE | curFlag);
 		}
 		catch (CVMAbortException &err)
 		{

@@ -1552,8 +1552,13 @@ void P_PredictPlayer (player_t *player)
 {
 	int maxtic;
 
-	if ((player->ClientState & CS_PREDICTING) || !P_CanPredict(player))
+	if (player->ClientState & CS_PREDICTING)
 		return;
+	if (!P_CanPredict(player))
+	{
+		P_PredictionLerpReset();
+		return;
+	}
 
 	maxtic = maketic;
 
