@@ -519,7 +519,7 @@ inline int IsPredicting(AActor* self)
 
 inline int ShouldDoEffect(AActor* self)
 {
-	return self->player == nullptr || self->player->mo != self || !cl_predict_states || (self->player->ClientState & CS_LATEST_TICK);
+	return self->player == nullptr || self->player->mo != self || (self->player->ClientState & CS_LATEST_TICK) || (!cl_predict_states && (self->flags9 & MF9_IN_STATE));
 }
 
 #endif // __D_PLAYER_H__

@@ -1649,7 +1649,7 @@ class PlayerPawn : Actor
 		
 		CheckFOV();
 
-		if (player.inventorytics)
+		if (player.inventorytics && ShouldDoEffect())
 		{
 			player.inventorytics--;
 		}
