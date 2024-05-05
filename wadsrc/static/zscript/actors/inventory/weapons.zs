@@ -124,7 +124,7 @@ class Weapon : StateProvider
 
 	override void BackupActor(ActorBackup backup)
 	{
-		backup.SetInt('ReloadCounter', ReloadCounter);
+		backup.MarkField('ReloadCounter');
 	}
 
 	//===========================================================================

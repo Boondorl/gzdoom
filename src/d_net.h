@@ -141,16 +141,7 @@ private:
 public:
 	FActorBackup(AActor* mo) : actor(mo) {}
 
-	inline void SetInt(const FName& field, int value)
-	{
-		IntFields[field] = value;
-	}
-
-	inline void SetFloat(const FName& field, double value)
-	{
-		FloatFields[field] = value;
-	}
-
+	void MarkField(const FName& field);
 	bool BackupActor();
 	void RestoreActor();
 };

@@ -95,6 +95,7 @@
 #include "s_music.h"
 #include "d_main.h"
 #include "maps.h"
+#include "types.h"
 
 static FRandom pr_skullpop ("SkullPop", false);
 
@@ -183,6 +184,18 @@ struct
 
 static TArray<FActorBackup> PredictionActors;
 
+void FActorBackup::MarkField(const FName& field)
+{
+	auto sym = dyn_cast<PField>(actor->GetClass()->FindSymbol(field, true));
+	if (sym == nullptr)
+		return;
+
+	if (sym->Type == TypeSInt32)
+		IntFields.Insert(field, actor->IntVar(field));
+	else if (sym->Type == TypeFloat64 || sym->Type == TypeFloat32)
+		FloatFields.Insert(field, actor->FloatVar(field));
+}
+
 bool FActorBackup::BackupActor()
 {
 	IFVIRTUALPTRNAME(actor, NAME_Inventory, BackupActor)
@@ -217,31 +230,16 @@ void FActorBackup::RestoreActor()
 	}
 }
 
-static void NativeSetInt(FActorBackup* self, int field, int value)
+static void MarkField(FActorBackup* self, int field)
 {
-	self->SetInt(ENamedName(field), value);
+	self->MarkField(ENamedName(field));
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, SetInt, NativeSetInt)
+DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, MarkField, MarkField)
 {
 	PARAM_SELF_STRUCT_PROLOGUE(FActorBackup);
 	PARAM_NAME(field);
-	PARAM_INT(value);
-	self->SetInt(field, value);
-	return 0;
-}
-
-static void NativeSetFloat(FActorBackup* self, int field, double value)
-{
-	self->SetFloat(ENamedName(field), value);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, SetFloat, NativeSetFloat)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FActorBackup);
-	PARAM_NAME(field);
-	PARAM_FLOAT(value);
-	self->SetFloat(field, value);
+	self->MarkField(field);
 	return 0;
 }
 

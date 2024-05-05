@@ -7,8 +7,7 @@ struct VisStyle
 
 struct ActorBackup native
 {
-	native void SetInt(Name field, int value);
-	native void SetFloat(Name field, double value);
+	native void MarkField(Name field);
 }
 
 class Inventory : Actor
