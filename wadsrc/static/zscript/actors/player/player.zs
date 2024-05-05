@@ -505,9 +505,6 @@ class PlayerPawn : Actor
 	virtual void TickPSprites()
 	{
 		let player = self.player;
-		if (player.ReadyWeapon)
-			player.ReadyWeapon.ResetClientReload();
-
 		let pspr = player.psprites;
 		while (pspr)
 		{

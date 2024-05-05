@@ -5,6 +5,12 @@ struct VisStyle
 	int				RenderStyle;
 }
 
+struct ActorBackup native
+{
+	native void SetInt(Name field, int value);
+	native void SetFloat(Name field, double value);
+}
+
 class Inventory : Actor
 {
 	const BLINKTHRESHOLD = (4*32);
@@ -205,6 +211,14 @@ class Inventory : Actor
 		}
 		return true;
 	}
+
+	//===========================================================================
+	//
+	// Inventory :: BackupActor
+	//
+	//===========================================================================
+
+	virtual void BackupActor(ActorBackup backup) {}
 	
 	//---------------------------------------------------------------------------
 	//

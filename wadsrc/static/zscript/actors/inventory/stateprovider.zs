@@ -34,14 +34,14 @@ class StateProvider : Inventory
 
 		let weapon = player.ReadyWeapon;
 
-		int ReloadCounter = weapon.GetReloadCounter();
+		int ReloadCounter = weapon.ReloadCounter;
 		if (!dontincrement || ReloadCounter != 0)
-			weapon.SetReloadCounter((ReloadCounter + 1) % count);
+			ReloadCounter = (weapon.ReloadCounter+1) % count;
 		else // 0 % 1 = 1?  So how do we check if the weapon was never fired?  We should only do this when we're not incrementing the counter though.
-			weapon.SetReloadCounter(1);
+			ReloadCounter = 1;
 
 		// If we have not made our last shot...
-		if (weapon.GetReloadCounter() != 0)
+		if (ReloadCounter != 0)
 		{
 			// Go back to the refire frames, instead of continuing on to the reload frames.
 			ret = ResolveState(jump);
@@ -51,9 +51,9 @@ class StateProvider : Inventory
 			// We need to reload. However, don't reload if we're out of ammo.
 			weapon.CheckAmmo(false, false);
 		}
-		if (dontincrement)
+		if (!dontincrement)
 		{
-			weapon.SetReloadCounter(ReloadCounter);
+			weapon.ReloadCounter = ReloadCounter;
 		}
 		return ret;
 	}
@@ -67,7 +67,7 @@ class StateProvider : Inventory
 	action void A_ResetReloadCounter()
 	{
 		if (stateinfo != null && stateinfo.mStateType == STATE_Psprite && player != null && player.ReadyWeapon != null)
-			player.ReadyWeapon.SetReloadCounter(0);
+			player.ReadyWeapon.ReloadCounter = 0;
 	}
 
 	

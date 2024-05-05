@@ -9,8 +9,6 @@ class Weapon : StateProvider
 
 	const ZOOM_INSTANT = 1;
 	const ZOOM_NOSCALETURNING = 2;
-
-	private int _clientReloadCounter;
 	
 	deprecated("3.7") uint WeaponFlags;		// not to be used directly.
 	class<Ammo> AmmoType1, AmmoType2;		// Types of ammo used by self weapon
@@ -124,23 +122,9 @@ class Weapon : StateProvider
 		Stop;
 	}
 
-	void ResetClientReload()
+	override void BackupActor(ActorBackup backup)
 	{
-		if (!Owner.IsPredicting())
-			_clientReloadCounter = ReloadCounter;
-	}
-
-	int GetReloadCounter()
-	{
-		return Owner.IsPredicting() ? _clientReloadCounter : ReloadCounter;
-	}
-
-	void SetReloadCounter(int value)
-	{
-		if (Owner.IsPredicting())
-			_clientReloadCounter = value;
-		else
-			ReloadCounter = value;
+		backup.SetInt('ReloadCounter', ReloadCounter);
 	}
 
 	//===========================================================================
@@ -1043,9 +1027,6 @@ class Weapon : StateProvider
 			{
 				return false;
 			}
-
-			if (Owner.IsPredicting())
-				return true;
 				
 			if (!altFire)
 			{
