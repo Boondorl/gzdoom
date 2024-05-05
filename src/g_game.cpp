@@ -93,8 +93,8 @@
 #include "fs_findfile.h"
 
 
-static FRandom pr_dmspawn ("DMSpawn");
-static FRandom pr_pspawn ("PlayerSpawn");
+static FRandom pr_dmspawn ("DMSpawn", false);
+static FRandom pr_pspawn ("PlayerSpawn", false);
 
 bool WriteZip(const char* filename, const FileSys::FCompressedBuffer* content, size_t contentcount);
 bool	G_CheckDemoStatus (void);
