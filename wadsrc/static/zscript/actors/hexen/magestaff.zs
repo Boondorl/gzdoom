@@ -214,6 +214,12 @@ class MWeapBloodscourge : MageWeapon
 	{
 		if (invoker.MStaffCount > 0) invoker.MStaffCount--;
 	}
+
+	override void BackupActor(ActorBackup backup)
+	{
+		Super.BackupActor(backup);
+		backup.MarkField('MStaffCount');
+	}
 }
 
 

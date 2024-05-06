@@ -125,6 +125,7 @@ class Weapon : StateProvider
 	override void BackupActor(ActorBackup backup)
 	{
 		backup.MarkField('ReloadCounter');
+		backup.MarkField('WeaponSpecial');
 	}
 
 	//===========================================================================

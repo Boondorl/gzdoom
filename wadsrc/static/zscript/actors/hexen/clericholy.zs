@@ -182,6 +182,12 @@ class CWeapWraithverge : ClericWeapon
 	{
 		if (invoker.CHolyCount > 0) invoker.CHolyCount--;
 	}
+
+	override void BackupActor(ActorBackup backup)
+	{
+		Super.BackupActor(backup);
+		backup.MarkField('CHolyCount');
+	}
 }
 
 // Holy Missile -------------------------------------------------------------

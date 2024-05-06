@@ -59,6 +59,9 @@ class Mace : HereticWeapon
 
 		if (random[MaceAtk]() < 28)
 		{
+			if (IsPredicting())
+				return;
+				
 			Actor ball = Spawn("MaceFX2", Pos + (0, 0, 28 - Floorclip), ALLOW_REPLACE);
 			if (ball != null)
 			{

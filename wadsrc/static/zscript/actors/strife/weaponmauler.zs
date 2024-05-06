@@ -169,7 +169,8 @@ class Mauler2 : Mauler
 		player.mo.PlayAttacking2 ();
 		
 		SpawnPlayerMissile ("MaulerTorpedo");
-		DamageMobj (self, null, 20, 'Disintegrate');
+		if (!IsPredicting())
+			DamageMobj (self, null, 20, 'Disintegrate');
 		Thrust(7.8125, Angle+180.);
 	}
 }
