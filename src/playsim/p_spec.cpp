@@ -416,6 +416,9 @@ bool P_PredictLine(line_t *line, AActor *mo, int side, int activationType)
 //
 void P_PlayerInSpecialSector (player_t *player, sector_t * sector)
 {
+	if (player->ClientState & CS_PREDICTING)
+		return;
+
 	if (sector == NULL)
 	{
 		// Falling, not all the way down yet?
@@ -649,6 +652,9 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, GiveSecret)
 
 void P_PlayerOnSpecialFlat (player_t *player, int floorType)
 {
+	if (player->ClientState & CS_PREDICTING)
+		return;
+
 	auto Level = player->mo->Level;
 
 	if (Terrains[floorType].DamageAmount &&

@@ -1198,7 +1198,9 @@ void P_FallingDamage (AActor *actor)
 
 	if (actor->player)
 	{
-		S_Sound (actor, CHAN_AUTO, 0, "*land", 1, ATTN_NORM);
+		if (actor->player->ClientState & CS_FRESH_TICK)
+			S_Sound (actor, CHAN_AUTO, 0, "*land", 1, ATTN_NORM);
+
 		P_NoiseAlert (actor, actor, true);
 		if (damage >= TELEFRAG_DAMAGE && ((actor->player->cheats & (CF_GODMODE | CF_BUDDHA) ||
 			(actor->FindInventory(PClass::FindActor(NAME_PowerBuddha), true) != nullptr))))
@@ -1206,7 +1208,8 @@ void P_FallingDamage (AActor *actor)
 			damage = TELEFRAG_DAMAGE - 1;
 		}
 	}
-	P_DamageMobj (actor, NULL, NULL, damage, NAME_Falling);
+	if (!IsPredicting(actor))
+		P_DamageMobj (actor, NULL, NULL, damage, NAME_Falling);
 }
 
 //----------------------------------------------------------------------------
@@ -1272,7 +1275,7 @@ void P_CheckEnvironment(player_t *player)
 		player->mo->waterlevel == 0)
 	{
 		auto id = S_FindSkinnedSound(player->mo, S_FindSound("*falling"));
-		if (id != NO_SOUND && !S_IsActorPlayingSomething(player->mo, CHAN_VOICE, id))
+		if (id != NO_SOUND && (player->ClientState & CS_FRESH_TICK) && !S_IsActorPlayingSomething(player->mo, CHAN_VOICE, id))
 		{
 			S_Sound(player->mo, CHAN_VOICE, 0, id, 1, ATTN_NORM);
 		}
@@ -1300,7 +1303,7 @@ void P_CheckUse(player_t *player)
 		if (!player->usedown)
 		{
 			player->usedown = true;
-			if (!P_TalkFacing(player->mo))
+			if (!(player->ClientState & CS_PREDICTING) && !P_TalkFacing(player->mo))
 			{
 				P_UseLines(player);
 			}

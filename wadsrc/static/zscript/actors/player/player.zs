@@ -504,6 +504,9 @@ class PlayerPawn : Actor
 
 	virtual void TickPSprites()
 	{
+		if (!cl_predict_states && IsPredicting())
+			return;
+
 		let player = self.player;
 		let pspr = player.psprites;
 		while (pspr)
@@ -1459,7 +1462,7 @@ class PlayerPawn : Actor
 				Vel.Z += jumpvelz;
 				bOnMobj = false;
 				player.jumpTics = -1;
-				if (!IsPredicting()) A_StartSound("*jump", CHAN_BODY);
+				A_StartSound("*jump", CHAN_BODY);
 			}
 		}
 	}
@@ -1493,7 +1496,7 @@ class PlayerPawn : Actor
 				{
 					bFly = true;
 					bNoGravity = true;
-					if ((Vel.Z <= -39) && !IsPredicting())
+					if ((Vel.Z <= -39))
 					{ // Stop falling scream
 						A_StopSound(CHAN_VOICE);
 					}
@@ -1555,7 +1558,7 @@ class PlayerPawn : Actor
 			{ // Chicken attack counter
 				player.chickenPeck -= 3;
 			}
-			if (player.MorphTics && !--player.MorphTics)
+			if (!IsPredicting() && player.MorphTics && !--player.MorphTics)
 			{ // Attempt to undo the chicken/pig
 				Unmorph(self, MRF_UNDOBYTIMEOUT);
 			}
@@ -1571,7 +1574,7 @@ class PlayerPawn : Actor
 	virtual void CheckPoison()
 	{
 		let player = self.player;
-		if (player.poisoncount && !(Level.maptime & 15))
+		if (player.poisoncount && !(Level.maptime & 15) && !IsPredicting())
 		{
 			player.poisoncount -= 5;
 			if (player.poisoncount < 0)
@@ -1591,7 +1594,7 @@ class PlayerPawn : Actor
 	virtual void CheckDegeneration()
 	{
 		// Apply degeneration.
-		if (sv_degeneration)
+		if (sv_degeneration && !IsPredicting())
 		{
 			let player = self.player;
 			int maxhealth = GetMaxHealth(true);
@@ -1623,7 +1626,7 @@ class PlayerPawn : Actor
 			{
 				ResetAirSupply();
 			}
-			else if (player.air_finished <= Level.maptime && !(Level.maptime & 31))
+			else if (player.air_finished <= Level.maptime && !(Level.maptime & 31) && !IsPredicting())
 			{
 				DamageMobj(NULL, NULL, 2 + ((Level.maptime - player.air_finished) / TICRATE), 'Drowning');
 			}
@@ -1649,6 +1652,8 @@ class PlayerPawn : Actor
 		
 		CheckFOV();
 
+		// Make sure when playing online that prediction doesn't eat the inventory bar
+		// instantly if laggy.
 		if (player.inventorytics && (player.ClientState & CS_LATEST_TICK))
 		{
 			player.inventorytics--;
@@ -1682,7 +1687,7 @@ class PlayerPawn : Actor
 				player.jumpTics = 0;
 			}
 		}
-		if (Alternative && !IsPredicting())
+		if (Alternative)
 		{
 			MorphPlayerThink ();
 		}
@@ -1690,22 +1695,16 @@ class PlayerPawn : Actor
 		CheckPitch();
 		HandleMovement();
 		CalcHeight ();
+		CheckEnvironment();
 
-		bool predicting = IsPredicting();
-		if (!predicting)
-		{
-			CheckEnvironment();
-			// Note that after this point the PlayerPawn may have changed due to getting unmorphed or getting its skull popped so 'self' is no longer safe to use.
-			// This also must not read mo into a local variable because several functions in this block can change the attached PlayerPawn.
-			player.mo.CheckUse();
-			player.mo.CheckUndoMorph();
-		}
-
+		// Note that after this point the PlayerPawn may have changed due to getting unmorphed or getting its skull popped so 'self' is no longer safe to use.
+		// This also must not read mo into a local variable because several functions in this block can change the attached PlayerPawn.
+		player.mo.CheckUse();
+		player.mo.CheckUndoMorph();
 		// Cycle psprites.
-		if (cl_predict_states || !predicting)
-			player.mo.TickPSprites();
+		player.mo.TickPSprites();
 
-		if (!predicting)
+		if (!IsPredicting())
 		{
 			// Other Counters
 			if (player.damagecount)	player.damagecount--;
@@ -1719,10 +1718,11 @@ class PlayerPawn : Actor
 				if (!(Level.maptime % player.hazardinterval) && player.hazardcount > 16*TICRATE)
 					player.mo.DamageMobj (NULL, NULL, 5, player.hazardtype);
 			}
-			player.mo.CheckPoison();
-			player.mo.CheckDegeneration();
-			player.mo.CheckAirSupply();
 		}
+
+		player.mo.CheckPoison();
+		player.mo.CheckDegeneration();
+		player.mo.CheckAirSupply();
 	}
 
 	//---------------------------------------------------------------------------

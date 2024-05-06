@@ -1181,9 +1181,6 @@ class PowerSpeed : Powerup
 		if (Owner == NULL || Owner.player == NULL)
 			return;
 
-		if (Owner.IsPredicting())
-			return;
-
 		if (NoTrail)
 			return;
 
@@ -1556,8 +1553,7 @@ class PowerTimeFreezer : Powerup
 		Super.DoEffect();
 		// [RH] Do not change LEVEL_FROZEN on odd tics, or the Revenant's tracer
 		// will get thrown off.
-		// [ED850] Don't change it if the player is predicted either.
-		if (Level.maptime & 1 || (Owner != null && Owner.IsPredicting()))
+		if (Level.maptime & 1)
 		{
 			return;
 		}

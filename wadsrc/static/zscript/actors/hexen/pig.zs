@@ -151,7 +151,7 @@ class PigPlayer : PlayerPawn
 		}
 		if(Vel.X == 0 && Vel.Y == 0 && random[PigPlayerThink]() < 64)
 		{ // Snout sniff
-			if (player.ReadyWeapon != null)
+			if (player.ReadyWeapon != null && (cl_predict_states || !IsPredicting()))
 			{
 				player.SetPsprite(PSP_WEAPON, player.ReadyWeapon.FindState('Grunt'));
 			}

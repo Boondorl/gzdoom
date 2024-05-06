@@ -2561,9 +2561,10 @@ static void P_ZMovement (AActor *mo, double oldfloorz)
 //
 // clip movement
 //
+	const bool predicting = IsPredicting(mo);
 	if (mo->Z() <= mo->floorz)
 	{	// Hit the floor
-		if (!IsPredicting(mo) &&
+		if (!predicting &&
 			mo->Sector->SecActTarget != NULL &&
 			mo->Sector->floorplane.ZatPoint(mo) == mo->floorz)
 		{ // [RH] Let the sector do something to the actor
@@ -2672,7 +2673,7 @@ static void P_ZMovement (AActor *mo, double oldfloorz)
 
 	if (mo->Top() > mo->ceilingz)
 	{ // hit the ceiling
-		if (!IsPredicting(mo) &&
+		if (!predicting &&
 			mo->Sector->SecActTarget != NULL &&
 			mo->Sector->ceilingplane.ZatPoint(mo) == mo->ceilingz)
 		{ // [RH] Let the sector do something to the actor
@@ -2817,9 +2818,6 @@ static void PlayerLandedOnThing (AActor *mo, AActor *onmobj)
 	{
 		mo->player->deltaviewheight = mo->Vel.Z / 8.;
 	}
-
-	if (IsPredicting(mo))
-		return;
 
 	P_FallingDamage (mo);
 
@@ -3841,6 +3839,7 @@ void AActor::Tick ()
 		return;
 	}
 
+	const bool predicting = IsPredicting(this);
 	if (flags5 & MF5_NOINTERACTION)
 	{
 		// only do the minimally necessary things here to save time:
@@ -3874,7 +3873,7 @@ void AActor::Tick ()
 	{
 		if (player)
 			player->crossingPortal = false;
-		if (!IsPredicting(this))
+		if (!predicting)
 		{
 			// Handle powerup effects here so that the order is controlled
 			// by the order in the inventory, not the order in the thinker table
@@ -4215,9 +4214,9 @@ void AActor::Tick ()
 			return;
 		}
 		// [ZZ] trigger hit floor/hit ceiling actions from XY movement
-		if (BlockingFloor && BlockingFloor != oldBlockingFloor && !IsPredicting(this) && BlockingFloor->SecActTarget)
+		if (BlockingFloor && BlockingFloor != oldBlockingFloor && !predicting && BlockingFloor->SecActTarget)
 			BlockingFloor->TriggerSectorActions(this, SECSPAC_HitFloor);
-		if (BlockingCeiling && BlockingCeiling != oldBlockingCeiling && !IsPredicting(this) && BlockingCeiling->SecActTarget)
+		if (BlockingCeiling && BlockingCeiling != oldBlockingCeiling && !predicting && BlockingCeiling->SecActTarget)
 			BlockingCeiling->TriggerSectorActions(this, SECSPAC_HitCeiling);
 		if (Vel.X == 0 && Vel.Y == 0) // Actors at rest
 		{
@@ -4274,7 +4273,7 @@ void AActor::Tick ()
 						|| ((onmo->activationtype & THINGSPEC_MissileTrigger) && (flags & MF_MISSILE))
 						) && (Level->maptime > onmo->lastbump)) // Leave the bumper enough time to go away
 					{
-						if (!IsPredicting(this))
+						if (!predicting)
 						{
 							if (P_ActivateThingSpecial(onmo, this))
 								onmo->lastbump = Level->maptime + TICRATE;
@@ -4318,11 +4317,11 @@ void AActor::Tick ()
 
 		UpdateWaterLevel ();
 
-		if (!cl_predict_states && IsPredicting(this))
+		if (predicting && !cl_predict_states)
 			return;
 
 		// Check for poison damage, but only once per PoisonPeriod tics (or once per second if none).
-		if (PoisonDurationReceived && (Level->time % (PoisonPeriodReceived ? PoisonPeriodReceived : TICRATE) == 0) && !IsPredicting(this))
+		if (PoisonDurationReceived && (Level->time % (PoisonPeriodReceived ? PoisonPeriodReceived : TICRATE) == 0) && !predicting)
 		{
 			P_DamageMobj(this, NULL, Poisoner, PoisonDamageReceived, PoisonDamageTypeReceived != NAME_None ? PoisonDamageTypeReceived : (FName)NAME_Poison, 0);
 
@@ -6497,9 +6496,6 @@ int P_GetThingFloorType (AActor *thing)
 
 bool P_HitWater (AActor * thing, sector_t * sec, const DVector3 &pos, bool checkabove, bool alert, bool force)
 {
-	if (IsPredicting(thing))
-		return false;
-
 	AActor *mo = NULL;
 	FSplashDef *splash;
 	int terrainnum;
@@ -6569,7 +6565,8 @@ foundone:
 	if (splashnum == -1)
 		return Terrains[terrainnum].IsLiquid;
 
-	const bool dealDamageOnLand = thing->player
+	const bool predicting = IsPredicting(thing);
+	const bool dealDamageOnLand = thing->player && !predicting
 		&& Terrains[terrainnum].DamageOnLand
 		&& Terrains[terrainnum].DamageAmount
 		&& (thing->Level->time & Terrains[terrainnum].DamageTimeMask);
@@ -6592,7 +6589,7 @@ foundone:
 	if (thing->Mass < 10)
 		smallsplash = true;
 
-	if (!(thing->flags3 & MF3_DONTSPLASH))
+	if (!predicting && !(thing->flags3 & MF3_DONTSPLASH))
 	{
 		if (smallsplash && splash->SmallSplash)
 		{
