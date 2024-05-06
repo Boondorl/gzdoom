@@ -149,15 +149,18 @@ class PhoenixRodPowered : PhoenixRod
 		Vector3 spawnpos = Vec3Offset(xo, yo, 26 + slope - Floorclip);
 
 		slope += 0.1;
-		Actor mo = Spawn("PhoenixFX2", spawnpos, ALLOW_REPLACE);
-		if (mo != null)
+		if (!IsPredicting())
 		{
-			mo.target = self;
-			mo.Angle = Angle;
-			mo.VelFromAngle();
-			mo.Vel.XY += Vel.XY;
-			mo.Vel.Z = mo.Speed * slope;
-			mo.CheckMissileSpawn (radius);
+			Actor mo = Spawn("PhoenixFX2", spawnpos, ALLOW_REPLACE);
+			if (mo != null)
+			{
+				mo.target = self;
+				mo.Angle = Angle;
+				mo.VelFromAngle();
+				mo.Vel.XY += Vel.XY;
+				mo.Vel.Z = mo.Speed * slope;
+				mo.CheckMissileSpawn (radius);
+			}
 		}
 		if (!player.refire)
 		{
@@ -186,7 +189,11 @@ class PhoenixRodPowered : PhoenixRod
 		}
 	}
 
-	
+	override void BackupActor(ActorBackup backup)
+	{
+		Super.BackupActor(backup);
+		backup.MarkField('FlameCount');
+	}
 }
 
 // Phoenix FX 1 -------------------------------------------------------------

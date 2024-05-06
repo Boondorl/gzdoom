@@ -7079,7 +7079,7 @@ DEFINE_ACTION_FUNCTION(AActor, SpawnMissileZAimed)
 AActor *P_SpawnMissileAngleZSpeed (AActor *source, double z,
 	PClassActor *type, DAngle angle, double vz, double speed, AActor *owner, bool checkspawn)
 {
-	if (source == nullptr || type == nullptr)
+	if (source == nullptr || type == nullptr || IsPredicting(source))
 	{
 		return nullptr;
 	}
@@ -7123,6 +7123,9 @@ DEFINE_ACTION_FUNCTION(AActor, SpawnMissileAngleZSpeed)
 
 AActor *P_SpawnSubMissile(AActor *source, PClassActor *type, AActor *target)
 {
+	if (IsPredicting(source))
+		return nullptr;
+
 	AActor *other = Spawn(source->Level, type, source->Pos(), ALLOW_REPLACE);
 
 	if (source == nullptr || type == nullptr)
@@ -7276,7 +7279,7 @@ DEFINE_ACTION_FUNCTION(AActor, SpawnPlayerMissile)
 	PARAM_BOOL(nofreeaim);
 	PARAM_BOOL(noautoaim);
 	PARAM_INT(aimflags);
-	AActor *missileactor;
+	AActor *missileactor = nullptr;
 	if (angle == DAngle::fromDeg(1e37)) angle = self->Angles.Yaw;
 	AActor *misl = P_SpawnPlayerMissile(self, x, y, z, type, angle, lt, &missileactor, nofreeaim, noautoaim, aimflags);
 	if (numret > 0) ret[0].SetObject(misl);

@@ -195,6 +195,9 @@ extend class Actor
 	//
 	void A_BFGSpray(class<Actor> spraytype = "BFGExtra", int numrays = 40, int damagecnt = 15, double ang = 90, double distance = 16*64, double vrange = 32, int defdamage = 0, int flags = 0)
 	{
+		if (IsPredicting())
+			return;
+			
 		int damage;
 		FTranslatedLineTarget t;
 
