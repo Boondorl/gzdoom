@@ -1501,39 +1501,39 @@ bool PIT_CheckThing(FMultiBlockThingsIterator &it, FMultiBlockThingsIterator::Ch
 		if (!P_CanCollideWith(tm.thing, thing)) return true;
 	}
 
-
-	if (!IsPredicting(tm.thing))
+	const bool predicting = IsPredicting(tm.thing);
+	// touchy object is alive, toucher is solid
+	if (thing->flags6 & MF6_TOUCHY && tm.thing->flags & MF_SOLID && thing->health > 0 &&
+		// Thing is an armed mine or a sentient thing
+		(thing->flags6 & MF6_ARMED || thing->IsSentient()) &&
+		// either different classes or players
+		(thing->player || thing->GetClass() != tm.thing->GetClass()) &&
+		// or different species if DONTHARMSPECIES
+		(!(thing->flags6 & MF6_DONTHARMSPECIES) || thing->GetSpecies() != tm.thing->GetSpecies()) &&
+		// touches vertically
+		topz >= tm.thing->Z() && tm.thing->Top() >= thing->Z() &&
+		// prevents lost souls from exploding when fired by pain elementals
+		(thing->master != tm.thing && tm.thing->master != thing))
+		// Difference with MBF: MBF hardcodes the LS/PE check and lets actors of the same species
+		// but different classes trigger the touchiness, but that seems less straightforwards.
 	{
-		// touchy object is alive, toucher is solid
-		if (thing->flags6 & MF6_TOUCHY && tm.thing->flags & MF_SOLID && thing->health > 0 &&
-			// Thing is an armed mine or a sentient thing
-			(thing->flags6 & MF6_ARMED || thing->IsSentient()) &&
-			// either different classes or players
-			(thing->player || thing->GetClass() != tm.thing->GetClass()) &&
-			// or different species if DONTHARMSPECIES
-			(!(thing->flags6 & MF6_DONTHARMSPECIES) || thing->GetSpecies() != tm.thing->GetSpecies()) &&
-			// touches vertically
-			topz >= tm.thing->Z() && tm.thing->Top() >= thing->Z() &&
-			// prevents lost souls from exploding when fired by pain elementals
-			(thing->master != tm.thing && tm.thing->master != thing))
-			// Difference with MBF: MBF hardcodes the LS/PE check and lets actors of the same species
-			// but different classes trigger the touchiness, but that seems less straightforwards.
+		if (!predicting)
 		{
 			thing->flags6 &= ~MF6_ARMED; // Disarm
 			P_DamageMobj(thing, NULL, NULL, thing->health, NAME_None, DMG_FORCED);  // kill object
-			return true;
 		}
+		return true;
+	}
 
-		// Check for MF6_BUMPSPECIAL
-		// By default, only players can activate things by bumping into them
-		if ((thing->flags6 & MF6_BUMPSPECIAL) && ((tm.thing->player != NULL)
-			|| ((thing->activationtype & THINGSPEC_MonsterTrigger) && (tm.thing->flags3 & MF3_ISMONSTER))
-			|| ((thing->activationtype & THINGSPEC_MissileTrigger) && (tm.thing->flags & MF_MISSILE))
-			) && (thing->Level->maptime > thing->lastbump)) // Leave the bumper enough time to go away
-		{
-			if (P_ActivateThingSpecial(thing, tm.thing))
-				thing->lastbump = thing->Level->maptime + TICRATE;
-		}
+	// Check for MF6_BUMPSPECIAL
+	// By default, only players can activate things by bumping into them
+	if (!predicting && (thing->flags6 & MF6_BUMPSPECIAL) && ((tm.thing->player != NULL)
+		|| ((thing->activationtype & THINGSPEC_MonsterTrigger) && (tm.thing->flags3 & MF3_ISMONSTER))
+		|| ((thing->activationtype & THINGSPEC_MissileTrigger) && (tm.thing->flags & MF_MISSILE))
+		) && (thing->Level->maptime > thing->lastbump)) // Leave the bumper enough time to go away
+	{
+		if (P_ActivateThingSpecial(thing, tm.thing))
+			thing->lastbump = thing->Level->maptime + TICRATE;
 	}
 
 	// Check for skulls slamming into things
@@ -1544,32 +1544,25 @@ bool PIT_CheckThing(FMultiBlockThingsIterator &it, FMultiBlockThingsIterator::Ch
 		return res;
 	}
 
-	// [ED850] Player Prediction ends here. There is nothing else they could/should do.
-	if (IsPredicting(tm.thing))
-	{
-		solid = (thing->flags & MF_SOLID) &&
-			!(thing->flags & MF_NOCLIP) &&
-			((tm.thing->flags & MF_SOLID) || (tm.thing->flags6 & MF6_BLOCKEDBYSOLIDACTORS));
-
-		return !solid || unblocking;
-	}
-
 	// Check for blasted thing running into another
 	if ((tm.thing->flags2 & MF2_BLASTED) && (thing->flags & MF_SHOOTABLE))
 	{
 		if (!(thing->flags2 & MF2_BOSS) && (thing->flags3 & MF3_ISMONSTER) && !(thing->flags3 & MF3_DONTBLAST))
 		{
 			// ideally this should take the mass factor into account
-			thing->Vel += tm.thing->Vel.XY();
-			if (fabs(thing->Vel.X) + fabs(thing->Vel.Y) > 3.)
+			if (!predicting)
 			{
-				int newdam;
-				damage = (tm.thing->Mass / 100) + 1;
-				newdam = P_DamageMobj(thing, tm.thing, tm.thing, damage, tm.thing->DamageType);
-				P_TraceBleed(newdam > 0 ? newdam : damage, thing, tm.thing);
-				damage = (thing->Mass / 100) + 1;
-				newdam = P_DamageMobj(tm.thing, thing, thing, damage >> 2, tm.thing->DamageType);
-				P_TraceBleed(newdam > 0 ? newdam : damage, tm.thing, thing);
+				thing->Vel += tm.thing->Vel.XY();
+				if (fabs(thing->Vel.X) + fabs(thing->Vel.Y) > 3.)
+				{
+					int newdam;
+					damage = (tm.thing->Mass / 100) + 1;
+					newdam = P_DamageMobj(thing, tm.thing, tm.thing, damage, tm.thing->DamageType);
+					P_TraceBleed(newdam > 0 ? newdam : damage, thing, tm.thing);
+					damage = (thing->Mass / 100) + 1;
+					newdam = P_DamageMobj(tm.thing, thing, thing, damage >> 2, tm.thing->DamageType);
+					P_TraceBleed(newdam > 0 ? newdam : damage, tm.thing, thing);
+				}
 			}
 			return false;
 		}
@@ -1727,7 +1720,7 @@ bool PIT_CheckThing(FMultiBlockThingsIterator &it, FMultiBlockThingsIterator::Ch
 		}
 		return false;		// don't traverse any more
 	}
-	if (thing->flags2 & MF2_PUSHABLE && !(tm.thing->flags2 & MF2_CANNOTPUSH))
+	if (!predicting && thing->flags2 & MF2_PUSHABLE && !(tm.thing->flags2 & MF2_CANNOTPUSH))
 	{ // Push thing
 		if (thing->lastpush != tm.PushTime)
 		{
@@ -1741,7 +1734,7 @@ bool PIT_CheckThing(FMultiBlockThingsIterator &it, FMultiBlockThingsIterator::Ch
 		((tm.thing->flags & MF_SOLID) || (tm.thing->flags6 & MF6_BLOCKEDBYSOLIDACTORS));
 
 	// Check for special pickup
-	if ((thing->flags & MF_SPECIAL) && (tm.thing->flags & MF_PICKUP)
+	if (!predicting && (thing->flags & MF_SPECIAL) && (tm.thing->flags & MF_PICKUP)
 		// [RH] The next condition is to compensate for the extra height
 		// that gets added by P_CheckPosition() so that you cannot pick
 		// up things that are above your true height.
@@ -2304,6 +2297,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 	sector_t*	oldsec = thing->Sector;	// [RH] for sector actions
 	sector_t*	newsec;
 
+	const bool predicting = IsPredicting(thing);
 	tm.floatok = false;
 	tm.portalstep = false;
 	oldz = thing->Z();
@@ -2317,7 +2311,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 		AActor *BlockingMobj = thing->BlockingMobj;
 		// This gets called regardless of whether or not the following checks allow the thing to pass. This is because a player
 		// could step on top of an enemy but we still want it to register as a collision.
-		if (BlockingMobj != nullptr && !IsPredicting(thing))
+		if (BlockingMobj != nullptr && !predicting)
 			P_CollidedWith(thing, BlockingMobj);
 
 		// Solid wall or thing
@@ -2598,7 +2592,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 				thing->SetXYZ(thingpos.X, thingpos.Y, pos.Z);
 				if (!P_CheckPosition(thing, pos.XY(), true))	// check if some actor blocks us on the other side. (No line checks, because of the mess that'd create.)
 				{
-					if (thing->BlockingMobj != nullptr && !IsPredicting(thing))
+					if (thing->BlockingMobj != nullptr && !predicting)
 						P_CollidedWith(thing, thing->BlockingMobj);
 
 					thing->SetXYZ(oldthingpos);
@@ -2690,7 +2684,7 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 			oldside = P_PointOnLineSide(spec.Oldrefpos, ld);
 			if (side != oldside && ld->special && !(thing->flags6 & MF6_NOTRIGGER))
 			{
-				if (IsPredicting(thing))
+				if (predicting)
 				{
 					P_PredictLine(ld, thing, oldside, SPAC_Cross);
 				}
@@ -2720,16 +2714,9 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 		}
 	}
 
-	// [RH] Don't activate anything if just predicting
-	if (IsPredicting(thing))
-	{
-		thing->flags6 &= ~MF6_INTRYMOVE;
-		return true;
-	}
-
 	// [RH] Check for crossing fake floor/ceiling
 	newsec = thing->Sector;
-	if (newsec->heightsec && oldsec->heightsec && newsec->SecActTarget)
+	if (!predicting && newsec->heightsec && oldsec->heightsec && newsec->SecActTarget)
 	{
 		const sector_t *hs = newsec->heightsec;
 		double eyez = thing->Z() + viewheight;
@@ -2774,7 +2761,8 @@ bool P_TryMove(AActor *thing, const DVector2 &pos,
 	}
 
 	// [RH] If changing sectors, trigger transitions
-	thing->CheckSectorTransition(oldsec);
+	if (!predicting)
+		thing->CheckSectorTransition(oldsec);
 	thing->flags6 &= ~MF6_INTRYMOVE;
 	return true;
 
@@ -2783,7 +2771,7 @@ pushline:
 	thing->SetZ(oldz);
 
 	// [RH] Don't activate anything if just predicting
-	if (IsPredicting(thing))
+	if (predicting)
 	{
 		return false;
 	}
@@ -2994,7 +2982,7 @@ void FSlide::HitSlideLine(line_t* ld)
 		{
 			tmmove.X = -tmmove.X / 2;
 			tmmove.Y /= 2; // absorb half the velocity
-			if (slidemo->player && slidemo->health > 0 && !IsPredicting(slidemo))
+			if (slidemo->player && slidemo->health > 0 && (slidemo->player->ClientState & CS_FRESH_TICK))
 			{
 				S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!//   ^
 			}
@@ -3010,7 +2998,7 @@ void FSlide::HitSlideLine(line_t* ld)
 		{
 			tmmove.X /= 2; // absorb half the velocity
 			tmmove.Y = -tmmove.Y / 2;
-			if (slidemo->player && slidemo->health > 0 && !IsPredicting(slidemo))
+			if (slidemo->player && slidemo->health > 0 && (slidemo->player->ClientState & CS_FRESH_TICK))
 			{
 				S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
 			}
@@ -3042,7 +3030,7 @@ void FSlide::HitSlideLine(line_t* ld)
 	{
 		moveangle = ::deltaangle(deltaangle, lineangle);
 		movelen /= 2; // absorb
-		if (slidemo->player && slidemo->health > 0 && !IsPredicting(slidemo))
+		if (slidemo->player && slidemo->health > 0 && (slidemo->player->ClientState & CS_FRESH_TICK))
 		{
 			S_Sound(slidemo, CHAN_VOICE, 0, "*grunt", 1, ATTN_IDLE); // oooff!
 		}

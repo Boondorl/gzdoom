@@ -102,9 +102,6 @@ class StateProvider : Inventory
 		{
 			A_StartSound(weapon.AttackSound, CHAN_WEAPON);
 		}
-
-		if (IsPredicting())
-			return;
 		
 		if (range == 0)	range = PLAYERMISSILERANGE;
 
@@ -225,7 +222,7 @@ class StateProvider : Inventory
 				return null, null;	// out of ammo
 		}
 
-		if (missiletype && !IsPredicting()) 
+		if (missiletype) 
 		{
 			double ang = self.Angle - 90;
 			Vector2 ofs = AngleToVector(ang, spawnofs_xy);
@@ -290,9 +287,6 @@ class StateProvider : Inventory
 			if (!weapon.DepleteAmmo(weapon.bAltFire, true))
 				return;	// out of ammo
 		}
-
-		if (IsPredicting())
-			return;
 
 		if (!norandom)
 			damage *= random[cwpunch](1, 8);
@@ -380,9 +374,6 @@ class StateProvider : Inventory
 			if (!weapon.DepleteAmmo(weapon.bAltFire, true))
 				return;	// out of ammo
 		}
-
-		if (IsPredicting())
-			return;
 
 		if (!(flags & RGF_EXPLICITANGLE))
 		{
