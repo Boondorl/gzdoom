@@ -447,7 +447,7 @@ bool FLevelLocals::EV_Teleport (int tid, int tag, line_t *line, int side, AActor
 				thing->Vel.Y = vy*c + vx*s;
 			}
 		}
-		if (vx == 0 && vy == 0 && (cl_predict_states || !IsPredicting(thing)))
+		if (vx == 0 && vy == 0 && thing->player != nullptr && (cl_predict_states || !IsPredicting(thing)))
 		{
 			PlayIdle (thing->player->mo);
 		}
