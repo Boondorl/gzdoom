@@ -32,6 +32,8 @@
 #include "doomdef.h"
 #include "d_protocol.h"
 #include "i_net.h"
+#include "types.h"
+#include <variant>
 
 class AActor;
 
@@ -135,8 +137,7 @@ struct FActorBackup
 {
 private:
 	AActor* actor = nullptr;
-	TMap<FName, int> IntFields = {};
-	TMap<FName, double> FloatFields = {};
+	TMap<FName, std::pair<PType*, std::variant<bool, int, double>>> Fields;
 
 public:
 	FActorBackup(AActor* mo) : actor(mo) {}

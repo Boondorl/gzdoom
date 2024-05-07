@@ -190,10 +190,12 @@ void FActorBackup::MarkField(const FName& field)
 	if (sym == nullptr)
 		return;
 
-	if (sym->Type == TypeSInt32)
-		IntFields.Insert(field, actor->IntVar(field));
+	if (sym->Type == TypeBool)
+		Fields.Insert(field, std::make_pair(TypeBool, actor->BoolVar(field)));
+	else if (sym->Type == TypeSInt32 || sym->Type == TypeSInt16 || sym->Type == TypeSInt8 || sym->Type == TypeUInt32 || sym->Type == TypeUInt16 || sym->Type == TypeUInt8)
+		Fields.Insert(field, std::make_pair(TypeSInt32, actor->IntVar(field)));
 	else if (sym->Type == TypeFloat64 || sym->Type == TypeFloat32)
-		FloatFields.Insert(field, actor->FloatVar(field));
+		Fields.Insert(field, std::make_pair(TypeFloat64, actor->FloatVar(field)));
 }
 
 bool FActorBackup::BackupActor()
@@ -204,7 +206,7 @@ bool FActorBackup::BackupActor()
 		VMCall(func, params, 2, nullptr, 0);
 	}
 
-	return IntFields.CountUsed() || FloatFields.CountUsed();
+	return Fields.CountUsed();
 }
 
 void FActorBackup::RestoreActor()
@@ -213,20 +215,25 @@ void FActorBackup::RestoreActor()
 	if (actor == nullptr || (actor->ObjectFlags & OF_EuthanizeMe))
 		return;
 
-	TMap<FName, int>::Iterator intIt = { IntFields };
-	TMap<FName, int>::Pair* iPair = nullptr;
-	while (intIt.NextPair(iPair))
+	TMap<FName, std::pair<PType*, std::variant<bool, int, double>>>::Iterator it = { Fields };
+	TMap<FName, std::pair<PType*, std::variant<bool, int, double>>>::Pair* pair = nullptr;
+	while (it.NextPair(pair))
 	{
-		int& ref = actor->IntVar(iPair->Key);
-		ref = iPair->Value;
-	}
-
-	TMap<FName, double>::Iterator floatIt = { FloatFields };
-	TMap<FName, double>::Pair* fPair = nullptr;
-	while (floatIt.NextPair(fPair))
-	{
-		double& ref = actor->FloatVar(fPair->Key);
-		ref = fPair->Value;
+		if (pair->Value.first == TypeBool)
+		{
+			bool& ref = actor->BoolVar(pair->Key);
+			ref = std::get<0>(pair->Value.second);
+		}
+		else if (pair->Value.first == TypeSInt32)
+		{
+			int& ref = actor->IntVar(pair->Key);
+			ref = std::get<1>(pair->Value.second);
+		}
+		else if (pair->Value.first == TypeFloat64)
+		{
+			double& ref = actor->FloatVar(pair->Key);
+			ref = std::get<2>(pair->Value.second);
+		}
 	}
 }
 
@@ -1813,7 +1820,11 @@ void P_UnPredictPlayer ()
 				if (psp->ObjectFlags & OF_EuthanizeMe)
 					continue;
 
+				// These are set by the renderer so they shouldn't be restored.
+				WeaponInterp Prev = psp->Prev, Vert = psp->Vert;
 				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+				psp->Prev = Prev;
+				psp->Vert = Vert;
 				psp->firstTic = false;
 				++i;
 			}
@@ -1821,7 +1832,10 @@ void P_UnPredictPlayer ()
 			for (; i < PredictionPSprites.Size(); ++i)
 			{
 				auto psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
+				WeaponInterp Prev = psp->Prev, Vert = psp->Vert;
 				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+				psp->Prev = Prev;
+				psp->Vert = Vert;
 				psp->firstTic = false;
 			}
 		}
