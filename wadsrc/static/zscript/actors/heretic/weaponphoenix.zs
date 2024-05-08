@@ -93,6 +93,7 @@ class PhoenixRodPowered : PhoenixRod
 
 	override void EndPowerup ()
 	{
+		Owner.player.mo.MispredictPSprites();
 		if (FlameCount > 0) DepleteAmmo (bAltFire);
 		Owner.player.refire = 0;
 		Owner.A_StopSound (CHAN_WEAPON);

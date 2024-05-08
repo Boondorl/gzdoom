@@ -1183,13 +1183,15 @@ enum EPlayerCheats
 
 enum EClientState
 {
-	CS_NONE = 0,
-	CS_PREDICTING = 1,			// Client is currently predicting movement (unconfirmed position).
-	CS_LATEST_TICK = 1 << 1,	// Client is on the latest tick taking prediction into account.
-	CS_RUBBERBANDING = 1 << 2,	// Client's misprediction is being corrected.
-	CS_FRESH_TICK = 1 << 3,		// Client is playing a tick for the first time.
+	CS_NONE					= 0,
+	CS_PREDICTING			= 1,		// Client is currently predicting movement (unconfirmed position).
+	CS_LATEST_TICK			= 1 << 1,	// Client is on the latest tick taking prediction into account.
+	CS_RUBBERBANDING		= 1 << 2,	// Client's misprediction is being corrected.
+	CS_FRESH_TICK			= 1 << 3,	// Client is playing ticks for the first time.
+	CS_STATE_MISPREDICT		= 1 << 4,	// Client's state was mispredicted.
+	CS_PSPRITE_MISPREDICT	= 1 << 5,	// Client's PSprites were mispredicted.
 
-	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING | CS_FRESH_TICK,
+	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING | CS_FRESH_TICK | CS_STATE_MISPREDICT | CS_PSPRITE_MISPREDICT,
 };
 
 enum EWeaponState

@@ -1352,6 +1352,20 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, ShouldDoEffect, ShouldDoEffect)
 	ACTION_RETURN_BOOL(ShouldDoEffect(self));
 }
 
+DEFINE_ACTION_FUNCTION_NATIVE(AActor, MispredictState, MispredictState)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	MispredictState(self);
+	return 0;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_PlayerPawn, MispredictPSprites, MispredictPSprites)
+{
+	PARAM_SELF_PROLOGUE(AActor);
+	MispredictPSprites(self);
+	return 0;
+}
+
 //----------------------------------------------------------------------------
 //
 // PROC P_PlayerThink

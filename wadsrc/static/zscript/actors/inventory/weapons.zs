@@ -730,6 +730,7 @@ class Weapon : StateProvider
 		{
 			if (!Owner.player.GetNeverSwitch() && !bNo_Auto_Switch)
 			{
+				Owner.player.mo.MispredictPSprites();
 				Owner.player.PendingWeapon = self;
 			}
 			if (Owner.player.mo == players[consoleplayer].camera)

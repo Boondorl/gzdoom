@@ -963,6 +963,7 @@ static bool TriggerPainChance(AActor *target, FName mod = NAME_None, bool forced
 				if (painstate != NULL)
 				{
 					flinched = true;
+					MispredictState(target);
 					target->SetState(painstate);
 				}
 			}
@@ -982,6 +983,7 @@ static bool TriggerPainChance(AActor *target, FName mod = NAME_None, bool forced
 			if (painstate != NULL)
 			{
 				flinched = true;
+				MispredictState(target);
 				target->SetState(painstate);
 			}
 			if (mod == NAME_PoisonCloud)
