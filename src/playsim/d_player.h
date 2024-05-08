@@ -137,13 +137,15 @@ typedef enum
 
 typedef enum
 {
-	CS_NONE = 0,
-	CS_PREDICTING = 1,			// Client is currently predicting movement (unconfirmed position).
-	CS_LATEST_TICK = 1 << 1,	// Client is on the latest tick taking prediction into account.
-	CS_RUBBERBANDING = 1 << 2,	// Client's misprediction is being corrected.
-	CS_FRESH_TICK = 1 << 3,		// Client is playing a tick for the first time.
+	CS_NONE					= 0,
+	CS_PREDICTING			= 1,		// Client is currently predicting movement (unconfirmed position).
+	CS_LATEST_TICK			= 1 << 1,	// Client is on the latest tick taking prediction into account.
+	CS_RUBBERBANDING		= 1 << 2,	// Client's misprediction is being corrected.
+	CS_FRESH_TICK			= 1 << 3,	// Client is playing ticks for the first time.
+	CS_STATE_MISPREDICT		= 1 << 4,	// Client's state was mispredicted.
+	CS_PSPRITE_MISPREDICT	= 1 << 5,	// Client's PSprites were mispredicted.
 
-	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING | CS_FRESH_TICK,
+	CS_PREDICTION_STATE = CS_PREDICTING | CS_LATEST_TICK | CS_RUBBERBANDING | CS_FRESH_TICK | CS_STATE_MISPREDICT | CS_PSPRITE_MISPREDICT,
 } clientstate_t;
 
 enum
@@ -534,7 +536,25 @@ inline int IsPredicting(AActor* self)
 
 inline int ShouldDoEffect(AActor* self)
 {
-	return self->player == nullptr || self->player->mo != self || (self->player->ClientState & CS_FRESH_TICK) || (!cl_predict_states && (self->flags9 & MF9_IN_STATE));
+	const bool state = (self->flags9 & MF9_IN_STATE);
+	const bool psprite = (self->flags9 & MF9_IN_PSPRITE);
+	return self->player == nullptr || self->player->mo != self
+			|| (self->player->ClientState & CS_FRESH_TICK)
+			|| (!cl_predict_states && state)
+			|| ((self->player->ClientState & CS_STATE_MISPREDICT) && state && !psprite)
+			|| ((self->player->ClientState & CS_PSPRITE_MISPREDICT) && psprite);
+}
+
+inline void MispredictState(AActor* self)
+{
+	if (self->player != nullptr && cl_predict_states && self->GetNetworkID() - 1u == consoleplayer)
+		self->player->ClientState |= CS_STATE_MISPREDICT;
+}
+
+inline void MispredictPSprites(AActor* self)
+{
+	if (self->player != nullptr && cl_predict_states && self->GetNetworkID() - 1u == consoleplayer)
+		self->player->ClientState |= CS_PSPRITE_MISPREDICT;
 }
 
 #endif // __D_PLAYER_H__

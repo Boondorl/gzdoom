@@ -566,8 +566,12 @@ void DPSprite::SetState(FState *newstate, bool pending)
 					FState::StaticGetStateName(newstate).GetChars(), newstate->ActionFunc->PrintableName);
 				newstate->ActionFunc = nullptr;
 			}
+
+			const ActorFlags9 curPSprite = (Owner->mo->flags9 & MF9_IN_PSPRITE);
+			Owner->mo->flags9 |= MF9_IN_PSPRITE;
 			if (newstate->CallAction(Owner->mo, Caller, &stp, &nextstate))
 			{
+				Owner->mo->flags9 &= (~MF9_IN_PSPRITE | curPSprite);
 				// It's possible this call resulted in this very layer being replaced.
 				if (ObjectFlags & OF_EuthanizeMe)
 				{
@@ -585,6 +589,7 @@ void DPSprite::SetState(FState *newstate, bool pending)
 					return;
 				}
 			}
+			Owner->mo->flags9 &= (~MF9_IN_PSPRITE | curPSprite);
 		}
 
 		newstate = State->GetNextState();

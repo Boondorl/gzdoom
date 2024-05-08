@@ -2588,6 +2588,7 @@ class PlayerPawn : Actor
 	native void CheckUse();
 	native void CheckWeaponButtons();
 	native void MarkPlayerSounds();
+	native void MispredictPSprites();
 	private native int SetupCrouchSprite(int c);
 	private native clearscope Color GetPainFlashForType(Name type);
 }

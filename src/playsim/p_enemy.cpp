@@ -3173,7 +3173,7 @@ DEFINE_ACTION_FUNCTION(AActor, A_Pain)
 			sfx_id = S_FindSound(pain_amount);
 		}
 
-		if (self->player->ClientState & CS_FRESH_TICK)
+		if (ShouldDoEffect(self))
 			S_Sound (self, CHAN_VOICE, 0, sfx_id, 1, ATTN_NORM);
 	}
 	else if (self->PainSound.isvalid())
