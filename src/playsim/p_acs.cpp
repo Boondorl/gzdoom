@@ -10504,6 +10504,9 @@ EXTERN_CVAR (Bool, sv_cheats)
 
 int P_StartScript (FLevelLocals *Level, AActor *who, line_t *where, int script, const char *map, const int *args, int argcount, int flags)
 {
+	if (players[consoleplayer].ClientState & CS_PREDICTING)
+		return false;
+
 	if (map == NULL || 0 == strnicmp (Level->MapName.GetChars(), map, 8))
 	{
 		FBehavior *module = NULL;
@@ -10559,6 +10562,9 @@ int P_StartScript (FLevelLocals *Level, AActor *who, line_t *where, int script, 
 
 void P_SuspendScript (FLevelLocals *Level, int script, const char *map)
 {
+	if (players[consoleplayer].ClientState & CS_PREDICTING)
+		return;
+
 	if (strnicmp (Level->MapName.GetChars(), map, 8))
 		addDefered (FindLevelInfo (map), acsdefered_t::defsuspend, script, NULL, 0, NULL);
 	else
@@ -10567,6 +10573,9 @@ void P_SuspendScript (FLevelLocals *Level, int script, const char *map)
 
 void P_TerminateScript (FLevelLocals *Level, int script, const char *map)
 {
+	if (players[consoleplayer].ClientState & CS_PREDICTING)
+		return;
+
 	if (strnicmp (Level->MapName.GetChars(), map, 8))
 		addDefered (FindLevelInfo (map), acsdefered_t::defterminate, script, NULL, 0, NULL);
 	else
