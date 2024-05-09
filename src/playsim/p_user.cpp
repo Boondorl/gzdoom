@@ -443,6 +443,7 @@ void player_t::CopyFrom(player_t &p, bool copyPSP)
 	MUSINFOactor = p.MUSINFOactor;
 	MUSINFOtics = p.MUSINFOtics;
 	SoundClass = p.SoundClass;
+	angleOffsetTargets = p.angleOffsetTargets;
 	if (copyPSP)
 	{
 		// This needs to transfer ownership completely.
