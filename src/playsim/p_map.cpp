@@ -4630,9 +4630,6 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 		*actualdamage = 0;
 	}
 
-	if (IsPredicting(t1))
-		return nullptr;
-
 	double pc = pitch.Cos();
 
 	direction = { pc * angle.Cos(), pc * angle.Sin(), -pitch.Sin() };
@@ -4667,25 +4664,13 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 	// [MC] To prevent possible mod breakage, this flag is pretty much necessary.
 	// Somewhere, someone is relying on these to spawn on actors and move through them.
 
-	if ((puffDefaults->flags7 & MF7_ALLOWTHRUFLAGS))
+	if (puffDefaults && (puffDefaults->flags7 & MF7_ALLOWTHRUFLAGS))
 	{
-		TData.ThruSpecies = (puffDefaults && (puffDefaults->flags6 & MF6_THRUSPECIES));
-		TData.ThruActors = (puffDefaults && (puffDefaults->flags2 & MF2_THRUACTORS));
-		
-		// [MC] Because this is a one-hit trace event, we need to spawn the puff, get the species
-		// and destroy it. Assume there is no species unless tempuff isn't NULL. We cannot get
-		// a proper species the same way as puffDefaults flags it appears...
-
-		AActor *tempuff = NULL;
-		if (pufftype != NULL)
-			tempuff = Spawn(t1->Level, pufftype, t1->Pos(), ALLOW_REPLACE);
-		if (tempuff != NULL)
-		{
-			TData.PuffSpecies = tempuff->GetSpecies();
-			TData.UseThruBits = tempuff->flags8 & MF8_ALLOWTHRUBITS;
-			TData.ThruBits = tempuff->ThruBits;
-			tempuff->Destroy();
-		}
+		TData.ThruSpecies = (puffDefaults->flags6 & MF6_THRUSPECIES);
+		TData.ThruActors = (puffDefaults->flags2 & MF2_THRUACTORS);
+		TData.PuffSpecies = puffDefaults->Species == NAME_None ? puffDefaults->GetClass()->TypeName : puffDefaults->Species;
+		TData.UseThruBits = (puffDefaults->flags8 & MF8_ALLOWTHRUBITS);
+		TData.ThruBits = puffDefaults->ThruBits;
 	}
 	else
 	{
@@ -4701,8 +4686,9 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 		damageType = puffDefaults->DamageType;
 	}
 
+	const bool predicting = IsPredicting(t1);
 	uint32_t tflags = TRACE_NoSky | TRACE_Impact;
-	if (nointeract || (puffDefaults && puffDefaults->flags6 & MF6_NOTRIGGER)) tflags &= ~TRACE_Impact;
+	if (nointeract || predicting || (puffDefaults && puffDefaults->flags6 & MF6_NOTRIGGER)) tflags &= ~TRACE_Impact;
 	if (spawnSky)
 	{
 		tflags &= ~TRACE_NoSky;
@@ -4739,10 +4725,13 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 	if (!Trace(tempos, t1->Sector, direction, distance, MF_SHOOTABLE, 
 		ML_BLOCKEVERYTHING | ML_BLOCKHITSCAN, t1, trace, tflags, CheckForActor, &TData))
 	{ // hit nothing
-		if (!nointeract && puffDefaults && puffDefaults->ActiveSound.isvalid())
+		if (!nointeract && puffDefaults && puffDefaults->ActiveSound.isvalid() && ShouldDoEffect(t1))
 		{ // Play miss sound
 			S_Sound(t1, CHAN_WEAPON, 0, puffDefaults->ActiveSound, 1, ATTN_NORM);
 		}
+
+		if (predicting)
+			return nullptr;
 
 		// [MC] LAF_NOINTERACT guarantees puff spawning and returns it directly to the calling function.
 		// No damage caused, no sounds played, no blood splatters.
@@ -4765,6 +4754,11 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 	{
 		if (trace.HitType != TRACE_HitActor)
 		{
+			if (predicting)
+			{
+				if (victim != NULL) victim->unlinked = trace.unlinked;
+				return nullptr;
+			}
 
 			if (trace.HitType == TRACE_HasHitSky || (trace.HitType == TRACE_HitWall
 				&& trace.Line->special == Line_Horizon && spawnSky))
@@ -4824,6 +4818,19 @@ AActor *P_LineAttack(AActor *t1, DAngle angle, double distance,
 		}
 		else
 		{
+			if (predicting)
+			{
+				if (victim != NULL)
+				{
+					victim->linetarget = trace.Actor;
+					victim->attackAngleFromSource = trace.SrcAngleFromTarget;
+					// With arbitrary portals this cannot be calculated so using the actual attack angle is the only option.
+					victim->angleFromSource = trace.unlinked ? victim->attackAngleFromSource : t1->AngleTo(trace.Actor);
+					victim->unlinked = trace.unlinked;
+				}
+				return nullptr;
+			}
+
 			// Hit a thing, so it could be either a puff or blood
 			DVector3 bleedpos = trace.HitPos;
 			// position a bit closer for puffs/blood if using compatibility mode.
