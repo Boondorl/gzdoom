@@ -1177,9 +1177,9 @@ class Actor : Thinker native
 	native void A_SoundVolume(int slot, double volume);
 	native void A_SoundPitch(int slot, double pitch);
 	deprecated("2.3", "Use A_StartSound(<sound>, CHAN_WEAPON) instead") void A_PlayWeaponSound(sound whattoplay, bool fullvol = false) { A_StartSound(whattoplay, CHAN_WEAPON, 0, 1, fullvol? ATTN_NONE : ATTN_NORM); }
-	native void A_StopSound(int slot = CHAN_VOICE);	// Bad default but that's what is originally was...
-	void A_StopAllSounds()	{	A_StopSounds(0,0);	}
-	native void A_StopSounds(int chanmin, int chanmax);
+	native void A_StopSound(int slot = CHAN_VOICE, bool noPredict = false); // Bad default but that's what is originally was...
+	void A_StopAllSounds(bool noPredict = false)	{	A_StopSounds(0,0,noPredict);	}
+	native void A_StopSounds(int chanmin, int chanmax, bool noPredict = false);
 	deprecated("2.3", "Use A_StartSound() instead") native void A_PlaySoundEx(sound whattoplay, name slot, bool looping = false, int attenuation = 0);
 	deprecated("2.3", "Use A_StopSound() instead") native void A_StopSoundEx(name slot);
 	native clearscope bool IsActorPlayingSound(int channel, Sound snd = -1);

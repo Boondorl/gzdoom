@@ -32,6 +32,7 @@ enum EChanFlag
 	CHANF_TRANSIENT = 32768,	// Do not record in savegames - used for sounds that get restarted outside the sound system (e.g. ambients in SW and Blood)
 	CHANF_FORCE = 65536,		// Start, even if sound is paused.
 	CHANF_SINGULAR = 0x20000,		// Only start if no sound of this name is already playing.
+	CHANF_NO_PREDICT = 0x40000,	// Sound should only play back on real ticks.
 };
 
 typedef TFlags<EChanFlag> EChanFlags;
