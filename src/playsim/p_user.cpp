@@ -1622,6 +1622,8 @@ void P_PredictPlayer (player_t *player)
 		PredictionViewPosBackup.Flags = act->ViewPos->Flags;
 	}
 
+	// Back up specific fields on the player's inventory items. Needed for improved weapon prediction but can be used
+	// for anything else the player might need e.g. while moving.
 	for (AActor* inv = act->Inventory; inv != nullptr; inv = inv->Inventory)
 	{
 		FActorBackup backup(inv);
@@ -1634,17 +1636,18 @@ void P_PredictPlayer (player_t *player)
 	while (PredictionWeapons.Size() && PredictionWeapons[0].GameTic < gametic)
 		PredictionWeapons.Delete(0);
 
-	act->flags &= ~MF_PICKUP;
-	act->flags2 &= ~MF2_PUSHWALL;
 	player->cheats |= CF_PREDICTING; // Deprecated but needs to be kept around for existing ZScript.
 	player->ClientState |= CS_PREDICTING;
 
+	// Backup sector information.
 	BackupNodeList(act, act->touching_sectorlist, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
 	BackupNodeList(act, act->touching_rendersectors, &sector_t::touching_renderthings, PredictionRenderSectors_sprev_Backup, PredictionRenderSectorsBackup);
 	BackupNodeList(act, act->touching_sectorportallist, &sector_t::sectorportal_thinglist, PredictionPortalSectors_sprev_Backup, PredictionPortalSectorsBackup);
 	BackupNodeList(act, act->touching_lineportallist, &FLinePortal::lineportal_thinglist, PredictionPortalLines_sprev_Backup, PredictionPortalLinesBackup);
 
 	// Keep an ordered list off all actors in the linked sector.
+	// TODO: This has a chance to crash if an Actor does get spawned/destroyed. Needs better safety barriers in the
+	// future.
 	PredictionSectorListBackup.Clear();
 	if (!(act->flags & MF_NOSECTOR))
 	{
@@ -1769,10 +1772,9 @@ void P_UnPredictPlayer ()
 	{
 		AActor *act = player->mo;
 
+		// (Un)Morphed while predicting; don't allow this but don't inelegantly crash either.
 		if (act != PredictionActor)
-		{
-			// Q: Can this happen? If yes, can we continue?
-		}
+			I_Error("Player changed Actors while predicting (this is currently not supported).");
 
 		FRandom::RestoreRNGState(PredictionRNG);
 
@@ -1844,6 +1846,7 @@ void P_UnPredictPlayer ()
 				++i;
 			}
 
+			// Recreate any remaining ones.
 			for (; i < PredictionPSprites.Size(); ++i)
 			{
 				auto psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);

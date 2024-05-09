@@ -2217,7 +2217,7 @@ void P_FakeZMovement(AActor *mo)
 
 static void CheckForPushSpecial(line_t *line, int side, AActor *mobj, DVector2 *posforwindowcheck)
 {
-	if (line->special && !(mobj->flags6 & MF6_NOTRIGGER))
+	if (line->special && !(mobj->flags6 & MF6_NOTRIGGER) && !IsPredicting(mobj))
 	{
 		if (posforwindowcheck && !(mobj->Level->i_compatflags2 & COMPATF2_PUSHWINDOW) && line->backsector != NULL)
 		{ // Make sure this line actually blocks us and is not a window

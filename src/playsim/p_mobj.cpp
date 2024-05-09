@@ -5388,6 +5388,10 @@ int MorphPointerSubstitution(AActor* from, AActor* to)
 		// Swap the new body into the right network slot if it's a client (this doesn't
 		// really matter for regular Actors since they grab any ID they can get anyway).
 		NetworkEntityManager::SetClientNetworkEntity(to, to->player - players);
+		// These will both inevitably be mispredicted since morphing currently isn't allowed
+		// while predicting.
+		MispredictState(to);
+		MispredictPSprites(to);
 	}
 
 	if (from->alternative != nullptr)
