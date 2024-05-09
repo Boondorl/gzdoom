@@ -130,24 +130,25 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, GetPointer, COPY_AAPTR)
 //
 //==========================================================================
 
-static void NativeStopSound(AActor *actor, int slot)
+static void NativeStopSound(AActor *self, int slot, bool noPredict)
 {
-	if (ShouldDoEffect(actor))
-		S_StopSound(actor, slot);
+	if ((noPredict && !IsPredicting(self)) || (!noPredict && ShouldDoEffect(self)))
+		S_StopSound(self, slot);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StopSound, NativeStopSound)
 {
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_INT(slot);
+	PARAM_BOOL(noPredict);
 	
-	NativeStopSound(self, slot);
+	NativeStopSound(self, slot, noPredict);
 	return 0;
 }
 
-static void NativeStopActorSounds(AActor* self, int chanmin, int chanmax)
+static void NativeStopActorSounds(AActor* self, int chanmin, int chanmax, bool noPredict)
 {
-	if (ShouldDoEffect(self))
+	if ((noPredict && !IsPredicting(self)) || (!noPredict && ShouldDoEffect(self)))
 		S_StopActorSounds(self, chanmin, chanmax);
 }
 
@@ -156,7 +157,8 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StopSounds, NativeStopActorSounds)
 	PARAM_SELF_PROLOGUE(AActor);
 	PARAM_INT(chanmin);
 	PARAM_INT(chanmax);
-	NativeStopActorSounds(self, chanmin, chanmax);
+	PARAM_BOOL(noPredict)
+	NativeStopActorSounds(self, chanmin, chanmax, noPredict);
 	return 0;
 }
 
@@ -212,7 +214,8 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_PlaySound, NativePlaySound)
 
 static void NativeStartSound(AActor* self, int id, int chan, int flags, double vol, double atten, double pitch, double startTime)
 {
-	if (ShouldDoEffect(self))
+	const bool noPredict = (flags & CHANF_NO_PREDICT);
+	if ((noPredict && !IsPredicting(self)) || (!noPredict && ShouldDoEffect(self)))
 		A_StartSound(self, id, chan, flags, vol, atten, pitch, startTime);
 }
 
@@ -233,8 +236,8 @@ DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSound, NativeStartSound)
 
 void A_StartSoundIfNotSame(AActor *self, int soundid, int checksoundid, int channel, int flags, double volume, double attenuation, double pitch, double startTime)
 {
-	if (ShouldDoEffect(self) && !S_AreSoundsEquivalent (self, FSoundID::fromInt(soundid), FSoundID::fromInt(checksoundid)))
-		A_StartSound(self, soundid, channel, flags, volume, attenuation, pitch, startTime);
+	if (!S_AreSoundsEquivalent (self, FSoundID::fromInt(soundid), FSoundID::fromInt(checksoundid)))
+		NativeStartSound(self, soundid, channel, flags, volume, attenuation, pitch, startTime);
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, A_StartSoundIfNotSame, A_StartSoundIfNotSame)

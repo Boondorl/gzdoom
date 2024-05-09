@@ -96,7 +96,7 @@ class PhoenixRodPowered : PhoenixRod
 		Owner.player.mo.MispredictPSprites();
 		if (FlameCount > 0) DepleteAmmo (bAltFire);
 		Owner.player.refire = 0;
-		Owner.A_StopSound (CHAN_WEAPON);
+		Owner.A_StopSound (CHAN_WEAPON, true);
 		Owner.player.ReadyWeapon = SisterWeapon;
 		Owner.player.SetPsprite(PSP_WEAPON, SisterWeapon.GetReadyState());
 	}

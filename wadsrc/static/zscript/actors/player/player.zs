@@ -165,6 +165,7 @@ class PlayerPawn : Actor
 				player.PendingWeapon.bPowered_Up &&
 				player.PendingWeapon.SisterWeapon != NULL)
 			{
+				MispredictPSprites();
 				player.PendingWeapon = player.PendingWeapon.SisterWeapon;
 			}
 		}
