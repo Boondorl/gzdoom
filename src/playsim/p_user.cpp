@@ -188,7 +188,10 @@ void FActorBackup::MarkField(const FName& field)
 {
 	auto sym = dyn_cast<PField>(actor->GetClass()->FindSymbol(field, true));
 	if (sym == nullptr)
+	{
+		Printf("Field %s did not exist in Actor %s.\n", field.GetChars(), actor->GetClass()->TypeName.GetChars());
 		return;
+	}
 
 	if (sym->Type == TypeBool)
 		Fields.Insert(field, std::make_pair(TypeBool, actor->BoolVar(field)));
@@ -196,6 +199,10 @@ void FActorBackup::MarkField(const FName& field)
 		Fields.Insert(field, std::make_pair(TypeSInt32, actor->IntVar(field)));
 	else if (sym->Type == TypeFloat64 || sym->Type == TypeFloat32)
 		Fields.Insert(field, std::make_pair(TypeFloat64, actor->FloatVar(field)));
+	else if (sym->Type == TypeVoidPtr)
+		Fields.Insert(field, std::make_pair(TypeVoidPtr, actor->ScriptVar(field, nullptr)));
+	else
+		Printf("Field type for %s in Actor %s is currently not supported.\n", field.GetChars(), actor->GetClass()->TypeName.GetChars());
 }
 
 bool FActorBackup::BackupActor()
@@ -215,8 +222,8 @@ void FActorBackup::RestoreActor()
 	if (actor == nullptr || (actor->ObjectFlags & OF_EuthanizeMe))
 		return;
 
-	TMap<FName, std::pair<PType*, std::variant<bool, int, double>>>::Iterator it = { Fields };
-	TMap<FName, std::pair<PType*, std::variant<bool, int, double>>>::Pair* pair = nullptr;
+	BackupMap::Iterator it = { Fields };
+	BackupMap::Pair* pair = nullptr;
 	while (it.NextPair(pair))
 	{
 		if (pair->Value.first == TypeBool)
@@ -233,6 +240,11 @@ void FActorBackup::RestoreActor()
 		{
 			double& ref = actor->FloatVar(pair->Key);
 			ref = std::get<2>(pair->Value.second);
+		}
+		else if (pair->Value.first == TypeVoidPtr)
+		{
+			void* ref = actor->ScriptVar(pair->Key, nullptr);
+			ref = std::get<3>(pair->Value.second);
 		}
 	}
 }
