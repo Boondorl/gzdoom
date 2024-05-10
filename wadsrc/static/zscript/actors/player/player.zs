@@ -505,7 +505,7 @@ class PlayerPawn : Actor
 
 	virtual void TickPSprites()
 	{
-		if (!cl_predict_states && IsPredicting())
+		if (!cl_predict_weapons && IsPredicting())
 			return;
 
 		let player = self.player;

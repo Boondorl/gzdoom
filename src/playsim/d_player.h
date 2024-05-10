@@ -50,6 +50,7 @@
 #include "b_bot.h"
 
 EXTERN_CVAR(Bool, cl_predict_states)
+EXTERN_CVAR(Bool, cl_predict_weapons)
 
 class player_t;
 
@@ -536,13 +537,11 @@ inline int IsPredicting(AActor* self)
 
 inline int ShouldDoEffect(AActor* self)
 {
-	const bool state = (self->flags9 & MF9_IN_STATE);
 	const bool psprite = (self->flags9 & MF9_IN_PSPRITE);
 	return self->player == nullptr || self->player->mo != self
 			|| (self->player->ClientState & CS_FRESH_TICK)
-			|| (!cl_predict_states && state)
-			|| ((self->player->ClientState & CS_STATE_MISPREDICT) && state && !psprite)
-			|| ((self->player->ClientState & CS_PSPRITE_MISPREDICT) && psprite);
+			|| ((self->flags9 & MF9_IN_STATE) && !psprite && (!cl_predict_states || (self->player->ClientState & CS_STATE_MISPREDICT)))
+			|| (psprite && (!cl_predict_weapons || (self->player->ClientState & CS_PSPRITE_MISPREDICT)));
 }
 
 inline void MispredictState(AActor* self)
@@ -553,7 +552,7 @@ inline void MispredictState(AActor* self)
 
 inline void MispredictPSprites(AActor* self)
 {
-	if (self->player != nullptr && cl_predict_states && self->GetNetworkID() - 1u == consoleplayer)
+	if (self->player != nullptr && cl_predict_weapons && self->GetNetworkID() - 1u == consoleplayer)
 		self->player->ClientState |= CS_PSPRITE_MISPREDICT;
 }
 

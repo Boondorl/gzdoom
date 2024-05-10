@@ -105,6 +105,7 @@ CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
 // Variables for prediction
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_states, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Very likely to break mods, so off by default.
+CVAR(Bool, cl_predict_weapons, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Same as above but for PSprites.
 // Deprecated
 CVAR(Bool, cl_noprediction, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -1614,7 +1615,7 @@ void P_PredictPlayer (player_t *player)
 	memcpy(PredictionActorBackupArray.Data(), &act->snext, act->GetClass()->Size - ((uint8_t *)&act->snext - (uint8_t *)act));
 
 	// Only back these up if we plan on actually predicting them.
-	bDidPSpritePrediction = cl_predict_states;
+	bDidPSpritePrediction = cl_predict_weapons;
 	if (bDidPSpritePrediction)
 	{
 		for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
@@ -1719,7 +1720,7 @@ void P_PredictPlayer (player_t *player)
 		}
 
 		// Play back the weapon select history (this will align with how the netevents execute).
-		if (cl_predict_states && curWeapon < PredictionWeapons.Size() && PredictionWeapons[curWeapon].GameTic == i)
+		if (cl_predict_weapons && curWeapon < PredictionWeapons.Size() && PredictionWeapons[curWeapon].GameTic == i)
 			player->mo->UseInventory(PredictionWeapons[curWeapon++].Pending);
 
 		// This information is only relevant on the latest tick.
