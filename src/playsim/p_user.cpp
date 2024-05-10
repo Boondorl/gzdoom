@@ -103,10 +103,10 @@ static FRandom pr_skullpop ("SkullPop", false);
 CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
 
 // Variables for prediction
-CVAR (Bool, cl_noprediction, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_states, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Very likely to break mods, so off by default.
 // Deprecated
+CVAR(Bool, cl_noprediction, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpthreshold, 2.00f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
@@ -1334,7 +1334,6 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckUse)
 static bool P_CanPredict(const player_t* player)
 {
 	return (netgame
-		&& !cl_noprediction
 		&& !singletics
 		&& !demoplayback
 		&& player->mo != nullptr
