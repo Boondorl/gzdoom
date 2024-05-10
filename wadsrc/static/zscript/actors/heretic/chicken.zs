@@ -213,8 +213,8 @@ class ChickenPlayer : PlayerPawn
 
 	override void MorphPlayerThink ()
 	{
-		bool predictStates = cl_predict_states || !IsPredicting();
-		if (health > 0 && predictStates)
+		bool predicting = IsPredicting();
+		if (health > 0 && (!predicting || cl_predict_weapons))
 		{ // Handle beak movement
 			PSprite pspr;
 			if (player != null && (pspr = player.FindPSprite(PSP_WEAPON)) != null)
@@ -234,7 +234,7 @@ class ChickenPlayer : PlayerPawn
 		{ // Jump and noise
 			Vel.Z += JumpZ;
 
-			if (predictStates)
+			if (!predicting || cl_predict_states)
 			{
 				State painstate = FindState('Pain');
 				if (painstate != null) SetState (painstate);
