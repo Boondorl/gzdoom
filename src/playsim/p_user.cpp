@@ -128,6 +128,11 @@ CUSTOM_CVAR(Float, cl_rubberband_minmove, 20.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFI
 	if (self < 0.1f)
 		self = 0.1f;
 }
+CUSTOM_CVAR(Float, cl_rubberband_limit, 756.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self < 0.0f)
+		self = 0.0f;
+}
 
 ColorSetList ColorSets;
 PainFlashList PainFlashes;
@@ -1688,7 +1693,7 @@ void P_PredictPlayer (player_t *player)
 
 	// This essentially acts like a mini P_Ticker where only the stuff relevant to the client is actually
 	// called. Call order is preserved.
-	bool rubberband = false;
+	bool rubberband = false, rubberbandLimit = false;
 	DVector3 rubberbandPos = {};
 	const bool canRubberband = LastPredictedTic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
@@ -1715,6 +1720,7 @@ void P_PredictPlayer (player_t *player)
 				rubberband = true;
 				rubberbandPos = player->mo->Pos();
 				player->ClientState |= CS_RUBBERBANDING;
+				rubberbandLimit = cl_rubberband_limit > 0.0f && dist > cl_rubberband_limit * cl_rubberband_limit;
 			}
 		}
 
@@ -1748,21 +1754,29 @@ void P_PredictPlayer (player_t *player)
 
 	if (rubberband)
 	{
-		R_ClearInterpolationPath();
-		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
-
 		DPrintf(DMSG_NOTIFY, "Prediction mismatch at (%.3f, %.3f, %.3f)\nExpected: (%.3f, %.3f, %.3f)\nCorrecting to (%.3f, %.3f, %.3f)\n",
 			LastPredictedPosition.X, LastPredictedPosition.Y, LastPredictedPosition.Z,
 			rubberbandPos.X, rubberbandPos.Y, rubberbandPos.Z,
 			player->mo->X(), player->mo->Y(), player->mo->Z());
 
-		DVector3 snapPos = {};
-		P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
-		player->mo->PrevPortalGroup = LastPredictedPortalGroup;
-		player->mo->Prev = LastPredictedPosition;
-		const double zOfs = player->viewz - player->mo->Z();
-		player->mo->SetXYZ(snapPos);
-		player->viewz = snapPos.Z + zOfs;
+		if (rubberbandLimit)
+		{
+			// If too far away, instantly snap the player's view to their correct position.
+			player->mo->renderflags |= RF_NOINTERPOLATEVIEW;
+		}
+		else
+		{
+			R_ClearInterpolationPath();
+			player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
+
+			DVector3 snapPos = {};
+			P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
+			player->mo->PrevPortalGroup = LastPredictedPortalGroup;
+			player->mo->Prev = LastPredictedPosition;
+			const double zOfs = player->viewz - player->mo->Z();
+			player->mo->SetXYZ(snapPos);
+			player->viewz = snapPos.Z + zOfs;
+		}
 	}
 
 	// The real ticker will handle any clean up.
