@@ -2252,3 +2252,17 @@ DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, SpawnParticle, SpawnParticle)
 	SpawnParticle(self, p);
 	return 0;
 }
+
+static void UseEvent(AActor* item, bool useAll)
+{
+	P_AddPredictedItem(item, useAll);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_Inventory, UseEvent, UseEvent)
+{
+	PARAM_PROLOGUE;
+	PARAM_OBJECT(item, AActor);
+	PARAM_BOOL(useAll);
+	UseEvent(item, useAll);
+	return 0;
+}

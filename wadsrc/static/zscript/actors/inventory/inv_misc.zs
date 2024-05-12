@@ -136,13 +136,13 @@ class PuzzleItem : Inventory
 
 	override bool Use (bool pickup)
 	{
-		if (Owner == NULL) return false;
+		if (Owner == NULL || Owner.IsPredicting()) return false;
 		if (Owner.UsePuzzleItem (PuzzleItemNumber))
 		{
 			return true;
 		}
 		// [RH] Always play the sound if the use fails.
-		Owner.A_StartSound (PuzzFailSound, CHAN_VOICE);
+		Owner.A_StartSound (PuzzFailSound, CHAN_VOICE, CHANF_NO_PREDICT);
 		if (Owner.CheckLocalView())
 		{
 			Console.MidPrint (null, PuzzFailMessage, true);

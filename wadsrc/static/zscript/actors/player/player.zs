@@ -154,7 +154,7 @@ class PlayerPawn : Actor
 			if (health > 0) Height = FullHeight;
 		}
 
-		if (player && bWeaponLevel2Ended && !IsPredicting())
+		if (player && bWeaponLevel2Ended && (cl_predict_inventory || !IsPredicting()))
 		{
 			bWeaponLevel2Ended = false;
 			if (player.ReadyWeapon != NULL && player.ReadyWeapon.bPowered_Up)
@@ -165,7 +165,8 @@ class PlayerPawn : Actor
 				player.PendingWeapon.bPowered_Up &&
 				player.PendingWeapon.SisterWeapon != NULL)
 			{
-				MispredictPSprites();
+				if (!cl_predict_inventory)
+					MispredictPSprites();
 				player.PendingWeapon = player.PendingWeapon.SisterWeapon;
 			}
 		}
@@ -1503,7 +1504,7 @@ class PlayerPawn : Actor
 					}
 				}
 			}
-			else if (cmd.upmove > 0 && !IsPredicting())
+			else if (cmd.upmove > 0 && (cl_predict_inventory || !IsPredicting()))
 			{
 				let fly = FindInventory("ArtiFly");
 				if (fly != NULL)

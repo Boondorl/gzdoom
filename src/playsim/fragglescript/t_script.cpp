@@ -617,7 +617,7 @@ void T_PreprocessScripts(FLevelLocals *Level)
 
 bool T_RunScript(FLevelLocals *Level, int snum, AActor * t_trigger)
 {
-	if (players[consoleplayer].ClientState & CS_PREDICTING)
+	if (NetworkEntityManager::bWorldPredicting)
 		return false;
 
 	DFraggleThinker *th = Level->FraggleScriptThinker;

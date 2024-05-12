@@ -51,6 +51,7 @@
 
 EXTERN_CVAR(Bool, cl_predict_states)
 EXTERN_CVAR(Bool, cl_predict_weapons)
+EXTERN_CVAR(Bool, cl_predict_inventory)
 
 class player_t;
 
@@ -512,7 +513,8 @@ bool P_IsPlayerTotallyFrozen(const player_t *player);
 
 bool P_NoInterpolation(player_t const *player, AActor const *actor);
 
-void P_AddPredictedWeapon(AActor* weapon);
+void P_AddPredictedItem(AActor* item, bool useAll = false);
+bool P_CanPredictItem(AActor* item);
 
 inline int IsPredicting(AActor* self)
 {
@@ -530,13 +532,13 @@ inline int ShouldDoEffect(AActor* self)
 
 inline void MispredictState(AActor* self)
 {
-	if (self->player != nullptr && cl_predict_states && self->GetNetworkID() - 1u == consoleplayer)
+	if (self->player != nullptr && cl_predict_states && self->player->mo == self && self->GetNetworkID() - 1u == consoleplayer)
 		self->player->ClientState |= CS_STATE_MISPREDICT;
 }
 
 inline void MispredictPSprites(AActor* self)
 {
-	if (self->player != nullptr && cl_predict_weapons && self->GetNetworkID() - 1u == consoleplayer)
+	if (self->player != nullptr && cl_predict_weapons && self->player->mo == self && self->GetNetworkID() - 1u == consoleplayer)
 		self->player->ClientState |= CS_PSPRITE_MISPREDICT;
 }
 

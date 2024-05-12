@@ -57,7 +57,7 @@ class PowerupGiver : Inventory
 		{
 			return true;
 		}
-		power.GoAwayAndDie ();
+		power.Destroy();
 		return false;
 	}
 }
@@ -92,6 +92,7 @@ class Powerup : Inventory
 		if (Owner == NULL)
 		{
 			Destroy ();
+			return;
 		}
 		if (EffectTics == 0 || (EffectTics > 0 && --EffectTics == 0))
 		{

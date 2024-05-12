@@ -319,8 +319,7 @@ CCMD (slot)
 				VMValue param[] = { mo, slot, !(dmflags2 & DF2_DONTCHECKAMMO) };
 				VMReturn ret((void**)&pending);
 				VMCall(func, param, 3, &ret, 1);
-				SendItemUse = pending;
-				P_AddPredictedWeapon(pending);
+				P_AddPredictedItem(pending);
 			}
 		}
 
@@ -374,8 +373,7 @@ CCMD (weapnext)
 			VMValue param[] = { mo };
 			VMReturn ret((void**)&pending);
 			VMCall(func, param, 1, &ret, 1);
-			SendItemUse = pending;
-			P_AddPredictedWeapon(pending);
+			P_AddPredictedItem(pending);
 		}
 	}
 
@@ -404,8 +402,7 @@ CCMD (weapprev)
 			VMValue param[] = { mo };
 			VMReturn ret((void**)&pending);
 			VMCall(func, param, 1, &ret, 1);
-			SendItemUse = pending;
-			P_AddPredictedWeapon(pending);
+			P_AddPredictedItem(pending);
 		}
 	}
 
@@ -464,14 +461,14 @@ CCMD(invprev)
 
 CCMD (invuseall)
 {
-	SendItemUse = (const AActor *)1;
+	P_AddPredictedItem(nullptr, true);
 }
 
 CCMD (invuse)
 {
 	if (players[consoleplayer].inventorytics == 0)
 	{
-		if (players[consoleplayer].mo) SendItemUse = players[consoleplayer].mo->PointerVar<AActor>(NAME_InvSel);
+		if (players[consoleplayer].mo) P_AddPredictedItem(players[consoleplayer].mo->PointerVar<AActor>(NAME_InvSel));
 	}
 	players[consoleplayer].inventorytics = 0;
 }
@@ -489,7 +486,7 @@ CCMD (use)
 {
 	if (argv.argc() > 1 && players[consoleplayer].mo != NULL)
 	{
-		SendItemUse = players[consoleplayer].mo->FindInventory(argv[1]);
+		P_AddPredictedItem(players[consoleplayer].mo->FindInventory(argv[1]));
 	}
 }
 
@@ -527,7 +524,7 @@ CCMD (useflechette)
 		VMReturn ret((void**)&cls);
 		VMCall(func, params, 1, &ret, 1);
 
-		if (cls != nullptr) SendItemUse = cls;
+		if (cls != nullptr) P_AddPredictedItem(cls);
 	}
 }
 

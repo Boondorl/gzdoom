@@ -121,13 +121,6 @@ class Weapon : StateProvider
 		SHTG E 0 A_Light0;
 		Stop;
 	}
-
-	override void BackupActor(ActorBackup backup)
-	{
-		backup.MarkField('ReloadCounter');
-		backup.MarkField('WeaponSpecial');
-	}
-
 	//===========================================================================
 	//
 	// Weapon :: MarkPrecacheSounds

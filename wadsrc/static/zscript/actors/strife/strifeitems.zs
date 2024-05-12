@@ -424,7 +424,7 @@ class DegninOre : Inventory
 	
 	override bool Use (bool pickup)
 	{
-		if (pickup)
+		if (pickup || Owner.IsPredicting())
 		{
 			return false;
 		}
@@ -529,7 +529,8 @@ class Scanner : PowerupGiver
 	{
 		if (!level.AllMap)
 		{
-			if (Owner.CheckLocalView())
+			if (Owner.CheckLocalView()
+				&& (!cl_predict_inventory || (Owner.player.ClientState & CS_FRESH_TICK)))
 			{
 				Console.MidPrint(null, "$TXT_NEEDMAP");
 			}

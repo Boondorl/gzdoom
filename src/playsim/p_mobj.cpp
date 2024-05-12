@@ -3261,7 +3261,7 @@ bool AActor::Slam (AActor *thing)
 	Vel.Zero();
 	if (health > 0)
 	{
-		bool predicting = IsPredicting(this);
+		const bool predicting = IsPredicting(this);
 		if (!(flags2 & MF2_DORMANT))
 		{
 			if (!predicting)
@@ -3873,7 +3873,7 @@ void AActor::Tick ()
 	{
 		if (player)
 			player->crossingPortal = false;
-		if (!predicting)
+		if (!predicting || cl_predict_inventory || cl_predict_weapons)
 		{
 			// Handle powerup effects here so that the order is controlled
 			// by the order in the inventory, not the order in the thinker table
@@ -3881,10 +3881,13 @@ void AActor::Tick ()
 			
 			while (item != NULL)
 			{
-				IFVIRTUALPTRNAME(item, NAME_Inventory, DoEffect)
+				if (!predicting || P_CanPredictItem(item))
 				{
-					VMValue params[1] = { item };
-					VMCall(func, params, 1, nullptr, 0);
+					IFVIRTUALPTRNAME(item, NAME_Inventory, DoEffect)
+					{
+						VMValue params[1] = { item };
+						VMCall(func, params, 1, nullptr, 0);
+					}
 				}
 				item = item->Inventory;
 			}

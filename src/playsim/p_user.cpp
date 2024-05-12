@@ -106,6 +106,7 @@ CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_states, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Very likely to break mods, so off by default.
 CVAR(Bool, cl_predict_weapons, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Same as above but for PSprites.
+CVAR(Bool, cl_predict_inventory, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG) // Allow the player's items to tick.
 // Deprecated
 CVAR(Bool, cl_noprediction, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -148,25 +149,82 @@ static DVector3 LastPredictedPosition;
 static int LastPredictedPortalGroup;
 static int LastPredictedTic;
 
-static player_t PredictionPlayerBackup;
-static AActor *PredictionActor;
-static TArray<uint8_t> PredictionActorBackupArray;
+static player_t PredictionPlayer;
+static AActor *PredictionPawn;
 static TArray<AActor *> PredictionSectorListBackup;
 
 struct PredictionPSprite
 {
 	int ID;
 	TArray<uint8_t> Backup;
+
+	PredictionPSprite(DPSprite* psp)
+	{
+		ID = psp->GetID();
+		Backup.Resize(psp->GetClass()->Size);
+		memcpy(Backup.Data(), &psp->HAlign, psp->GetClass()->Size - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+	}
+	// No restore since this requires a lot more work to rebuild the list.
 };
 static TArray<PredictionPSprite> PredictionPSprites;
 static bool bDidPSpritePrediction;
 
-struct PredictionWeapon
+struct PredictionItem
 {
 	int GameTic;
 	AActor* Pending;
+	bool bUseAll;
+	bool bIsWeapon;
+
+	PredictionItem(int gameTic, AActor* pending, bool useAll) : GameTic(gameTic)
+	{
+		UpdateItem(pending, useAll);
+	}
+
+	void UpdateItem(AActor* pending, bool useAll)
+	{
+		Pending = pending;
+		bUseAll = useAll;
+		bIsWeapon = !bUseAll && Pending->IsKindOf(NAME_Weapon);
+	}
+
+	void UseItem(AActor* user) const
+	{
+		if (bUseAll)
+		{
+			VMValue owner = user;
+			for (AActor* item = user->Inventory; item != nullptr; item = item->Inventory)
+			{
+				if (item->ObjectFlags & OF_NoPredict)
+					continue;
+
+				IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
+				{
+					VMValue param[] = { item, owner };
+					VMCall(func, param, 2, nullptr, 0);
+				}
+			}
+		}
+		else
+		{
+			if (Pending == nullptr || (Pending->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict)))
+				return;
+
+			if (bIsWeapon)
+			{
+				if (!cl_predict_weapons)
+					return;
+			}
+			else if (!cl_predict_inventory)
+			{
+				return;
+			}
+
+			user->UseInventory(Pending);
+		}
+	}
 };
-static TArray<PredictionWeapon> PredictionWeapons;
+static TArray<PredictionItem> PredictionItems;
 
 static TArray<sector_t *> PredictionTouchingSectorsBackup;
 static TArray<msecnode_t *> PredictionTouchingSectors_sprev_Backup;
@@ -182,91 +240,38 @@ static TArray<portnode_t *> PredictionPortalLines_sprev_Backup;
 
 static TArray<FRandom> PredictionRNG;
 
-struct
+struct PredictionActor
 {
-	DVector3 Pos = {};
-	int Flags = 0;
-} static PredictionViewPosBackup;
+	AActor* Actor = nullptr;
+	TArray<uint8_t> Backup = {};
+	DVector3 ViewPos = {};
+	int ViewFlags = 0;
 
-static TArray<FActorBackup> PredictionActors;
-
-void FActorBackup::MarkField(const FName& field)
-{
-	auto sym = dyn_cast<PField>(actor->GetClass()->FindSymbol(field, true));
-	if (sym == nullptr)
+	PredictionActor(AActor* actor) : Actor(actor)
 	{
-		Printf("Field %s did not exist in Actor %s.\n", field.GetChars(), actor->GetClass()->TypeName.GetChars());
-		return;
+		Backup.Resize(Actor->GetClass()->Size);
+		memcpy(Backup.Data(), &Actor->snext, Actor->GetClass()->Size - ((uint8_t*)&Actor->snext - (uint8_t*)Actor));
+		if (Actor->ViewPos != nullptr)
+		{
+			ViewPos = Actor->ViewPos->Offset;
+			ViewFlags = Actor->ViewPos->Flags;
+		}
 	}
 
-	if (sym->Type == TypeBool)
-		Fields.Insert(field, std::make_pair(TypeBool, actor->BoolVar(field)));
-	else if (sym->Type == TypeSInt32 || sym->Type == TypeSInt16 || sym->Type == TypeSInt8 || sym->Type == TypeUInt32 || sym->Type == TypeUInt16 || sym->Type == TypeUInt8)
-		Fields.Insert(field, std::make_pair(TypeSInt32, actor->IntVar(field)));
-	else if (sym->Type == TypeFloat64 || sym->Type == TypeFloat32)
-		Fields.Insert(field, std::make_pair(TypeFloat64, actor->FloatVar(field)));
-	else if (sym->Type == TypeVoidPtr)
-		Fields.Insert(field, std::make_pair(TypeVoidPtr, actor->ScriptVar(field, nullptr)));
-	else
-		Printf("Field type for %s in Actor %s is currently not supported.\n", field.GetChars(), actor->GetClass()->TypeName.GetChars());
-}
-
-bool FActorBackup::BackupActor()
-{
-	IFVIRTUALPTRNAME(actor, NAME_Inventory, BackupActor)
+	void RestoreActor()
 	{
-		VMValue params[] = { actor, this };
-		VMCall(func, params, 2, nullptr, 0);
-	}
+		if (Actor == nullptr || (Actor->ObjectFlags & OF_EuthanizeMe))
+			return;
 
-	return Fields.CountUsed();
-}
-
-void FActorBackup::RestoreActor()
-{
-	// Probably got accidentally destroyed. Don't hardcrash in this case.
-	if (actor == nullptr || (actor->ObjectFlags & OF_EuthanizeMe))
-		return;
-
-	BackupMap::Iterator it = { Fields };
-	BackupMap::Pair* pair = nullptr;
-	while (it.NextPair(pair))
-	{
-		if (pair->Value.first == TypeBool)
+		memcpy(&Actor->snext, Backup.Data(), Backup.Size() - ((uint8_t*)&Actor->snext - (uint8_t*)Actor));
+		if (Actor->ViewPos != nullptr)
 		{
-			bool& ref = actor->BoolVar(pair->Key);
-			ref = std::get<0>(pair->Value.second);
-		}
-		else if (pair->Value.first == TypeSInt32)
-		{
-			int& ref = actor->IntVar(pair->Key);
-			ref = std::get<1>(pair->Value.second);
-		}
-		else if (pair->Value.first == TypeFloat64)
-		{
-			double& ref = actor->FloatVar(pair->Key);
-			ref = std::get<2>(pair->Value.second);
-		}
-		else if (pair->Value.first == TypeVoidPtr)
-		{
-			void* ref = actor->ScriptVar(pair->Key, nullptr);
-			ref = std::get<3>(pair->Value.second);
+			Actor->ViewPos->Offset = ViewPos;
+			Actor->ViewPos->Flags = ViewFlags;
 		}
 	}
-}
-
-static void MarkField(FActorBackup* self, int field)
-{
-	self->MarkField(ENamedName(field));
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(FActorBackup, MarkField, MarkField)
-{
-	PARAM_SELF_STRUCT_PROLOGUE(FActorBackup);
-	PARAM_NAME(field);
-	self->MarkField(field);
-	return 0;
-}
+};
+static TArray<PredictionActor> PredictionActors;
 
 // [GRB] Custom player classes
 TArray<FPlayerClass> PlayerClasses;
@@ -1477,22 +1482,26 @@ void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float 
 	result = pmo->Vec3Offset(-diff.X, -diff.Y, -diff.Z);
 }
 
-void P_AddPredictedWeapon(AActor* weapon)
+void P_AddPredictedItem(AActor* item, bool useAll)
 {
-	if (!netgame || weapon == nullptr)
+	if (useAll)
+		item = (AActor*)1;
+
+	SendItemUse = item;
+	if (!netgame || item == nullptr)
 		return;
 
-	if (PredictionWeapons.Size())
+	if (PredictionItems.Size())
 	{
-		auto& weap = PredictionWeapons.Last();
-		if (weap.GameTic == maketic)
+		auto& inv = PredictionItems.Last();
+		if (inv.GameTic == maketic)
 		{
-			weap.Pending = weapon;
+			inv.UpdateItem(item, useAll);
 			return;
 		}
 	}
 
-	PredictionWeapons.Push({ maketic, weapon });
+	PredictionItems.Push({ maketic, item, useAll });
 }
 
 template<class nodetype, class linktype>
@@ -1589,6 +1598,16 @@ nodetype *RestoreNodeList(AActor *act, nodetype *head, nodetype *linktype::*othe
 	return head;
 }
 
+bool P_CanPredictItem(AActor* item)
+{
+	if (item->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict))
+		return false;
+
+	// Weapons don't get backed up alongside standard inventory since they can modify the PSprite state.
+	const bool isWeap = item->IsKindOf(NAME_Weapon);
+	return (cl_predict_weapons && (isWeap || item->IsKindOf(NAME_Ammo))) || (cl_predict_inventory && !isWeap);
+}
+
 void P_PredictPlayer (player_t *player)
 {
 	int maxtic;
@@ -1608,52 +1627,41 @@ void P_PredictPlayer (player_t *player)
 		return;
 	}
 
+	NetworkEntityManager::bWorldPredicting = true;
+	player->ClientState |= CS_PREDICTING;
+
 	FRandom::SaveRNGState(PredictionRNG);
 
 	// Save original values for restoration later
-	PredictionPlayerBackup.CopyFrom(*player, false);
+	PredictionPlayer.CopyFrom(*player, false);
+	player->cheats |= CF_PREDICTING; // Deprecated but needs to be kept around for existing ZScript.
 
 	auto act = player->mo;
-	PredictionActor = player->mo;
-	PredictionActorBackupArray.Resize(act->GetClass()->Size);
-	memcpy(PredictionActorBackupArray.Data(), &act->snext, act->GetClass()->Size - ((uint8_t *)&act->snext - (uint8_t *)act));
+	PredictionPawn = act;
+	PredictionActors.Push({ act });
 
 	// Only back these up if we plan on actually predicting them.
 	bDidPSpritePrediction = cl_predict_weapons;
 	if (bDidPSpritePrediction)
 	{
 		for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
+			PredictionPSprites.Push({ psp });
+	}
+
+	const bool predictingItems = cl_predict_weapons || cl_predict_inventory;
+	if (predictingItems)
+	{
+		for (AActor* item = act->Inventory; item != nullptr; item = item->Inventory)
 		{
-			const unsigned int i = PredictionPSprites.Push({ psp->GetID(), {} });
-			PredictionPSprites[i].Backup.Resize(psp->GetClass()->Size);
-			memcpy(PredictionPSprites[i].Backup.Data(), &psp->HAlign, psp->GetClass()->Size - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+			if (P_CanPredictItem(item))
+				PredictionActors.Push({ item });
 		}
 	}
 
-	// Since this is a DObject it needs to have its fields backed up manually for restore, otherwise any changes
-	// to it will be permanent while predicting. This is now auto-created on pawns to prevent creation spam.
-	if (act->ViewPos != nullptr)
-	{
-		PredictionViewPosBackup.Pos = act->ViewPos->Offset;
-		PredictionViewPosBackup.Flags = act->ViewPos->Flags;
-	}
-
-	// Back up specific fields on the player's inventory items. Needed for improved weapon prediction but can be used
-	// for anything else the player might need e.g. while moving.
-	for (AActor* inv = act->Inventory; inv != nullptr; inv = inv->Inventory)
-	{
-		FActorBackup backup(inv);
-		if (backup.BackupActor())
-			PredictionActors.Push(backup);
-	}
-
-	// Clean up any old pending weapons.
-	unsigned int curWeapon = 0u;
-	while (PredictionWeapons.Size() && PredictionWeapons[0].GameTic < gametic)
-		PredictionWeapons.Delete(0);
-
-	player->cheats |= CF_PREDICTING; // Deprecated but needs to be kept around for existing ZScript.
-	player->ClientState |= CS_PREDICTING;
+	// Clean up any old pending items.
+	unsigned int curItem = 0u;
+	while (PredictionItems.Size() && PredictionItems[0].GameTic < gametic)
+		PredictionItems.Delete(0);
 
 	// Backup sector information.
 	BackupNodeList(act, act->touching_sectorlist, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
@@ -1724,9 +1732,9 @@ void P_PredictPlayer (player_t *player)
 			}
 		}
 
-		// Play back the weapon select history (this will align with how the netevents execute).
-		if (cl_predict_weapons && curWeapon < PredictionWeapons.Size() && PredictionWeapons[curWeapon].GameTic == i)
-			player->mo->UseInventory(PredictionWeapons[curWeapon++].Pending);
+		// Play back the item use history (this will align with how the netevents execute).
+		if (curItem < PredictionItems.Size() && PredictionItems[curItem].GameTic == i)
+			PredictionItems[curItem++].UseItem(player->mo);
 
 		// This information is only relevant on the latest tick.
 		R_ClearInterpolationPath();
@@ -1748,8 +1756,29 @@ void P_PredictPlayer (player_t *player)
 
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
+		if (predictingItems)
+		{
+			for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
+			{
+				if (!P_CanPredictItem(item))
+					continue;
+
+				item->ClearInterpolation();
+				item->ClearFOVInterpolation();
+			}
+		}
+
 		P_PlayerThink(player);
 		player->mo->CallTick();
+		if (predictingItems)
+		{
+			// This isn't quite the same as ticking but is much more efficient than constantly making ThinkerIterators.
+			for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
+			{
+				if (P_CanPredictItem(item))
+					item->CallTick();
+			}
+		}
 	}
 
 	if (rubberband)
@@ -1781,6 +1810,14 @@ void P_PredictPlayer (player_t *player)
 
 	// The real ticker will handle any clean up.
 	player->mo->UpdateLightLocations();
+	if (predictingItems)
+	{
+		for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
+		{
+			if (P_CanPredictItem(item))
+				item->UpdateLightLocations();
+		}
+	}
 
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
 	// the right spot until it reaches it.
@@ -1797,21 +1834,31 @@ void P_UnPredictPlayer ()
 	{
 		AActor *act = player->mo;
 
+		// Make sure to clean up any predicted items before restoring the world state (in case they modify anything while destroying).
+		TArray<AActor*> toDestroy;
+		for (AActor* item = act->Inventory; item != nullptr; item = item->Inventory)
+		{
+			item->ObjectFlags &= ~OF_NoPredict;
+			if (item->ObjectFlags & OF_Predicted)
+				toDestroy.Push(item);
+		}
+
+		for (auto item : toDestroy)
+			item->Destroy();
+
 		// (Un)Morphed while predicting; don't allow this but don't inelegantly crash either.
-		if (act != PredictionActor)
+		if (act != PredictionPawn)
 			I_Error("Player changed Actors while predicting (this is currently not supported).");
 
 		FRandom::RestoreRNGState(PredictionRNG);
 
 		AActor *savedcamera = player->camera;
-
 		auto &actInvSel = act->PointerVar<AActor*>(NAME_InvSel);
 		auto InvSel = actInvSel;
 		int inventorytics = player->inventorytics;
 		const bool settings_controller = player->settings_controller;
 
-		player->CopyFrom(PredictionPlayerBackup, false);
-
+		player->CopyFrom(PredictionPlayer, false);
 		player->settings_controller = settings_controller;
 		// Restore the camera instead of using the backup's copy, because spynext/prev
 		// could cause it to change during prediction.
@@ -1823,9 +1870,11 @@ void P_UnPredictPlayer ()
 		auto lineportal_list = act->touching_lineportallist;
 		act->touching_sectorportallist = nullptr;
 		act->touching_lineportallist = nullptr;
-
 		act->UnlinkFromWorld(&ctx);
-		memcpy(&act->snext, PredictionActorBackupArray.Data(), PredictionActorBackupArray.Size() - ((uint8_t *)&act->snext - (uint8_t *)act));
+
+		for (auto& predicted : PredictionActors)
+			predicted.RestoreActor();
+		PredictionActors.Clear();
 
 		// The state of the PSprite list needs to be brought back to exactly how it was before predicting.
 		unsigned int i = 0u;
@@ -1881,18 +1930,9 @@ void P_UnPredictPlayer ()
 				psp->Vert = Vert;
 				psp->firstTic = false;
 			}
-		}
-		PredictionPSprites.Clear();
 
-		if (act->ViewPos != nullptr)
-		{
-			act->ViewPos->Offset = PredictionViewPosBackup.Pos;
-			act->ViewPos->Flags = PredictionViewPosBackup.Flags;
+			PredictionPSprites.Clear();
 		}
-
-		for (auto& backup : PredictionActors)
-			backup.RestoreActor();
-		PredictionActors.Clear();
 
 		// The blockmap ordering needs to remain unchanged, too.
 		// Restore sector links and refrences.
@@ -1940,12 +1980,13 @@ void P_UnPredictPlayer ()
 
 		actInvSel = InvSel;
 		player->inventorytics = inventorytics;
+		player->ClientTic = gametic;
+		player->ClientState &= ~CS_PREDICTION_STATE;
 		// Make sure to always unset this since the renderer won't be able to if it's getting backed up.
 		act->renderflags &= ~RF_NOINTERPOLATEVIEW;
 	}
 
-	player->ClientTic = gametic;
-	player->ClientState &= ~CS_PREDICTION_STATE;
+	NetworkEntityManager::bWorldPredicting = false;
 }
 
 void player_t::Serialize(FSerializer &arc)

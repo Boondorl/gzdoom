@@ -3839,6 +3839,9 @@ int GameMain()
 
 void D_Cleanup()
 {
+	// Make sure any networked objects left over are properly destroyed.
+	NetworkEntityManager::bWorldPredicting = false;
+
 	if (demorecording)
 	{
 		G_CheckDemoStatus();

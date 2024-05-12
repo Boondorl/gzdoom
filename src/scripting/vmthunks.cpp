@@ -2581,6 +2581,17 @@ DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, setFrozen, setFrozen)
 	return 0;
 }
 
+static int IsWorldPredicting()
+{
+	return NetworkEntityManager::bWorldPredicting;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, IsWorldPredicting, IsWorldPredicting)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_BOOL(NetworkEntityManager::bWorldPredicting);
+}
+
 //=====================================================================================
 //
 //
