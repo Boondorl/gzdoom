@@ -64,8 +64,9 @@ ClassReg DObject::RegistrationInfo =
 _DECLARE_TI(DObject)
 
 // This bit is needed in the playsim - but give it a less crappy name.
-DEFINE_FIELD_BIT(DObject,ObjectFlags, bDestroyed, OF_EuthanizeMe)
-
+DEFINE_FIELD_BIT(DObject, ObjectFlags, bDestroyed, OF_EuthanizeMe)
+DEFINE_FIELD_BIT(DObject, ObjectFlags, bDontPredict, OF_NoPredict)
+DEFINE_FIELD_BIT(DObject, ObjectFlags, bPredicted, OF_Predicted)
 
 //==========================================================================
 //
@@ -328,11 +329,23 @@ void DObject::Destroy ()
 			VMCall(func, params, 1, nullptr, 0);
 		}
 	}
+
+	// If we're currently predicting, don't actually delete any networked objects. While it's safe
+	// to call the VM's OnDestroy, calling the internal one is too risky as it frees memory in ways
+	// that aren't recoverable.
+	if (NetworkEntityManager::bWorldPredicting && (ObjectFlags & OF_NoPredict))
+		return;
+
 	OnDestroy();
 	ObjectFlags = (ObjectFlags & ~OF_Fixed) | OF_EuthanizeMe;
 }
 
-DEFINE_ACTION_FUNCTION(DObject, Destroy)
+static void NativeDestroy(DObject* self)
+{
+	self->Destroy();
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(DObject, Destroy, NativeDestroy)
 {
 	PARAM_SELF_PROLOGUE(DObject);
 	self->Destroy();
@@ -670,6 +683,14 @@ void NetworkEntityManager::AddNetworkEntity(DObject* const ent)
 	if (ent->IsNetworked())
 		return;
 
+	if (bWorldPredicting)
+	{
+		// We can't really know what ID this entity will actually get on the real world
+		// tick so just mark it as network unsafe instead.
+		ent->ObjectFlags |= OF_Predicted;
+		return;
+	}
+
 	// Slot 0 is reserved for the world.
 	// Clients go in the first 1 - MAXPLAYERS slots
 	// Everything else is first come first serve.
@@ -691,6 +712,13 @@ void NetworkEntityManager::RemoveNetworkEntity(DObject* const ent)
 {
 	if (!ent->IsNetworked())
 		return;
+
+	if (bWorldPredicting)
+	{
+		// Wait until a real world tick happens before freeing up its network slot.
+		ent->ObjectFlags |= OF_NoPredict;
+		return;
+	}
 
 	const uint32_t id = ent->GetNetworkID();
 	if (id == WorldNetID)

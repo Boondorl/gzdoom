@@ -133,20 +133,4 @@ class DObject;
 #define NCMD_1TICS				0x01		// packet contains 1 tic
 #define NCMD_0TICS				0x00		// packet contains 0 tics
 
-using BackupMap = TMap<FName, std::pair<PType*, std::variant<bool, int, double, void*>>>;
-
-struct FActorBackup
-{
-private:
-	AActor* actor = nullptr;
-	BackupMap Fields = {};
-
-public:
-	FActorBackup(AActor* mo) : actor(mo) {}
-
-	void MarkField(const FName& field);
-	bool BackupActor();
-	void RestoreActor();
-};
-
 #endif

@@ -751,10 +751,6 @@ void InitThingdef()
 	teamstruct->Size = sizeof(FTeam);
 	teamstruct->Align = alignof(FTeam);
 
-	auto backupstruct = NewStruct("ActorBackup", nullptr, true);
-	backupstruct->Size = sizeof(FActorBackup);
-	backupstruct->Align = alignof(FActorBackup);
-
 	auto terraindefstruct = NewStruct("TerrainDef", nullptr, true);
 	terraindefstruct->Size = sizeof(FTerrainDef);
 	terraindefstruct->Align = alignof(FTerrainDef);

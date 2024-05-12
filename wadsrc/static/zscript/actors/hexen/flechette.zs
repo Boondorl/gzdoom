@@ -278,6 +278,9 @@ class ArtiPoisonBag1 : ArtiPoisonBag
 	
 	override bool Use (bool pickup)
 	{
+		if (Owner.IsPredicting())
+			return true;
+
 		Actor mo = Spawn("PoisonBag", Owner.Vec3Offset(
 			16 * cos(Owner.angle),
 			24 * sin(Owner.angle),
@@ -304,6 +307,9 @@ class ArtiPoisonBag2 : ArtiPoisonBag
 	
 	override bool Use (bool pickup)
 	{
+		if (Owner.IsPredicting())
+			return true;
+
 		Actor mo = Spawn("FireBomb", Owner.Vec3Offset(
 			16 * cos(Owner.angle),
 			24 * sin(Owner.angle),
@@ -330,6 +336,9 @@ class ArtiPoisonBag3 : ArtiPoisonBag
 	
 	override bool Use (bool pickup)
 	{
+		if (Owner.IsPredicting())
+			return true;
+
 		Actor mo = Spawn("ThrowingBomb", Owner.Pos + (0,0,35. - Owner.Floorclip + (Owner.player? Owner.player.crouchoffset : 0)), ALLOW_REPLACE);
 		if (mo)
 		{
@@ -379,15 +388,18 @@ class ArtiPoisonBagGiver : ArtiPoisonBag
 	
 	override bool Use (bool pickup)
 	{
-		Class<Actor> missiletype = MissileName;
+		Class<Inventory> missiletype = MissileName;
 		if (missiletype != null)
 		{
-			Actor mo = Spawn (missiletype, Owner.Pos, ALLOW_REPLACE);
-			if (mo != null)
+			Inventory inv = Inventory(Spawn (missiletype, Owner.Pos, ALLOW_REPLACE));
+			if (inv)
 			{
-				Inventory inv = Inventory(mo);
-				if (inv && inv.CallTryPickup(Owner)) return true;
-				mo.Destroy();	// Destroy if not inventory or couldn't be picked up
+				if (inv.CallTryPickup(Owner))
+				{
+					if (!inv.bDestroyed && inv.Owner != Owner && Owner.IsPredicting())
+						inv.Destroy();
+					return true;
+				}
 			}
 		}
 		return false;
@@ -407,6 +419,9 @@ class ArtiPoisonBagShooter : ArtiPoisonBag
 	override bool Use (bool pickup)
 	{
 		Class<Actor> missiletype = MissileName;
+		if (Owner.IsPredicting())
+			return missiletype != null;
+
 		if (missiletype != null)
 		{
 			Actor mo = Owner.SpawnPlayerMissile(missiletype);

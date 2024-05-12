@@ -115,12 +115,6 @@ class Sigil : Weapon
 		SIGF C 0 Bright A_Light0;
 		Stop;
 	}
-	
-	override void BackupActor(ActorBackup backup)
-	{
-		Super.BackupActor(backup);
-		backup.MarkField('DownPieces');
-	}
 
 	//============================================================================
 	//

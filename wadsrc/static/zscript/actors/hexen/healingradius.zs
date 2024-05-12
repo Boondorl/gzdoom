@@ -60,6 +60,8 @@ class ArtiHealingRadius : Inventory
 						}
 						else
 						{
+							if (!armor.bDestroyed && armor.Owner != Owner && Owner.IsPredicting())
+								armor.Destroy();
 							gotsome = true;
 						}
 					}
@@ -84,7 +86,8 @@ class ArtiHealingRadius : Inventory
 				}
 				if (gotsome)
 				{
-					mo.A_StartSound ("MysticIncant", CHAN_AUTO);
+					if (!Owner.IsPredicting())
+						mo.A_StartSound ("MysticIncant", CHAN_AUTO);
 					effective=true;
 				}
 			}

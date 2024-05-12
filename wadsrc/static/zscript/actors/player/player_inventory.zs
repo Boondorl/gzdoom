@@ -222,9 +222,9 @@ extend class PlayerPawn
 			// Should this behavior be retained?
 			return false;
 		}
-		if (player == players[consoleplayer])
+		if (player == players[consoleplayer] && (!cl_predict_inventory || ShouldDoEffect()))
 		{
-			A_StartSound(item.UseSound, CHAN_ITEM);
+			A_StartSound(item.UseSound, CHAN_ITEM, cl_predict_inventory ? CHANF_DEFAULT : CHANF_NO_PREDICT);
  			StatusBar.FlashItem (itemtype);	// Fixme: This shouldn't be called from here, because it is in the UI.
 		}
 		return true;

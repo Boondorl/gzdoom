@@ -93,7 +93,8 @@ class PhoenixRodPowered : PhoenixRod
 
 	override void EndPowerup ()
 	{
-		Owner.player.mo.MispredictPSprites();
+		if (!cl_predict_inventory)
+			Owner.player.mo.MispredictPSprites();
 		if (FlameCount > 0) DepleteAmmo (bAltFire);
 		Owner.player.refire = 0;
 		Owner.A_StopSound (CHAN_WEAPON, true);
@@ -188,12 +189,6 @@ class PhoenixRodPowered : PhoenixRod
 			weapon.FlameCount = 0;
 			weapon.DepleteAmmo (weapon.bAltFire);
 		}
-	}
-
-	override void BackupActor(ActorBackup backup)
-	{
-		Super.BackupActor(backup);
-		backup.MarkField('FlameCount');
 	}
 }
 

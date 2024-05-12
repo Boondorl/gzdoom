@@ -49,11 +49,6 @@ class Ammo : Inventory
 		Inventory.PickupSound "misc/ammo_pkup";
 	}
 
-	override void BackupActor(ActorBackup backup)
-	{
-		backup.MarkField('Amount');
-	}
-
 	//===========================================================================
 	//
 	// AAmmo :: GetParentAmmo
