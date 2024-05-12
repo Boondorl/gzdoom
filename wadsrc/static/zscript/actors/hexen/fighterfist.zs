@@ -76,7 +76,7 @@ class FWeapFist : FighterWeapon
 				if (t.linetarget.player != null || 
 					(t.linetarget.Mass < 10000000 && (t.linetarget.bIsMonster)))
 				{
-					if (!t.linetarget.bDontThrust)
+					if (!t.linetarget.bDontThrust && !IsPredicting())
 						t.linetarget.Thrust(power, t.attackAngleFromSource);
 				}
 				AdjustPlayerAngle(t);

@@ -112,7 +112,7 @@ extend class StateProvider
 			}
 		}
 
-		if (lifesteal && !t.linetarget.bDontDrain)
+		if (lifesteal && !t.linetarget.bDontDrain && !IsPredicting())
 		{
 			if (flags & SF_STEALARMOR)
 			{

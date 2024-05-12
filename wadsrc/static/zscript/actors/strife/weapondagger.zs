@@ -67,7 +67,8 @@ class PunchDagger : StrifeWeapon
 			A_StartSound (t.linetarget.bNoBlood ? sound("misc/metalhit") : sound("misc/meathit"), CHAN_WEAPON);
 			angle = t.angleFromSource;
 			bJustAttacked = true;
-			t.linetarget.DaggerAlert (self);
+			if (!IsPredicting())
+				t.linetarget.DaggerAlert (self);
 		}
 		else
 		{

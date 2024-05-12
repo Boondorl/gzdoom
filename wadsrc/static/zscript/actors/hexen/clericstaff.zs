@@ -84,11 +84,14 @@ class CWeapStaff : ClericWeapon
 						if (((t.linetarget.player && (!t.linetarget.IsTeammate(self) || level.teamdamage != 0)) || t.linetarget.bIsMonster)
 							&& (!t.linetarget.bDormant && !t.linetarget.bInvulnerable))
 						{
-							int newLife = player.health + (damage >> 3);
-							newLife = newLife > max ? max : newLife;
-							if (newLife > player.health)
+							if (!IsPredicting())
 							{
-								health = player.health = newLife;
+								int newLife = player.health + (damage >> 3);
+								newLife = newLife > max ? max : newLife;
+								if (newLife > player.health)
+								{
+									health = player.health = newLife;
+								}
 							}
 							if (weapon != null)
 							{

@@ -78,7 +78,7 @@ class FWeapHammer : FighterWeapon
 					if (t.linetarget != null)
 					{
 						AdjustPlayerAngle(t);
-						if (t.linetarget.bIsMonster || t.linetarget.player)
+						if ((t.linetarget.bIsMonster || t.linetarget.player) && !IsPredicting())
 						{
 							t.linetarget.Thrust(10, t.attackAngleFromSource);
 						}
