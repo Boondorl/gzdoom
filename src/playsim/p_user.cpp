@@ -1832,15 +1832,21 @@ void P_UnPredictPlayer ()
 
 	if (player->ClientState & CS_PREDICTING)
 	{
+		AActor* act = player->mo;
+		if (act != PredictionPawn)
+		{
+			// If the player is (un)morphed, morph them back real quickly. We can safely skip any
+			// checks here since their previous body was already a valid pawn.
+			if (!MorphPointerSubstitution(act, PredictionPawn, true))
+				I_Error("Could not (un)morph predicted pawn back.");
+
+			act = PredictionPawn;
+		}
+
 		// Make sure to clean up any predicted Actors before restoring the world state (in case they modify anything while destroying).
 		TArray<FName> toDestroy = {};
 		toDestroy.Push(NAME_Actor);
 		NetworkEntityManager::CleanUpPredictedEntities(&toDestroy);
-
-		// (Un)Morphed while predicting; don't allow this but don't inelegantly crash either.
-		AActor* act = player->mo;
-		if (act != PredictionPawn)
-			I_Error("Player changed Actors while predicting (this is currently not supported).");
 
 		FRandom::RestoreRNGState(PredictionRNG);
 

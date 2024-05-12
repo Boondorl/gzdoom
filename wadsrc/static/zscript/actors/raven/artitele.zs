@@ -47,7 +47,7 @@ class ArtiTeleport : Inventory
 		}
 
 		if (canLaugh)
-			Owner.A_StartSound("*evillaugh", CHAN_VOICE, CHANF_NO_PREDICT, attenuation: ATTN_NONE);
+			Owner.A_StartSound("*evillaugh", CHAN_VOICE, cl_predict_inventory ? CHANF_DEFAULT : CHANF_NO_PREDICT, attenuation: ATTN_NONE);
 
 		return true;
 	}
