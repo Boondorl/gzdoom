@@ -79,7 +79,7 @@ Class ArtiTomeOfPower : PowerupGiver
 			}
 			else if (Owner.player)
 			{
-				Owner.A_StartSound("*evillaugh", CHAN_VOICE, CHANF_NO_PREDICT);
+				Owner.A_StartSound("*evillaugh", CHAN_VOICE, cl_predict_inventory ? CHANF_DEFAULT : CHANF_NO_PREDICT);
 			}
 
 			return true;

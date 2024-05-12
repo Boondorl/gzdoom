@@ -1560,7 +1560,7 @@ class PlayerPawn : Actor
 			{ // Chicken attack counter
 				player.chickenPeck -= 3;
 			}
-			if (!IsPredicting() && player.MorphTics && !--player.MorphTics)
+			if (player.MorphTics && !--player.MorphTics)
 			{ // Attempt to undo the chicken/pig
 				Unmorph(self, MRF_UNDOBYTIMEOUT);
 			}

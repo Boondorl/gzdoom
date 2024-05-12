@@ -1757,7 +1757,7 @@ struct FTranslatedLineTarget
 };
 
 void PlayerPointerSubstitution(AActor* oldPlayer, AActor* newPlayer, bool removeOld);
-int MorphPointerSubstitution(AActor* from, AActor* to);
+int MorphPointerSubstitution(AActor* from, AActor* to, bool force = false);
 
 #define S_FREETARGMOBJ	1
 

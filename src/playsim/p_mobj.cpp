@@ -5307,37 +5307,40 @@ void PlayerPointerSubstitution(AActor* oldPlayer, AActor* newPlayer, bool remove
 //
 //==========================================================================
 
-int MorphPointerSubstitution(AActor* from, AActor* to)
+int MorphPointerSubstitution(AActor* from, AActor* to, bool force)
 {
-	// Special care is taken here to make sure things marked as a dummy Actor for a morphed thing aren't
-	// allowed to be changed into other things. Anything being morphed into that's considered a player
-	// is automatically out of the question to ensure modders aren't swapping clients around.
-	if (from == nullptr || to == nullptr || from == to || to->player != nullptr
-		|| IsPredicting(from)
-		|| (from->flags & MF_UNMORPHED)									// Another thing's dummy Actor, unmorphing the wrong way, etc.
-		|| (from->alternative == nullptr && to->alternative != nullptr)	// Morphing into something that's already morphed.
-		|| (from->alternative != nullptr && from->alternative != to))	// Only allow something morphed to unmorph.
+	if (!force)
 	{
-		return false;
-	}
-
-	const bool toIsPlayer = to->IsKindOf(NAME_PlayerPawn);
-	if (from->IsKindOf(NAME_PlayerPawn))
-	{
-		// Players are only allowed to turn into other valid player pawns. For
-		// valid pawns, make sure an actual player is changing into an empty one.
-		// Voodoo dolls aren't allowed to morph since that should be passed to
-		// the main player directly.
-		if (!toIsPlayer || from->player == nullptr || from->player->mo != from)
+		// Special care is taken here to make sure things marked as a dummy Actor for a morphed thing aren't
+		// allowed to be changed into other things. Anything being morphed into that's considered a player
+		// is automatically out of the question to ensure modders aren't swapping clients around.
+		if (from == nullptr || to == nullptr || from == to || to->player != nullptr
+			|| (!cl_predict_inventory && IsPredicting(from))				// Only allow predicted morphing if the the inventory is backed up.
+			|| (from->flags & MF_UNMORPHED)									// Another thing's dummy Actor, unmorphing the wrong way, etc.
+			|| (from->alternative == nullptr && to->alternative != nullptr)	// Morphing into something that's already morphed.
+			|| (from->alternative != nullptr && from->alternative != to))	// Only allow something morphed to unmorph.
+		{
 			return false;
-	}
-	else if (toIsPlayer || from->player != nullptr
+		}
+
+		const bool toIsPlayer = to->IsKindOf(NAME_PlayerPawn);
+		if (from->IsKindOf(NAME_PlayerPawn))
+		{
+			// Players are only allowed to turn into other valid player pawns. For
+			// valid pawns, make sure an actual player is changing into an empty one.
+			// Voodoo dolls aren't allowed to morph since that should be passed to
+			// the main player directly.
+			if (!toIsPlayer || from->player == nullptr || from->player->mo != from)
+				return false;
+		}
+		else if (toIsPlayer || from->player != nullptr
 			|| (from->IsKindOf(NAME_Inventory) && from->PointerVar<AActor>(NAME_Owner) != nullptr)
 			|| (to->IsKindOf(NAME_Inventory) && to->PointerVar<AActor>(NAME_Owner) != nullptr))
-	{
-		// Only allow items to be swapped around if they aren't currently owned. Also prevent non-players from
-		// turning into fake players.
-		return false;
+		{
+			// Only allow items to be swapped around if they aren't currently owned. Also prevent non-players from
+			// turning into fake players.
+			return false;
+		}
 	}
 
 	// Since the check is good, move the inventory items over. This should always be done when
@@ -5391,10 +5394,12 @@ int MorphPointerSubstitution(AActor* from, AActor* to)
 		// Swap the new body into the right network slot if it's a client (this doesn't
 		// really matter for regular Actors since they grab any ID they can get anyway).
 		NetworkEntityManager::SetClientNetworkEntity(to, to->player - players);
-		// These will both inevitably be mispredicted since morphing currently isn't allowed
-		// while predicting.
-		MispredictState(to);
-		MispredictPSprites(to);
+		// These will both inevitably mispredict if inventory prediction isn't allowed.
+		if (!cl_predict_inventory && !force)
+		{
+			MispredictState(to);
+			MispredictPSprites(to);
+		}
 	}
 
 	if (from->alternative != nullptr)
