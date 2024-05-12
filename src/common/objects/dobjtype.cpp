@@ -444,6 +444,8 @@ DObject *PClass::CreateNew()
 
 	((DObject *)mem)->SetClass (const_cast<PClass *>(this));
 	InitializeSpecials(mem, Defaults, &PClass::SpecialInits);
+	if (NetworkEntityManager::bWorldPredicting)
+		((DObject*)mem)->ObjectFlags |= OF_Predicted;
 	return (DObject *)mem;
 }
 

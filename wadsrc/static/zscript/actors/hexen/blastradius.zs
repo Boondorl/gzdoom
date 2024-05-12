@@ -114,6 +114,8 @@ extend class Actor
 		}
 
 		A_StartSound (blastsound, CHAN_AUTO);
+		if (IsPredicting())
+			return;
 
 		if (!(blastflags & BF_DONTWARN))
 		{

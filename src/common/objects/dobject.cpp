@@ -333,8 +333,11 @@ void DObject::Destroy ()
 	// If we're currently predicting, don't actually delete any networked objects. While it's safe
 	// to call the VM's OnDestroy, calling the internal one is too risky as it frees memory in ways
 	// that aren't recoverable.
-	if (NetworkEntityManager::bWorldPredicting && (ObjectFlags & OF_NoPredict))
+	if (IsNetworked())
+	{
+		ObjectFlags |= OF_NoPredict;
 		return;
+	}
 
 	OnDestroy();
 	ObjectFlags = (ObjectFlags & ~OF_Fixed) | OF_EuthanizeMe;
@@ -680,16 +683,11 @@ void NetworkEntityManager::SetClientNetworkEntity(DObject* mo, const unsigned in
 
 void NetworkEntityManager::AddNetworkEntity(DObject* const ent)
 {
-	if (ent->IsNetworked())
+	// We can't really know what ID this entity will actually get on the real world
+	// tick so don't bother. For entities spawned while predicting, these will never
+	// be safe to make networkable.
+	if (bWorldPredicting || (ent->ObjectFlags & OF_Predicted) || ent->IsNetworked())
 		return;
-
-	if (bWorldPredicting)
-	{
-		// We can't really know what ID this entity will actually get on the real world
-		// tick so just mark it as network unsafe instead.
-		ent->ObjectFlags |= OF_Predicted;
-		return;
-	}
 
 	// Slot 0 is reserved for the world.
 	// Clients go in the first 1 - MAXPLAYERS slots
@@ -710,15 +708,9 @@ void NetworkEntityManager::AddNetworkEntity(DObject* const ent)
 
 void NetworkEntityManager::RemoveNetworkEntity(DObject* const ent)
 {
-	if (!ent->IsNetworked())
+	// Wait until a real world tick happens before freeing up its network slot.
+	if (bWorldPredicting || !ent->IsNetworked())
 		return;
-
-	if (bWorldPredicting)
-	{
-		// Wait until a real world tick happens before freeing up its network slot.
-		ent->ObjectFlags |= OF_NoPredict;
-		return;
-	}
 
 	const uint32_t id = ent->GetNetworkID();
 	if (id == WorldNetID)
@@ -737,6 +729,22 @@ DObject* NetworkEntityManager::GetNetworkEntity(const uint32_t id)
 		return nullptr;
 
 	return s_netEntities[id];
+}
+
+void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeTypes)
+{
+	const bool hasClasses = removeTypes != nullptr && removeTypes->Size();
+	TArray<DObject*> toDestroy = {};
+	for (DObject* probe = GC::Root; probe != nullptr; probe = probe->ObjNext)
+	{
+		if (probe->ObjectFlags & OF_NoPredict)
+			probe->ObjectFlags &= ~OF_NoPredict;
+		else if ((probe->ObjectFlags & OF_Predicted) && hasClasses && removeTypes->Find(probe->GetClass()->TypeName))
+			toDestroy.Push(probe);
+	}
+
+	for (auto obj : toDestroy)
+		obj->Destroy();
 }
 
 //==========================================================================

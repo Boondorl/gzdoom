@@ -396,8 +396,6 @@ class ArtiPoisonBagGiver : ArtiPoisonBag
 			{
 				if (inv.CallTryPickup(Owner))
 				{
-					if (!inv.bDestroyed && inv.Owner != Owner && Owner.IsPredicting())
-						inv.Destroy();
 					return true;
 				}
 			}

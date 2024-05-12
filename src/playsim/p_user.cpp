@@ -1832,21 +1832,13 @@ void P_UnPredictPlayer ()
 
 	if (player->ClientState & CS_PREDICTING)
 	{
-		AActor *act = player->mo;
-
-		// Make sure to clean up any predicted items before restoring the world state (in case they modify anything while destroying).
-		TArray<AActor*> toDestroy;
-		for (AActor* item = act->Inventory; item != nullptr; item = item->Inventory)
-		{
-			item->ObjectFlags &= ~OF_NoPredict;
-			if (item->ObjectFlags & OF_Predicted)
-				toDestroy.Push(item);
-		}
-
-		for (auto item : toDestroy)
-			item->Destroy();
+		// Make sure to clean up any predicted Actors before restoring the world state (in case they modify anything while destroying).
+		TArray<FName> toDestroy = {};
+		toDestroy.Push(NAME_Actor);
+		NetworkEntityManager::CleanUpPredictedEntities(&toDestroy);
 
 		// (Un)Morphed while predicting; don't allow this but don't inelegantly crash either.
+		AActor* act = player->mo;
 		if (act != PredictionPawn)
 			I_Error("Player changed Actors while predicting (this is currently not supported).");
 
