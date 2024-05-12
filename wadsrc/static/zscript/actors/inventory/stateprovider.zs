@@ -306,7 +306,7 @@ class StateProvider : Inventory
 		}
 		else
 		{
-			if (lifesteal > 0 && !(t.linetarget.bDontDrain))
+			if (lifesteal > 0 && !(t.linetarget.bDontDrain) && !IsPredicting())
 			{
 				if (flags & CPF_STEALARMOR)
 				{
@@ -349,7 +349,7 @@ class StateProvider : Inventory
 			}
 
 			if (flags & CPF_PULLIN) self.bJustAttacked = true;
-			if (flags & CPF_DAGGER) t.linetarget.DaggerAlert (self);
+			if ((flags & CPF_DAGGER) && !IsPredicting()) t.linetarget.DaggerAlert (self);
 		}
 	}
 

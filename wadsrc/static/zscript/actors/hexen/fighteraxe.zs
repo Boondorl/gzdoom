@@ -251,7 +251,7 @@ class FWeapAxe : FighterWeapon
 					LineAttack(ang, AXERANGE, slope, damage, 'Melee', pufftype, true, t);
 					if (t.linetarget != null)
 					{
-						if (t.linetarget.bIsMonster || t.linetarget.player)
+						if ((t.linetarget.bIsMonster || t.linetarget.player) && !IsPredicting())
 						{
 							t.linetarget.Thrust(power, t.attackAngleFromSource);
 						}

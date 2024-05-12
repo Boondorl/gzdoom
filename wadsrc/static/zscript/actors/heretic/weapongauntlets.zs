@@ -115,7 +115,7 @@ class Gauntlets : Weapon
 		}
 		if (power)
 		{
-			if (!t.linetarget.bDontDrain) GiveBody (actualdamage >> 1);
+			if (!t.linetarget.bDontDrain && !IsPredicting()) GiveBody (actualdamage >> 1);
 			A_StartSound ("weapons/gauntletspowhit", CHAN_AUTO);
 		}
 		else
