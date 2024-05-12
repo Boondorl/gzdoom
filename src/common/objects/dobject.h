@@ -365,6 +365,28 @@ public:
 	virtual void EnableNetworking(const bool enable);
 };
 
+class NetworkEntityManager
+{
+private:
+	inline static TArray<DObject*> s_netEntities = {};
+	inline static TArray<uint32_t> s_openNetIDs = {};
+
+public:
+	NetworkEntityManager() = delete;
+
+	static constexpr uint32_t WorldNetID = 0u;
+	static constexpr uint32_t ClientNetIDStart = 1u;
+	inline static uint32_t NetIDStart;// = MAXPLAYERS + 1u;
+	inline static bool bWorldPredicting = false;
+
+	static void InitializeNetworkEntities();
+	static void SetClientNetworkEntity(DObject* mo, const unsigned int playNum);
+	static void AddNetworkEntity(DObject* const ent);
+	static void RemoveNetworkEntity(DObject* const ent);
+	static DObject* GetNetworkEntity(const uint32_t id);
+	static void CleanUpPredictedEntities(const TArray<FName>* removeTypes = nullptr);
+};
+
 // This is the only method aside from calling CreateNew that should be used for creating DObjects
 // to ensure that the Class pointer is always set.
 template<typename T, typename... Args>
@@ -376,6 +398,8 @@ T* Create(Args&&... args)
 	{
 		object->SetClass(RUNTIME_CLASS(T));
 		assert(object->GetClass() != nullptr);	// beware of objects that get created before the type system is up.
+		if (NetworkEntityManager::bWorldPredicting)
+			object->ObjectFlags |= OF_Predicted;
 	}
 	return object;
 }
@@ -486,27 +510,5 @@ inline T *&DObject::PointerVar(FName field)
 {
 	return *(T**)ScriptVar(field, nullptr);	// pointer check is more tricky and for the handful of uses in the DECORATE parser not worth the hassle.
 }
-
-
-class NetworkEntityManager
-{
-private:
-	inline static TArray<DObject*> s_netEntities = {};
-	inline static TArray<uint32_t> s_openNetIDs = {};
-
-public:
-	NetworkEntityManager() = delete;
-
-	static constexpr uint32_t WorldNetID = 0u;
-	static constexpr uint32_t ClientNetIDStart = 1u;
-	inline static uint32_t NetIDStart;// = MAXPLAYERS + 1u;
-	inline static bool bWorldPredicting = false;
-
-	static void InitializeNetworkEntities();
-	static void SetClientNetworkEntity(DObject* mo, const unsigned int playNum);
-	static void AddNetworkEntity(DObject* const ent);
-	static void RemoveNetworkEntity(DObject* const ent);
-	static DObject* GetNetworkEntity(const uint32_t id);
-};
 
 #endif //__DOBJECT_H__

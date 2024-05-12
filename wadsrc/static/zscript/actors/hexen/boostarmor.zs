@@ -43,8 +43,6 @@ class ArtiBoostArmor : Inventory
 				else
 				{
 					count++;
-					if (!armor.bDestroyed && armor.Owner != Owner && Owner.IsPredicting())
-						armor.Destroy();
 				}
 			}
 			return count != 0;
@@ -62,8 +60,6 @@ class ArtiBoostArmor : Inventory
 			}
 			else
 			{
-				if (!armor.bDestroyed && armor.Owner != Owner && Owner.IsPredicting())
-					armor.Destroy();
 				return true;
 			}
 		}
