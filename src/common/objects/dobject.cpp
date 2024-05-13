@@ -775,9 +775,13 @@ void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeT
 		}
 	}
 
-	// Do this after in case any networked objects were destroyed from the above.
+	// Do this after in case any networked objects were destroyed from the above. These could possibly be
+	// null if the game state is being cleaned up.
 	for (auto ent : s_noPredict)
-		ent->ObjectFlags &= ~OF_NoPredict;
+	{
+		if (ent != nullptr && !(ent->ObjectFlags & OF_EuthanizeMe))
+			ent->ObjectFlags &= ~OF_NoPredict;
+	}
 	s_noPredict.Clear();
 }
 
