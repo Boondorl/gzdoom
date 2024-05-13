@@ -1350,6 +1350,7 @@ static bool P_CanPredictPlayer(const player_t* player)
 	return netgame
 		&& !singletics
 		&& !demoplayback
+		&& gamestate == GS_LEVEL
 		&& player->mo != nullptr
 		&& player == player->mo->Level->GetConsolePlayer()
 		&& player->playerstate == PST_LIVE;
