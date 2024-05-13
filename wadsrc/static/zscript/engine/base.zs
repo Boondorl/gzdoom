@@ -740,6 +740,8 @@ class Object native
 {
 	const TICRATE = 35;
 	native bool bDestroyed;
+	native bool bDontPredict;
+	native bool bPredicted;
 
 	// These must be defined in some class, so that the compiler can find them. Object is just fine, as long as they are private to external code.
 	private native static Object BuiltinNew(Class<Object> cls, int outerclass, int compatibility);
