@@ -3881,7 +3881,7 @@ void AActor::Tick ()
 			
 			while (item != NULL)
 			{
-				if (!predicting || P_CanPredictItem(item))
+				if (!predicting || CanPredict(item))
 				{
 					IFVIRTUALPTRNAME(item, NAME_Inventory, DoEffect)
 					{
@@ -5469,7 +5469,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	// Old lerp data needs to go
 	if (playernum == consoleplayer)
 	{
-		P_PredictionLerpReset();
+		P_PredictionReset();
 	}
 
 	p = Players[playernum];

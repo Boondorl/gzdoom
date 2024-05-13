@@ -335,7 +335,7 @@ void DObject::Destroy ()
 	// that aren't recoverable.
 	if (IsNetworked())
 	{
-		ObjectFlags |= OF_NoPredict;
+		NetworkEntityManager::StopPredictingEntity(this);
 		return;
 	}
 
@@ -731,20 +731,48 @@ DObject* NetworkEntityManager::GetNetworkEntity(const uint32_t id)
 	return s_netEntities[id];
 }
 
+void NetworkEntityManager::AddPredictedEntity(DObject* ent)
+{
+	if (!(ent->ObjectFlags & OF_Predicted))
+	{
+		ent->ObjectFlags |= OF_Predicted;
+		s_predicted.Push(ent);
+	}
+}
+
+void NetworkEntityManager::StopPredictingEntity(DObject* ent)
+{
+	if (!(ent->ObjectFlags & OF_NoPredict))
+	{
+		ent->ObjectFlags |= OF_NoPredict;
+		s_noPredict.Push(ent);
+	}
+}
+
 void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeTypes)
 {
-	const bool hasClasses = removeTypes != nullptr && removeTypes->Size();
-	TArray<DObject*> toDestroy = {};
-	for (DObject* probe = GC::Root; probe != nullptr; probe = probe->ObjNext)
+	if (removeTypes != nullptr && removeTypes->Size())
 	{
-		if (probe->ObjectFlags & OF_NoPredict)
-			probe->ObjectFlags &= ~OF_NoPredict;
-		else if ((probe->ObjectFlags & OF_Predicted) && hasClasses && removeTypes->Find(probe->GetClass()->TypeName))
-			toDestroy.Push(probe);
+		// Intentionally going from front to back so any newly added entities will be
+		// automatically captured and destroyed if needed.
+		for (size_t i = 0u; i < s_predicted.Size(); ++i)
+		{
+			for (auto& type : *removeTypes)
+			{
+				if (s_predicted[i]->IsKindOf(type))
+				{
+					s_predicted[i]->Destroy();
+					s_predicted.Delete(i--);
+					break;
+				}
+			}
+		}
 	}
 
-	for (auto obj : toDestroy)
-		obj->Destroy();
+	// Do this after in case any networked objects were destroyed from the above.
+	for (auto ent : s_noPredict)
+		ent->ObjectFlags &= ~OF_NoPredict;
+	s_noPredict.Clear();
 }
 
 //==========================================================================

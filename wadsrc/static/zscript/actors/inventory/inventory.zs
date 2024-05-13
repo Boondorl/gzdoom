@@ -1143,11 +1143,6 @@ class Inventory : Actor
 	{
 		return bCreatingCopy;
 	}
-
-	// Queue up an item to be used over the network. This is more efficient than spamming
-	// network events and will also take prediction into account. If useAll is set, the item
-	// passed is irrelevant.
-	native clearscope static void UseEvent(Inventory item, bool useAll = false);
 	
 	//===========================================================================
 	//

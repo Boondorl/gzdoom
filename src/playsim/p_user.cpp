@@ -195,7 +195,7 @@ struct PredictionItem
 			VMValue owner = user;
 			for (AActor* item = user->Inventory; item != nullptr; item = item->Inventory)
 			{
-				if (item->ObjectFlags & OF_NoPredict)
+				if (!CanPredict(item))
 					continue;
 
 				IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
@@ -205,21 +205,8 @@ struct PredictionItem
 				}
 			}
 		}
-		else
+		else if (Pending != nullptr && CanPredict(Pending))
 		{
-			if (Pending == nullptr || (Pending->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict)))
-				return;
-
-			if (bIsWeapon)
-			{
-				if (!cl_predict_weapons)
-					return;
-			}
-			else if (!cl_predict_inventory)
-			{
-				return;
-			}
-
 			user->UseInventory(Pending);
 		}
 	}
@@ -263,12 +250,17 @@ struct PredictionActor
 		if (Actor == nullptr || (Actor->ObjectFlags & OF_EuthanizeMe))
 			return;
 
+		const int tid = Actor->tid;
 		memcpy(&Actor->snext, Backup.Data(), Backup.Size() - ((uint8_t*)&Actor->snext - (uint8_t*)Actor));
 		if (Actor->ViewPos != nullptr)
 		{
 			Actor->ViewPos->Offset = ViewPos;
 			Actor->ViewPos->Flags = ViewFlags;
 		}
+
+		// Thing ID was changed so make sure to re-link it.
+		if (Actor->tid != tid)
+			Actor->SetTID(Actor->tid);
 	}
 };
 static TArray<PredictionActor> PredictionActors;
@@ -1353,14 +1345,14 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckUse)
 	return 0;
 }
 
-static bool P_CanPredict(const player_t* player)
+static bool P_CanPredictPlayer(const player_t* player)
 {
-	return (netgame
+	return netgame
 		&& !singletics
 		&& !demoplayback
 		&& player->mo != nullptr
 		&& player == player->mo->Level->GetConsolePlayer()
-		&& player->playerstate == PST_LIVE);
+		&& player->playerstate == PST_LIVE;
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(AActor, IsPredicting, IsPredicting)
@@ -1404,7 +1396,7 @@ void P_PlayerThink (player_t *player)
 		I_Error ("No player %td start\n", player - players + 1);
 	}
 
-	if (!P_CanPredict(player))
+	if (!P_CanPredictPlayer(player))
 	{
 		player->ClientTic = gametic;
 		player->ClientState |= CS_LATEST_TICK | CS_FRESH_TICK;
@@ -1459,14 +1451,14 @@ void P_PlayerThink (player_t *player)
 	}
 }
 
-void P_PredictionLerpReset()
+void P_PredictionReset()
 {
 	LastPredictedPosition = DVector3{};
 	LastPredictedPortalGroup = 0;
 	LastPredictedTic = -1;
 }
 
-void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float scale, float threshold, float minMove)
+static void P_CalculateRubberband(AActor* pmo, const DVector3& from, DVector3 &result, float scale, float threshold, float minMove)
 {
 	DVector3 diff = pmo->Pos() - from;
 	diff.XY() += pmo->Level->Displacements.getOffset(pmo->Sector->PortalGroup, pmo->Level->PointInSector(from.XY())->PortalGroup);
@@ -1598,14 +1590,20 @@ nodetype *RestoreNodeList(AActor *act, nodetype *head, nodetype *linktype::*othe
 	return head;
 }
 
-bool P_CanPredictItem(AActor* item)
+static bool P_InBackup(const AActor* mo)
 {
-	if (item->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict))
-		return false;
+	for (auto& backup : PredictionActors)
+	{
+		if (backup.Actor == mo)
+			return true;
+	}
 
-	// Weapons don't get backed up alongside standard inventory since they can modify the PSprite state.
-	const bool isWeap = item->IsKindOf(NAME_Weapon);
-	return (cl_predict_weapons && (isWeap || item->IsKindOf(NAME_Ammo))) || (cl_predict_inventory && !isWeap);
+	return false;
+}
+
+bool CanPredict(AActor* mo)
+{
+	return !(mo->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict)) && P_InBackup(mo);
 }
 
 void P_PredictPlayer (player_t *player)
@@ -1614,9 +1612,9 @@ void P_PredictPlayer (player_t *player)
 
 	if (player->ClientState & CS_PREDICTING)
 		return;
-	if (!P_CanPredict(player))
+	if (!P_CanPredictPlayer(player))
 	{
-		P_PredictionLerpReset();
+		P_PredictionReset();
 		return;
 	}
 
@@ -1639,6 +1637,8 @@ void P_PredictPlayer (player_t *player)
 	auto act = player->mo;
 	PredictionPawn = act;
 	PredictionActors.Push({ act });
+	if (act->alternative != nullptr)
+		PredictionActors.Push({ act->alternative });
 
 	// Only back these up if we plan on actually predicting them.
 	bDidPSpritePrediction = cl_predict_weapons;
@@ -1653,8 +1653,23 @@ void P_PredictPlayer (player_t *player)
 	{
 		for (AActor* item = act->Inventory; item != nullptr; item = item->Inventory)
 		{
-			if (P_CanPredictItem(item))
+			// Weapons don't get backed up the same as other inventory items since they'll
+			// modify PSprites.
+			const bool isWeap = item->IsKindOf(NAME_Weapon);
+			if ((cl_predict_weapons && isWeap) || (cl_predict_inventory && !isWeap))
+			{
 				PredictionActors.Push({ item });
+				if (isWeap && !cl_predict_inventory)
+				{
+					// If it's a weapon, only back up its ammo types.
+					auto ammo1 = item->PointerVar<AActor>(NAME_Ammo1);
+					auto ammo2 = item->PointerVar<AActor>(NAME_Ammo2);
+					if (ammo1 != nullptr && !P_InBackup(ammo1))
+						PredictionActors.Push({ ammo1 });
+					if (ammo2 != nullptr && !P_InBackup(ammo2))
+						PredictionActors.Push({ ammo2 });
+				}
+			}
 		}
 	}
 
@@ -1670,8 +1685,6 @@ void P_PredictPlayer (player_t *player)
 	BackupNodeList(act, act->touching_lineportallist, &FLinePortal::lineportal_thinglist, PredictionPortalLines_sprev_Backup, PredictionPortalLinesBackup);
 
 	// Keep an ordered list off all actors in the linked sector.
-	// TODO: This has a chance to crash if an Actor does get spawned/destroyed. Needs better safety barriers in the
-	// future.
 	PredictionSectorListBackup.Clear();
 	if (!(act->flags & MF_NOSECTOR))
 	{
@@ -1756,18 +1769,6 @@ void P_PredictPlayer (player_t *player)
 
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
-		if (predictingItems)
-		{
-			for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
-			{
-				if (!P_CanPredictItem(item))
-					continue;
-
-				item->ClearInterpolation();
-				item->ClearFOVInterpolation();
-			}
-		}
-
 		P_PlayerThink(player);
 		player->mo->CallTick();
 		if (predictingItems)
@@ -1775,7 +1776,7 @@ void P_PredictPlayer (player_t *player)
 			// This isn't quite the same as ticking but is much more efficient than constantly making ThinkerIterators.
 			for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
 			{
-				if (P_CanPredictItem(item))
+				if (CanPredict(item))
 					item->CallTick();
 			}
 		}
@@ -1799,7 +1800,7 @@ void P_PredictPlayer (player_t *player)
 			player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
 			DVector3 snapPos = {};
-			P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
+			P_CalculateRubberband(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
 			player->mo->PrevPortalGroup = LastPredictedPortalGroup;
 			player->mo->Prev = LastPredictedPosition;
 			const double zOfs = player->viewz - player->mo->Z();
@@ -1810,14 +1811,9 @@ void P_PredictPlayer (player_t *player)
 
 	// The real ticker will handle any clean up.
 	player->mo->UpdateLightLocations();
-	if (predictingItems)
-	{
-		for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
-		{
-			if (P_CanPredictItem(item))
-				item->UpdateLightLocations();
-		}
-	}
+	// Unmorphed while predicting so make sure to hide the original Actor.
+	if (PredictionPawn->ObjectFlags & OF_NoPredict)
+		PredictionPawn->renderflags |= RF_INVISIBLE;
 
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
 	// the right spot until it reaches it.
@@ -1835,7 +1831,7 @@ void P_UnPredictPlayer ()
 		AActor* act = player->mo;
 		if (act != PredictionPawn)
 		{
-			// If the player is (un)morphed, morph them back real quickly. We can safely skip any
+			// If the player is (un)morphed, morph them back. We can safely skip any
 			// checks here since their previous body was already a valid pawn.
 			if (!MorphPointerSubstitution(act, PredictionPawn, true))
 				I_Error("Could not (un)morph predicted pawn back.");
