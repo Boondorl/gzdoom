@@ -757,6 +757,12 @@ void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeT
 		// automatically captured and destroyed if needed.
 		for (size_t i = 0u; i < s_predicted.Size(); ++i)
 		{
+			if (s_predicted[i] == nullptr || (s_predicted[i]->ObjectFlags & OF_EuthanizeMe))
+			{
+				s_predicted.Delete(i--);
+				continue;
+			}
+
 			for (auto& type : *removeTypes)
 			{
 				if (s_predicted[i]->IsKindOf(type))
