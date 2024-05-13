@@ -52,6 +52,9 @@ extend class PlayerPawn
 
 	virtual void ActivateMorphWeapon()
 	{
+		if (!cl_predict_weapons && IsPredicting())
+			return;
+
 		if (player.ReadyWeapon)
 		{
 			let psp = player.GetPSprite(PSP_WEAPON);
@@ -204,7 +207,7 @@ extend class PlayerPawn
 		PostMorph(morphed, false);		// No longer the current body
 		morphed.PostMorph(self, true);	// This is the current body
 
-		if (enterFlash)
+		if (enterFlash && !morphed.IsPredicting())
 		{
 			Actor fog = Spawn(enterFlash, morphed.Pos.PlusZ(GameInfo.TelefogHeight), ALLOW_REPLACE);
 			if (fog)
@@ -323,33 +326,40 @@ extend class PlayerPawn
 		if (level2)
 			level2.Destroy();
 
-		WeaponSlots.SetupWeaponSlots(alt);
-		let morphWeap = p.ReadyWeapon;
-		if (premorphWeap)
+		// Unfortunately there's no good way to back this up at the moment so it needs
+		// to be disabled.
+		bool predicting = alt.IsPredicting();
+		if (!predicting)
+			WeaponSlots.SetupWeaponSlots(alt);
+		if (!predicting || cl_predict_weapons)
 		{
-			premorphWeap.PostMorphWeapon();
-		}
-		else
-		{
-			p.ReadyWeapon = null;
-			p.PendingWeapon = WP_NOCHANGE;
-			p.Refire = 0;
-		}
-
-		if (style & MRF_LOSEACTUALWEAPON)
-		{
-			// Improved "lose morph weapon" semantics.
-			class<Weapon> morphWeapCls = MorphWeapon;
-			if (morphWeapCls)
+			let morphWeap = p.ReadyWeapon;
+			if (premorphWeap)
 			{
-				let originalMorphWeapon = Weapon(alt.FindInventory(morphWeapCls));
-				if (originalMorphWeapon && originalMorphWeapon.GivenAsMorphWeapon)
-					originalMorphWeapon.Destroy();
+				premorphWeap.PostMorphWeapon();
 			}
-		}
-		else if (morphWeap) // Old behaviour (not really useful now).
-		{
-			morphWeap.Destroy();
+			else
+			{
+				p.ReadyWeapon = null;
+				p.PendingWeapon = WP_NOCHANGE;
+				p.Refire = 0;
+			}
+
+			if (style & MRF_LOSEACTUALWEAPON)
+			{
+				// Improved "lose morph weapon" semantics.
+				class<Weapon> morphWeapCls = MorphWeapon;
+				if (morphWeapCls)
+				{
+					let originalMorphWeapon = Weapon(alt.FindInventory(morphWeapCls));
+					if (originalMorphWeapon && originalMorphWeapon.GivenAsMorphWeapon)
+						originalMorphWeapon.Destroy();
+				}
+			}
+			else if (morphWeap) // Old behaviour (not really useful now).
+			{
+				morphWeap.Destroy();
+			}
 		}
 
 		// Reset the base AC of the player's Hexen armor back to its default.
@@ -363,7 +373,7 @@ extend class PlayerPawn
 		PostUnmorph(alt, false);		// This body is no longer current.
 		alt.PostUnmorph(self, true);	// altmo body is current.
 
-		if (exitFlash)
+		if (exitFlash && !predicting)
 		{
 			Actor fog = Spawn(exitFlash, alt.Vec3Angle(20.0, alt.Angle, GameInfo.TelefogHeight), ALLOW_REPLACE);
 			if (fog)

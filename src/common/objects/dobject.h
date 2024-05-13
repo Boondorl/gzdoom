@@ -370,6 +370,8 @@ class NetworkEntityManager
 private:
 	inline static TArray<DObject*> s_netEntities = {};
 	inline static TArray<uint32_t> s_openNetIDs = {};
+	inline static TArray<DObject*> s_predicted = {};
+	inline static TArray<DObject*> s_noPredict = {};
 
 public:
 	NetworkEntityManager() = delete;
@@ -384,6 +386,8 @@ public:
 	static void AddNetworkEntity(DObject* const ent);
 	static void RemoveNetworkEntity(DObject* const ent);
 	static DObject* GetNetworkEntity(const uint32_t id);
+	static void AddPredictedEntity(DObject* ent);
+	static void StopPredictingEntity(DObject* ent);
 	static void CleanUpPredictedEntities(const TArray<FName>* removeTypes = nullptr);
 };
 
@@ -399,7 +403,7 @@ T* Create(Args&&... args)
 		object->SetClass(RUNTIME_CLASS(T));
 		assert(object->GetClass() != nullptr);	// beware of objects that get created before the type system is up.
 		if (NetworkEntityManager::bWorldPredicting)
-			object->ObjectFlags |= OF_Predicted;
+			NetworkEntityManager::AddPredictedEntity(object);
 	}
 	return object;
 }

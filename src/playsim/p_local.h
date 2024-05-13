@@ -84,7 +84,7 @@ void	P_FallingDamage (AActor *ent);
 void	P_PlayerThink (player_t *player);
 void	P_PredictPlayer (player_t *player);
 void	P_UnPredictPlayer ();
-void	P_PredictionLerpReset();
+void	P_PredictionReset();
 
 //
 // P_MOBJ
