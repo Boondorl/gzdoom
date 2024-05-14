@@ -353,16 +353,20 @@ protected:
 	friend class JitCompiler;
 
 private:
-	// This is intentionally left unserialized.
+	// These are intentionally left unserialized.
 	uint32_t _networkID;
+	DObject* _predictPrev, * _predictNext;
 
 public:
 	inline bool IsNetworked() const { return (ObjectFlags & OF_Networked); }
 	inline uint32_t GetNetworkID() const { return _networkID; }
+	inline DObject* GetNextPredicted() const { return _predictNext; }
 	void SetNetworkID(const uint32_t id);
 	void ClearNetworkID();
 	void RemoveFromNetwork();
 	virtual void EnableNetworking(const bool enable);
+	void LinkPredicted();
+	void UnlinkPredicted();
 };
 
 class NetworkEntityManager
@@ -370,7 +374,6 @@ class NetworkEntityManager
 private:
 	inline static TArray<DObject*> s_netEntities = {};
 	inline static TArray<uint32_t> s_openNetIDs = {};
-	inline static TArray<DObject*> s_predicted = {};
 	inline static TArray<DObject*> s_noPredict = {};
 
 public:
@@ -380,6 +383,7 @@ public:
 	static constexpr uint32_t ClientNetIDStart = 1u;
 	inline static uint32_t NetIDStart;// = MAXPLAYERS + 1u;
 	inline static bool bWorldPredicting = false;
+	inline static DObject* PredictHead = nullptr, * PredictTail = nullptr;
 
 	static void InitializeNetworkEntities();
 	static void SetClientNetworkEntity(DObject* mo, const unsigned int playNum);

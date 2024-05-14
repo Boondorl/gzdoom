@@ -735,8 +735,9 @@ void NetworkEntityManager::AddPredictedEntity(DObject* ent)
 {
 	if (!(ent->ObjectFlags & OF_Predicted))
 	{
-		ent->ObjectFlags |= OF_Predicted;
-		s_predicted.Push(ent);
+		// Also make sure they don't get saved.
+		ent->ObjectFlags |= OF_Predicted | OF_Transient;
+		ent->LinkPredicted();
 	}
 }
 
@@ -753,35 +754,24 @@ void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeT
 {
 	if (removeTypes != nullptr && removeTypes->Size())
 	{
-		// Intentionally going from front to back so any newly added entities will be
-		// automatically captured and destroyed if needed.
-		for (size_t i = 0u; i < s_predicted.Size(); ++i)
+		for (DObject* cur = PredictHead; cur != nullptr;)
 		{
-			if (s_predicted[i] == nullptr || (s_predicted[i]->ObjectFlags & OF_EuthanizeMe))
-			{
-				s_predicted.Delete(i--);
-				continue;
-			}
-
+			DObject* next = cur->GetNextPredicted();
 			for (auto& type : *removeTypes)
 			{
-				if (s_predicted[i]->IsKindOf(type))
+				if (cur->IsKindOf(type))
 				{
-					s_predicted[i]->Destroy();
-					s_predicted.Delete(i--);
+					cur->Destroy();
 					break;
 				}
 			}
+			cur = next;
 		}
 	}
 
-	// Do this after in case any networked objects were destroyed from the above. These could possibly be
-	// null if the game state is being cleaned up.
+	// Do this after in case any networked objects were destroyed from the above.
 	for (auto ent : s_noPredict)
-	{
-		if (ent != nullptr && !(ent->ObjectFlags & OF_EuthanizeMe))
-			ent->ObjectFlags &= ~OF_NoPredict;
-	}
+		ent->ObjectFlags &= ~OF_NoPredict;
 	s_noPredict.Clear();
 }
 
@@ -817,6 +807,34 @@ void DObject::EnableNetworking(const bool enable)
 void DObject::RemoveFromNetwork()
 {
 	NetworkEntityManager::RemoveNetworkEntity(this);
+	if (ObjectFlags & OF_Predicted)
+		UnlinkPredicted();
+}
+
+void DObject::LinkPredicted()
+{
+	if (NetworkEntityManager::PredictTail == nullptr)
+	{
+		NetworkEntityManager::PredictHead = NetworkEntityManager::PredictTail = this;
+		return;
+	}
+
+	_predictPrev = NetworkEntityManager::PredictTail;
+	NetworkEntityManager::PredictTail->_predictNext = this;
+	NetworkEntityManager::PredictTail = this;
+}
+
+void DObject::UnlinkPredicted()
+{
+	if (NetworkEntityManager::PredictHead == this)
+		NetworkEntityManager::PredictHead = _predictNext;
+	if (NetworkEntityManager::PredictTail == this)
+		NetworkEntityManager::PredictTail = _predictPrev;
+
+	if (_predictNext != nullptr)
+		_predictNext->_predictPrev = _predictPrev;
+	if (_predictPrev != nullptr)
+		_predictPrev->_predictNext = _predictNext;
 }
 
 static unsigned int GetNetworkID(DObject* const self)
