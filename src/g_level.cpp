@@ -472,11 +472,6 @@ void G_NewInit ()
 	// Usually, the list contains just a sentinel when such error occurred
 	primaryLevel->Thinkers.DestroyThinkersInList(STAT_TRAVELLING);
 
-	// Clean up any networked objects currently being tracked.
-	TArray<FName> remove = {};
-	remove.Push(NAME_Object);
-	NetworkEntityManager::CleanUpPredictedEntities(&remove);
-
 	G_ClearSnapshots ();
 	netgame = false;
 	multiplayer = multiplayernext;
@@ -1580,11 +1575,6 @@ void G_DoWorldDone (void)
 		Printf ("No next map specified.\n");
 		nextlevel = primaryLevel->MapName;
 	}
-
-	// Make sure to clean up any remaining client-side objects before transferring.
-	TArray<FName> remove = {};
-	remove.Push(NAME_Object);
-	NetworkEntityManager::CleanUpPredictedEntities(&remove);
 
 	primaryLevel->StartTravel ();
 	G_DoLoadLevel (nextlevel, startpos, true, false);
