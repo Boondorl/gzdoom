@@ -384,6 +384,7 @@ public:
 	inline static uint32_t NetIDStart;// = MAXPLAYERS + 1u;
 	inline static bool bWorldPredicting = false;
 	inline static DObject* PredictHead = nullptr, * PredictTail = nullptr;
+	inline static DObject* FreshPredicted = nullptr;
 
 	static void InitializeNetworkEntities();
 	static void SetClientNetworkEntity(DObject* mo, const unsigned int playNum);

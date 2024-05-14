@@ -754,18 +754,28 @@ void NetworkEntityManager::CleanUpPredictedEntities(const TArray<FName>* removeT
 {
 	if (removeTypes != nullptr && removeTypes->Size())
 	{
-		for (DObject* cur = PredictHead; cur != nullptr;)
+		// Keep looping until no more objects have been spawned.
+		while (FreshPredicted != nullptr)
 		{
-			DObject* next = cur->GetNextPredicted();
-			for (auto& type : *removeTypes)
+			TArray<DObject*> toDestroy = {};
+			for (DObject* cur = FreshPredicted; cur != nullptr; cur = cur->GetNextPredicted())
 			{
-				if (cur->IsKindOf(type))
+				for (auto& type : *removeTypes)
 				{
-					cur->Destroy();
-					break;
+					if (cur->IsKindOf(type))
+					{
+						toDestroy.Push(cur);
+						break;
+					}
 				}
 			}
-			cur = next;
+
+			FreshPredicted = nullptr;
+			for (auto ent : toDestroy)
+			{
+				if (!(ent->ObjectFlags & OF_EuthanizeMe))
+					ent->Destroy();
+			}
 		}
 	}
 
@@ -813,9 +823,14 @@ void DObject::RemoveFromNetwork()
 
 void DObject::LinkPredicted()
 {
+	_predictNext = nullptr;
+	if (NetworkEntityManager::FreshPredicted == nullptr)
+		NetworkEntityManager::FreshPredicted = this;
+
 	if (NetworkEntityManager::PredictTail == nullptr)
 	{
 		NetworkEntityManager::PredictHead = NetworkEntityManager::PredictTail = this;
+		_predictPrev = nullptr;
 		return;
 	}
 
@@ -826,6 +841,8 @@ void DObject::LinkPredicted()
 
 void DObject::UnlinkPredicted()
 {
+	if (NetworkEntityManager::FreshPredicted == this)
+		NetworkEntityManager::FreshPredicted = _predictNext;
 	if (NetworkEntityManager::PredictHead == this)
 		NetworkEntityManager::PredictHead = _predictNext;
 	if (NetworkEntityManager::PredictTail == this)
@@ -835,6 +852,8 @@ void DObject::UnlinkPredicted()
 		_predictNext->_predictPrev = _predictPrev;
 	if (_predictPrev != nullptr)
 		_predictPrev->_predictNext = _predictNext;
+
+	_predictPrev = _predictNext = nullptr;
 }
 
 static unsigned int GetNetworkID(DObject* const self)
