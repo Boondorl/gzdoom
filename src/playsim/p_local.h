@@ -82,7 +82,7 @@ void P_SetupPsprites (player_t* curplayer, bool startweaponup);
 //
 void	P_FallingDamage (AActor *ent);
 void	P_PlayerThink (player_t *player);
-void	P_PredictPlayer (player_t *player);
+void	P_PredictPlayer ();
 void	P_UnPredictPlayer ();
 void	P_PredictionReset();
 

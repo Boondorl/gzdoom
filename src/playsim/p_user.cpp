@@ -145,55 +145,110 @@ CUSTOM_CVAR(Float, fov, 90.f, CVAR_ARCHIVE | CVAR_USERINFO | CVAR_NOINITCALL)
 	p->SetFOV(fov);
 }
 
-static DVector3 LastPredictedPosition;
-static int LastPredictedPortalGroup;
-static int LastPredictedTic;
+struct ClientPrediction
+{
+	inline static DVector3 PrevPos = {};
+	inline static int PrevPortalGroup = -1;
+	inline static int PrevTic = -1;
+	inline static bool bPredictedPSprites = false;
 
-static player_t PredictionPlayer;
-static AActor *PredictionPawn;
-static TArray<AActor *> PredictionSectorListBackup;
+	static void Reset()
+	{
+		PrevPos = {};
+		PrevPortalGroup = -1;
+		PrevTic = -1;
+		bPredictedPSprites = false;
+	}
+
+	ClientPrediction() = delete;
+};
 
 struct PredictionPSprite
 {
-	int ID;
-	TArray<uint8_t> Backup;
+	TArray<uint8_t> Backup = {};
 
-	PredictionPSprite(DPSprite* psp)
+	// This is only for TMap support; this struct is useless without a DPSprite.
+	PredictionPSprite() = default;
+
+	PredictionPSprite(DPSprite& psp)
 	{
-		ID = psp->GetID();
-		Backup.Resize(psp->GetClass()->Size);
-		memcpy(Backup.Data(), &psp->HAlign, psp->GetClass()->Size - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+		Backup.Resize(psp.GetClass()->Size);
+		memcpy(Backup.Data(), &psp.HAlign, psp.GetClass()->Size - ((uint8_t*)&psp.HAlign - (uint8_t*)&psp));
 	}
-	// No restore since this requires a lot more work to rebuild the list.
+	
+	void Restore(DPSprite& psp) const
+	{
+		if (psp.ObjectFlags & OF_EuthanizeMe)
+			return;
+
+		// These are set by the renderer so they shouldn't be restored.
+		WeaponInterp prev = psp.Prev, vert = psp.Vert;
+		memcpy(&psp.HAlign, Backup.Data(), Backup.Size() - ((uint8_t*)&psp.HAlign - (uint8_t*)&psp));
+		psp.firstTic = false;
+		psp.Prev = prev;
+		psp.Vert = vert;
+	}
+
+	void Create(player_t& player, int layer) const
+	{
+		auto psp = player.GetPSprite((PSPLayers)layer);
+		memcpy(&psp->HAlign, Backup.Data(), Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
+		psp->firstTic = false;
+	}
 };
-static TArray<PredictionPSprite> PredictionPSprites;
-static bool bDidPSpritePrediction;
+static TMap<int, PredictionPSprite> PredictionPSprites;
+
+struct PredictionPlayer
+{
+	player_t Player = {};
+
+	void Update(player_t& player)
+	{
+		Player.CopyFrom(player, false);
+	}
+
+	void Restore(player_t& player)
+	{
+		AActor* cam = player.camera;
+		const int invTics = player.inventorytics;
+		const bool controller = player.settings_controller;
+
+		player.CopyFrom(Player, false);
+
+		// Restore the camera instead of using the backup's copy, because spynext/prev
+		// could cause it to change during prediction.
+		player.camera = cam;
+		player.inventorytics = invTics;
+		player.settings_controller = controller;
+		player.ClientTic = gametic;
+		player.ClientState &= ~CS_PREDICTION_STATE;
+	}
+};
+static PredictionPlayer PlayerBackup;
 
 struct PredictionItem
 {
-	int GameTic;
-	AActor* Pending;
-	bool bUseAll;
-	bool bIsWeapon;
+	int GameTic = -1;
+	AActor* Pending = nullptr;
+	bool bUseAll = false;
 
-	PredictionItem(int gameTic, AActor* pending, bool useAll) : GameTic(gameTic)
+	PredictionItem(int gameTic, AActor& pending, bool useAll) : GameTic(gameTic)
 	{
-		UpdateItem(pending, useAll);
+		Update(pending, useAll);
 	}
 
-	void UpdateItem(AActor* pending, bool useAll)
+	void Update(AActor& pending, bool useAll)
 	{
-		Pending = pending;
+		Pending = &pending;
 		bUseAll = useAll;
-		bIsWeapon = !bUseAll && Pending->IsKindOf(NAME_Weapon);
 	}
 
-	void UseItem(AActor* user) const
+	void Use(AActor& user) const
 	{
 		if (bUseAll)
 		{
-			VMValue owner = user;
-			for (AActor* item = user->Inventory; item != nullptr; item = item->Inventory)
+			VMValue owner = &user;
+			for (AActor* item = user.Inventory; item != nullptr; item = item->Inventory)
 			{
 				if (!CanPredict(item))
 					continue;
@@ -207,34 +262,122 @@ struct PredictionItem
 		}
 		else if (Pending != nullptr && CanPredict(Pending))
 		{
-			user->UseInventory(Pending);
+			user.UseInventory(Pending);
 		}
 	}
 };
 static TArray<PredictionItem> PredictionItems;
 
-static TArray<sector_t *> PredictionTouchingSectorsBackup;
-static TArray<msecnode_t *> PredictionTouchingSectors_sprev_Backup;
-
-static TArray<sector_t *> PredictionRenderSectorsBackup;
-static TArray<msecnode_t *> PredictionRenderSectors_sprev_Backup;
-
-static TArray<sector_t *> PredictionPortalSectorsBackup;
-static TArray<msecnode_t *> PredictionPortalSectors_sprev_Backup;
-
-static TArray<FLinePortal *> PredictionPortalLinesBackup;
-static TArray<portnode_t *> PredictionPortalLines_sprev_Backup;
-
 static TArray<FRandom> PredictionRNG;
 
 struct PredictionActor
 {
-	AActor* Actor = nullptr;
+private:
+	// We track things in the list after the Actor as any new thing will be appended to the head
+	// of these lists. Start checking from the tail of the list instead of the head.
+	using AfterList = TMap<AActor*, bool>;
+
+	// Store a list of Actors that came after it in the current sector. We can't back up
+	// the entire list because it's prone to crashing if we just put it back as is, so instead
+	// try and best fit it where it was. This has to be backed up as it has some actual gameplay
+	// implications.
+	AfterList SecAfter = {};
+
+	// We have to take a similar approach with the blockmap for the same reasons as above. Since block nodes
+	// get recreateed we can't store by pointer but should store by its blockmap index.
+	TMap<int, AfterList> BlockAfter = {};
+
+	// The touching sectors list also needs to be backed up as this has some possible gameplay implications
+	// and could be exported in the future. Like block nodes, sector nodes get recreated so we need to store
+	// by their sector.
+	TMap<sector_t*, AfterList> TSecAfter = {};
+
+	template<class NodeType, class LinkType>
+	void BackupNodeList(NodeType* actorListHead, TMap<LinkType*, AfterList>& backup)
+	{
+		for (auto thingNode = actorListHead; thingNode != nullptr; thingNode = thingNode->m_tnext)
+		{
+			AfterList after = {};
+			for (auto linkNode = thingNode->m_snext; linkNode != nullptr; linkNode = linkNode->m_snext)
+				after[linkNode->m_thing] = true;
+			backup[thingNode->m_sector] = after;
+		}
+	}
+
+	template<class NodeType, class LinkType>
+	void RestoreNodeList(NodeType* actorListHead, NodeType* LinkType::* linkListHead, TMap<LinkType*, AfterList>& backup)
+	{
+		// By now relinking should have restored the Actor's original lists since this behavior must be deterministic.
+		// However, the Actor's node placement in the sector list needs to be put into a best fit reposition. This should
+		// now be the head node since it gets unlinked then relinked, so if its next node is null, that means it's the only
+		// thing in the list and we can skip reordering it.
+		for (auto actNode = actorListHead; actNode != nullptr; actNode = actNode->m_tnext)
+		{
+			// New sector appeared? That can't be right...
+			if (actNode->m_snext == nullptr || !backup.CheckKey(actNode->m_sector))
+				continue;
+
+			// Unlink the node from the sector list so it can be properly relinked.
+			actNode->m_snext->m_sprev = nullptr;
+			actNode->m_sector->*linkListHead = actNode->m_snext;
+			actNode->m_snext = nullptr;
+			actNode->m_sprev = nullptr;
+
+			// Now we get to the much more complicated task of restoring its position in the link type's own linked list.
+
+			// These really need a better data structure...
+			TArray<NodeType*> linkNodes = {};
+			for (auto cur = actNode->m_sector->*linkListHead; cur != nullptr; cur = cur->m_snext)
+				linkNodes.Push(cur);
+
+			// Since these are singly linked lists, anything from the After pool that gets unlinked will end up in
+			// the Before pool of Actors. The only way a Before Actor shows up in the After pool is if every
+			// other After Actor was unlinked and then relinked back in. This is why we need to start from the After
+			// end, otherwise we could misplace it way too early if an After Actor ends up in the Before pool.
+			auto& after = backup[actNode->m_sector];
+			const int start = linkNodes.Size() - 1;
+			int i = start;
+			for (; i >= 0; --i)
+			{
+				if (!after.CheckKey(linkNodes[i]->m_thing))
+					break;
+			}
+
+			// Relink the node.
+			if (i == start)
+			{
+				// At the end of the list? Just append it there.
+				linkNodes[i]->m_snext = actNode;
+				actNode->m_sprev = linkNodes[i];
+			}
+			else if (i == -1)
+			{
+				// If we're at the start of the list, link into the head instead.
+				auto head = actNode->m_sector->*linkListHead;
+				actNode->m_snext = head;
+				head->m_sprev = actNode;
+				actNode->m_sector->*linkListHead = actNode;
+			}
+			else
+			{
+				auto next = linkNodes[i]->m_snext;
+				actNode->m_snext = next;
+				next->m_sprev = actNode;
+				linkNodes[i]->m_snext = actNode;
+				actNode->m_sprev = linkNodes[i];
+			}
+		}
+	}
+
+public:
+	bool bUnmorphed = false;
+	AActor* Actor = nullptr, * MorphActor = nullptr;
 	TArray<uint8_t> Backup = {};
+	// These have to be backed up manually since they're stored in an object.
 	DVector3 ViewPos = {};
 	int ViewFlags = 0;
 
-	PredictionActor(AActor* actor) : Actor(actor)
+	PredictionActor(AActor& actor) : Actor(&actor)
 	{
 		Backup.Resize(Actor->GetClass()->Size);
 		memcpy(Backup.Data(), &Actor->snext, Actor->GetClass()->Size - ((uint8_t*)&Actor->snext - (uint8_t*)Actor));
@@ -243,14 +386,62 @@ struct PredictionActor
 			ViewPos = Actor->ViewPos->Offset;
 			ViewFlags = Actor->ViewPos->Flags;
 		}
+
+		MorphActor = Actor->alternative;
+		bUnmorphed = (Actor->flags & MF_UNMORPHED);
+
+		if (!(Actor->flags & MF_NOSECTOR))
+		{
+			for (auto cur = Actor->snext; cur != nullptr; cur = cur->snext)
+				SecAfter[cur] = true;
+
+			// We don't care about the other lists at the moment as they're used purely for rendering.
+			BackupNodeList(Actor->touching_sectorlist, TSecAfter);
+		}
+
+		if (!(Actor->flags & MF_NOBLOCKMAP))
+		{
+			for (auto block = Actor->BlockNode; block != nullptr; block = block->NextBlock)
+			{
+				AfterList after = {};
+				for (auto actBlock = block->NextActor; actBlock != nullptr; actBlock = actBlock->NextActor)
+					after[actBlock->Me] = true;
+				BlockAfter[block->BlockIndex] = after;
+			}
+		}
 	}
 
-	void RestoreActor()
+	bool CheckUndoMorph()
+	{
+		// This should never happen so throw up a red flag if it does.
+		if (Actor == nullptr || (Actor->ObjectFlags & OF_EuthanizeMe))
+			return false;
+		// These can't morph back by their nature.
+		if (bUnmorphed)
+			return true;
+
+		if (Actor->alternative != MorphActor)
+		{
+			AActor* realAct = Actor->alternative;
+			// Double check it didn't morph into something else entirely as well.
+			if (realAct == nullptr)
+				realAct = MorphActor->alternative != nullptr ? MorphActor->alternative : MorphActor;
+
+			return MorphPointerSubstitution(realAct, Actor, true);
+		}
+
+		return true;
+	}
+
+	void Restore()
 	{
 		if (Actor == nullptr || (Actor->ObjectFlags & OF_EuthanizeMe))
 			return;
 
-		const int tid = Actor->tid;
+		// Make sure to unlink from and destroy all needed lists before restoring.
+		Actor->UnlinkFromWorld(nullptr);
+		Actor->SetTID(0);
+
 		memcpy(&Actor->snext, Backup.Data(), Backup.Size() - ((uint8_t*)&Actor->snext - (uint8_t*)Actor));
 		if (Actor->ViewPos != nullptr)
 		{
@@ -258,12 +449,106 @@ struct PredictionActor
 			Actor->ViewPos->Flags = ViewFlags;
 		}
 
-		// Thing ID was changed so make sure to re-link it.
-		if (Actor->tid != tid)
-			Actor->SetTID(Actor->tid);
+		// Make sure to always unset this since the renderer won't be able to if it's getting backed up.
+		Actor->renderflags &= ~RF_NOINTERPOLATEVIEW;
+
+		// Clean up any possible stale pointers after restoring.
+		Actor->snext = Actor->inext = nullptr;
+		Actor->sprev = Actor->iprev = nullptr;
+		Actor->BlockNode = nullptr;
+		Actor->touching_sectorlist = Actor->touching_rendersectors = Actor->touching_sectorportallist = nullptr;
+		Actor->touching_lineportallist = nullptr;
+
+		Actor->LinkToWorld(nullptr, false, Actor->Sector);
+		// Just do a simple relink of its TID back into the hash map. This isn't quite correct but order rarely matters
+		// for this.
+		Actor->SetTID(Actor->tid);
+		
+		// See RestoreNodeList for explanation on how nodes are being reinserted into the lists.
+		if (!(Actor->flags & MF_NOSECTOR))
+		{
+			if (Actor->snext != nullptr)
+			{
+				*Actor->sprev = Actor->snext;
+				Actor->snext->sprev = Actor->sprev;
+				Actor->snext = nullptr;
+				Actor->sprev = nullptr;
+
+				// This really needs to be reworked into a doubly linked list...
+				TArray<AActor*> actors = {};
+				for (AActor* cur = Actor->Sector->thinglist; cur != nullptr; cur = cur->snext)
+					actors.Push(cur);
+
+				const int start = actors.Size() - 1;
+				int i = start;
+				for (; i >= 0; --i)
+				{
+					if (!SecAfter.CheckKey(actors[i]))
+						break;
+				}
+
+				if (i == start)
+				{
+					actors[i]->snext = Actor;
+					Actor->sprev = &actors[i]->snext;
+				}
+				else
+				{
+					auto head = i == -1 ? &Actor->Sector->thinglist : &actors[i]->snext;
+					Actor->snext = *head;
+					(*head)->sprev = &Actor->snext;
+					*head = Actor;
+					Actor->sprev = head;
+				}
+			}
+
+			RestoreNodeList(Actor->touching_sectorlist, &sector_t::touching_thinglist, TSecAfter);
+		}
+
+		if (!(Actor->flags & MF_NOBLOCKMAP))
+		{
+			for (auto actBlock = Actor->BlockNode; actBlock != nullptr; actBlock = actBlock->NextBlock)
+			{
+				// Did it change size/position somehow...?
+				if (actBlock->NextActor == nullptr || !BlockAfter.CheckKey(actBlock->BlockIndex))
+					continue;
+
+				*actBlock->PrevActor = actBlock->NextActor;
+				actBlock->NextActor->PrevActor = actBlock->PrevActor;
+				actBlock->NextActor = nullptr;
+				actBlock->PrevActor = nullptr;
+
+				TArray<FBlockNode*> blockNodes = {};
+				for (auto cur = Actor->Level->blockmap.blocklinks[actBlock->BlockIndex]; cur != nullptr; cur = cur->NextActor)
+					blockNodes.Push(cur);
+
+				auto& after = BlockAfter[actBlock->BlockIndex];
+				const int start = blockNodes.Size() - 1;
+				int i = start;
+				for (; i >= 0; --i)
+				{
+					if (!after.CheckKey(blockNodes[i]->Me))
+						continue;
+				}
+
+				if (i == start)
+				{
+					blockNodes[i]->NextActor = actBlock;
+					actBlock->PrevActor = &blockNodes[i]->NextActor;
+				}
+				else
+				{
+					auto head = i == -1 ? &Actor->Level->blockmap.blocklinks[actBlock->BlockIndex] : &blockNodes[i]->NextActor;
+					actBlock->NextActor = *head;
+					(*head)->PrevActor = &actBlock->NextActor;
+					*head = actBlock;
+					actBlock->PrevActor = head;
+				}
+			}
+		}
 	}
 };
-static TArray<PredictionActor> PredictionActors;
+static TMap<const AActor*, PredictionActor> PredictionActors;
 
 // [GRB] Custom player classes
 TArray<FPlayerClass> PlayerClasses;
@@ -1455,9 +1740,7 @@ void P_PlayerThink (player_t *player)
 
 void P_PredictionReset()
 {
-	LastPredictedPosition = DVector3{};
-	LastPredictedPortalGroup = 0;
-	LastPredictedTic = -1;
+	ClientPrediction::Reset();
 }
 
 static void P_CalculateRubberband(AActor* pmo, const DVector3& from, DVector3 &result, float scale, float threshold, float minMove)
@@ -1482,7 +1765,7 @@ void P_AddPredictedItem(AActor* item, bool useAll)
 		item = (AActor*)1;
 
 	SendItemUse = item;
-	if (!netgame || item == nullptr)
+	if (!netgame)
 		return;
 
 	if (PredictionItems.Size())
@@ -1490,128 +1773,31 @@ void P_AddPredictedItem(AActor* item, bool useAll)
 		auto& inv = PredictionItems.Last();
 		if (inv.GameTic == maketic)
 		{
-			inv.UpdateItem(item, useAll);
+			if (item == nullptr)
+				PredictionItems.Pop();
+			else
+				inv.Update(*item, useAll);
 			return;
 		}
 	}
 
-	PredictionItems.Push({ maketic, item, useAll });
-}
-
-template<class nodetype, class linktype>
-void BackupNodeList(AActor *act, nodetype *head, nodetype *linktype::*otherlist, TArray<nodetype*, nodetype*> &prevbackup, TArray<linktype *, linktype *> &otherbackup)
-{
-	// The ordering of the touching_sectorlist needs to remain unchanged
-	// Also store a copy of all previous sector_thinglist nodes
-	prevbackup.Clear();
-	otherbackup.Clear();
-
-	for (auto mnode = head; mnode != nullptr; mnode = mnode->m_tnext)
-	{
-		otherbackup.Push(mnode->m_sector);
-
-		for (auto snode = mnode->m_sector->*otherlist; snode; snode = snode->m_snext)
-		{
-			if (snode->m_thing == act)
-			{
-				prevbackup.Push(snode->m_sprev);
-				break;
-			}
-		}
-	}
-}
-
-template<class nodetype, class linktype>
-nodetype *RestoreNodeList(AActor *act, nodetype *head, nodetype *linktype::*otherlist, TArray<nodetype*, nodetype*> &prevbackup, TArray<linktype *, linktype *> &otherbackup)
-{
-	// Destroy old refrences
-	nodetype *node = head;
-	while (node)
-	{
-		node->m_thing = NULL;
-		node = node->m_tnext;
-	}
-
-	// Make the sector_list match the player's touching_sectorlist before it got predicted.
-	P_DelSeclist(head, otherlist);
-	head = NULL;
-	for (auto i = otherbackup.Size(); i-- > 0;)
-	{
-		head = P_AddSecnode(otherbackup[i], act, head, otherbackup[i]->*otherlist);
-	}
-	//act->touching_sectorlist = ctx.sector_list;	// Attach to thing
-	//ctx.sector_list = NULL;		// clear for next time
-
-	// In the old code this block never executed because of the commented-out NULL assignment above. Needs to be checked
-	node = head;
-	while (node)
-	{
-		if (node->m_thing == NULL)
-		{
-			if (node == head)
-				head = node->m_tnext;
-			node = P_DelSecnode(node, otherlist);
-		}
-		else
-		{
-			node = node->m_tnext;
-		}
-	}
-
-	nodetype *snode;
-
-	// Restore sector thinglist order
-	for (auto i = otherbackup.Size(); i-- > 0;)
-	{
-		// If we were already the head node, then nothing needs to change
-		if (prevbackup[i] == NULL)
-			continue;
-
-		for (snode = otherbackup[i]->*otherlist; snode; snode = snode->m_snext)
-		{
-			if (snode->m_thing == act)
-			{
-				if (snode->m_sprev)
-					snode->m_sprev->m_snext = snode->m_snext;
-				else
-					snode->m_sector->*otherlist = snode->m_snext;
-				if (snode->m_snext)
-					snode->m_snext->m_sprev = snode->m_sprev;
-
-				snode->m_sprev = prevbackup[i];
-
-				// At the moment, we don't exist in the list anymore, but we do know what our previous node is, so we set its current m_snext->m_sprev to us.
-				if (snode->m_sprev->m_snext)
-					snode->m_sprev->m_snext->m_sprev = snode;
-				snode->m_snext = snode->m_sprev->m_snext;
-				snode->m_sprev->m_snext = snode;
-				break;
-			}
-		}
-	}
-	return head;
+	if (item != nullptr)
+		PredictionItems.Push({ maketic, *item, useAll });
 }
 
 static bool P_InBackup(const AActor* mo)
 {
-	for (auto& backup : PredictionActors)
-	{
-		if (backup.Actor == mo)
-			return true;
-	}
-
-	return false;
+	return PredictionActors.CheckKey(mo);
 }
 
-bool CanPredict(AActor* mo)
+bool CanPredict(const AActor* mo)
 {
 	return !(mo->ObjectFlags & (OF_EuthanizeMe | OF_NoPredict)) && P_InBackup(mo);
 }
 
-void P_PredictPlayer (player_t *player)
+void P_PredictPlayer ()
 {
-	int maxtic;
-
+	player_t* player = &players[consoleplayer];
 	if (player->ClientState & CS_PREDICTING)
 		return;
 	if (!P_CanPredictPlayer(player))
@@ -1620,56 +1806,53 @@ void P_PredictPlayer (player_t *player)
 		return;
 	}
 
-	maxtic = maketic;
-
-	if (gametic == maxtic)
-	{
+	const int maxTic = maketic;
+	if (gametic == maxTic)
 		return;
-	}
 
 	NetworkEntityManager::bWorldPredicting = true;
 	player->ClientState |= CS_PREDICTING;
 
 	FRandom::SaveRNGState(PredictionRNG);
 
-	// Save original values for restoration later
-	PredictionPlayer.CopyFrom(*player, false);
+	// Save original values for restoration later.
+	PlayerBackup.Update(*player);
+	PredictionActors.Insert(player->mo, { *player->mo });
+	if (player->mo->alternative != nullptr)
+		PredictionActors.Insert(player->mo->alternative, { *player->mo->alternative.ForceGet() });
+
 	player->cheats |= CF_PREDICTING; // Deprecated but needs to be kept around for existing ZScript.
 
-	auto act = player->mo;
-	PredictionPawn = act;
-	PredictionActors.Push({ act });
-	if (act->alternative != nullptr)
-		PredictionActors.Push({ act->alternative });
-
 	// Only back these up if we plan on actually predicting them.
-	bDidPSpritePrediction = cl_predict_weapons;
-	if (bDidPSpritePrediction)
+	ClientPrediction::bPredictedPSprites = cl_predict_weapons;
+	if (ClientPrediction::bPredictedPSprites)
 	{
 		for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
-			PredictionPSprites.Push({ psp });
+			PredictionPSprites.Insert(psp->GetID(), { *psp });
 	}
 
 	const bool predictingItems = cl_predict_weapons || cl_predict_inventory;
 	if (predictingItems)
 	{
-		for (AActor* item = act->Inventory; item != nullptr; item = item->Inventory)
+		for (AActor* item = player->mo->Inventory; item != nullptr; item = item->Inventory)
 		{
 			// Weapons don't get backed up the same as other inventory items since they'll
 			// modify PSprites.
 			const bool isWeap = item->IsKindOf(NAME_Weapon);
-			if ((cl_predict_weapons && isWeap) || (cl_predict_inventory && !isWeap))
+			if ((cl_predict_weapons && isWeap) || (cl_predict_inventory && !isWeap && !item->IsKindOf(NAME_Ammo)))
 			{
-				PredictionActors.Push({ item });
-				if (isWeap && !cl_predict_inventory)
+				PredictionActors.Insert(item, { *item });
+				if (isWeap)
 				{
-					// If it's a weapon, only back up its ammo types.
+					// If it's a weapon, only back up its own ammo types. We back them up this
+					// way because it tends to take up a ton of inventory space and some of it
+					// might not be all that useful.
 					auto ammo1 = item->PointerVar<AActor>(NAME_Ammo1);
 					auto ammo2 = item->PointerVar<AActor>(NAME_Ammo2);
 					if (ammo1 != nullptr && !P_InBackup(ammo1))
-						PredictionActors.Push({ ammo1 });
+						PredictionActors.Insert(ammo1, { *ammo1 });
 					if (ammo2 != nullptr && !P_InBackup(ammo2))
-						PredictionActors.Push({ ammo2 });
+						PredictionActors.Insert(ammo2, { *ammo2 });
 				}
 			}
 		}
@@ -1680,63 +1863,29 @@ void P_PredictPlayer (player_t *player)
 	while (PredictionItems.Size() && PredictionItems[0].GameTic < gametic)
 		PredictionItems.Delete(0);
 
-	// Backup sector information.
-	BackupNodeList(act, act->touching_sectorlist, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
-	BackupNodeList(act, act->touching_rendersectors, &sector_t::touching_renderthings, PredictionRenderSectors_sprev_Backup, PredictionRenderSectorsBackup);
-	BackupNodeList(act, act->touching_sectorportallist, &sector_t::sectorportal_thinglist, PredictionPortalSectors_sprev_Backup, PredictionPortalSectorsBackup);
-	BackupNodeList(act, act->touching_lineportallist, &FLinePortal::lineportal_thinglist, PredictionPortalLines_sprev_Backup, PredictionPortalLinesBackup);
-
-	// Keep an ordered list off all actors in the linked sector.
-	PredictionSectorListBackup.Clear();
-	if (!(act->flags & MF_NOSECTOR))
-	{
-		AActor *link = act->Sector->thinglist;
-		
-		while (link != NULL)
-		{
-			PredictionSectorListBackup.Push(link);
-			link = link->snext;
-		}
-	}
-
-	// Blockmap ordering also needs to stay the same, so unlink the block nodes
-	// without releasing them. (They will be used again in P_UnpredictPlayer).
-	FBlockNode *block = act->BlockNode;
-
-	while (block != NULL)
-	{
-		if (block->NextActor != NULL)
-		{
-			block->NextActor->PrevActor = block->PrevActor;
-		}
-		*(block->PrevActor) = block->NextActor;
-		block = block->NextBlock;
-	}
-	act->BlockNode = NULL;
-
 	// This essentially acts like a mini P_Ticker where only the stuff relevant to the client is actually
 	// called. Call order is preserved.
 	bool rubberband = false, rubberbandLimit = false;
 	DVector3 rubberbandPos = {};
-	const bool canRubberband = LastPredictedTic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
+	const bool canRubberband = ClientPrediction::PrevTic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
-	for (int i = gametic; i < maxtic; ++i)
+	for (int i = gametic; i < maxTic; ++i)
 	{
 		player->oldbuttons = player->cmd.ucmd.buttons;
 		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->ClientTic = i;
-		if (i + 1 == maxtic)
+		if (i + 1 == maxTic)
 			player->ClientState |= CS_LATEST_TICK;
-		if (i >= LastPredictedTic)
+		if (i >= ClientPrediction::PrevTic)
 			player->ClientState |= CS_FRESH_TICK;
 
 		// Got snagged on something. Start correcting towards the player's final predicted position. We're
 		// being intentionally generous here by not really caring how the player got to that position, only
 		// that they ended up in the same spot on the same tick.
-		if (canRubberband && LastPredictedTic == i)
+		if (canRubberband && ClientPrediction::PrevTic == i)
 		{
-			DVector3 diff = player->mo->Pos() - LastPredictedPosition;
-			diff += player->mo->Level->Displacements.getOffset(player->mo->Sector->PortalGroup, LastPredictedPortalGroup);
+			DVector3 diff = player->mo->Pos() - ClientPrediction::PrevPos;
+			diff += player->mo->Level->Displacements.getOffset(player->mo->Sector->PortalGroup, ClientPrediction::PrevPortalGroup);
 			double dist = diff.LengthSquared();
 			if (dist >= EQUAL_EPSILON * EQUAL_EPSILON && dist > rubberbandThreshold * rubberbandThreshold)
 			{
@@ -1749,7 +1898,7 @@ void P_PredictPlayer (player_t *player)
 
 		// Play back the item use history (this will align with how the netevents execute).
 		if (curItem < PredictionItems.Size() && PredictionItems[curItem].GameTic == i)
-			PredictionItems[curItem++].UseItem(player->mo);
+			PredictionItems[curItem++].Use(*player->mo);
 
 		// This information is only relevant on the latest tick.
 		R_ClearInterpolationPath();
@@ -1757,7 +1906,7 @@ void P_PredictPlayer (player_t *player)
 		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
 		// Reset the PSprite data too if predicting them.
-		if (bDidPSpritePrediction)
+		if (ClientPrediction::bPredictedPSprites)
 		{
 			for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
 			{
@@ -1787,7 +1936,7 @@ void P_PredictPlayer (player_t *player)
 	if (rubberband)
 	{
 		DPrintf(DMSG_NOTIFY, "Prediction mismatch at (%.3f, %.3f, %.3f)\nExpected: (%.3f, %.3f, %.3f)\nCorrecting to (%.3f, %.3f, %.3f)\n",
-			LastPredictedPosition.X, LastPredictedPosition.Y, LastPredictedPosition.Z,
+			ClientPrediction::PrevPos.X, ClientPrediction::PrevPos.Y, ClientPrediction::PrevPos.Z,
 			rubberbandPos.X, rubberbandPos.Y, rubberbandPos.Z,
 			player->mo->X(), player->mo->Y(), player->mo->Z());
 
@@ -1802,9 +1951,9 @@ void P_PredictPlayer (player_t *player)
 			player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
 			DVector3 snapPos = {};
-			P_CalculateRubberband(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
-			player->mo->PrevPortalGroup = LastPredictedPortalGroup;
-			player->mo->Prev = LastPredictedPosition;
+			P_CalculateRubberband(player->mo, ClientPrediction::PrevPos, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
+			player->mo->PrevPortalGroup = ClientPrediction::PrevPortalGroup;
+			player->mo->Prev = ClientPrediction::PrevPos;
 			const double zOfs = player->viewz - player->mo->Z();
 			player->mo->SetXYZ(snapPos);
 			player->viewz = snapPos.Z + zOfs;
@@ -1813,32 +1962,36 @@ void P_PredictPlayer (player_t *player)
 
 	// The real ticker will handle any clean up.
 	player->mo->UpdateLightLocations();
-	// Unmorphed while predicting so make sure to hide the original Actor.
-	if (PredictionPawn->ObjectFlags & OF_NoPredict)
-		PredictionPawn->renderflags |= RF_INVISIBLE;
+
+	// If anything was destroyed while predicting, make sure they're invisible.
+	TMap<const AActor*, PredictionActor>::Iterator it = { PredictionActors };
+	TMap<const AActor*, PredictionActor>::Pair* pair = nullptr;
+	while (it.NextPair(pair))
+	{
+		if (pair->Key->ObjectFlags & OF_NoPredict)
+			pair->Value.Actor->renderflags |= RF_INVISIBLE;
+	}
 
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
 	// the right spot until it reaches it.
-	LastPredictedTic = maxtic;
-	LastPredictedPosition = player->mo->Pos();
-	LastPredictedPortalGroup = player->mo->Level->PointInSector(LastPredictedPosition)->PortalGroup;
+	ClientPrediction::PrevTic = maxTic;
+	ClientPrediction::PrevPos = player->mo->Pos();
+	ClientPrediction::PrevPortalGroup = player->mo->Level->PointInSector(ClientPrediction::PrevPos)->PortalGroup;
 }
 
 void P_UnPredictPlayer ()
 {
 	player_t *player = &players[consoleplayer];
-
 	if (player->ClientState & CS_PREDICTING)
 	{
-		AActor* act = player->mo;
-		if (act != PredictionPawn)
+		// We have to do this before deleting anything in case the morphed thing is a predicted Actor.
+		TMap<const AActor*, PredictionActor>::Iterator it = { PredictionActors };
+		TMap<const AActor*, PredictionActor>::Pair* pair = nullptr;
+		while (it.NextPair(pair))
 		{
-			// If the player is (un)morphed, morph them back. We can safely skip any
-			// checks here since their previous body was already a valid pawn.
-			if (!MorphPointerSubstitution(act, PredictionPawn, true))
-				I_Error("Could not (un)morph predicted pawn back.");
-
-			act = PredictionPawn;
+			// If anything is (un)morphed, morph them back.
+			if (!pair->Value.CheckUndoMorph())
+				I_Error("Could not (un)morph predicted Actor back.");
 		}
 
 		// Make sure to clean up any predicted Actors before restoring the world state (in case they modify anything while destroying).
@@ -1848,138 +2001,43 @@ void P_UnPredictPlayer ()
 
 		FRandom::RestoreRNGState(PredictionRNG);
 
-		AActor *savedcamera = player->camera;
-		auto &actInvSel = act->PointerVar<AActor*>(NAME_InvSel);
-		auto InvSel = actInvSel;
-		int inventorytics = player->inventorytics;
-		const bool settings_controller = player->settings_controller;
+		PlayerBackup.Restore(*player);
+		// Make sure to keep their last selected item.
+		auto& invSel = player->mo->PointerVar<AActor*>(NAME_InvSel);
+		auto selected = invSel;
 
-		player->CopyFrom(PredictionPlayer, false);
-		player->settings_controller = settings_controller;
-		// Restore the camera instead of using the backup's copy, because spynext/prev
-		// could cause it to change during prediction.
-		player->camera = savedcamera;
-
-		FLinkContext ctx;
-		// Unlink from all list, including those which are not being handled by UnlinkFromWorld.
-		auto sectorportal_list = act->touching_sectorportallist;
-		auto lineportal_list = act->touching_lineportallist;
-		act->touching_sectorportallist = nullptr;
-		act->touching_lineportallist = nullptr;
-		act->UnlinkFromWorld(&ctx);
-
-		for (auto& predicted : PredictionActors)
-			predicted.RestoreActor();
+		it.Reset();
+		while (it.NextPair(pair))
+			pair->Value.Restore();
 		PredictionActors.Clear();
 
+		invSel = selected;
+
 		// The state of the PSprite list needs to be brought back to exactly how it was before predicting.
-		unsigned int i = 0u;
-		if (bDidPSpritePrediction)
+		if (ClientPrediction::bPredictedPSprites)
 		{
-			const bool hasPSprites = PredictionPSprites.Size();
 			for (DPSprite* psp = player->psprites; psp != nullptr; psp = psp->Next)
 			{
 				const int id = psp->GetID();
-				if (!hasPSprites || id < PredictionPSprites[i].ID)
+				if (!PredictionPSprites.CheckKey(id))
 				{
-					psp->Destroy();
-				}
-				else if (id > PredictionPSprites[i].ID)
-				{
-					// Check if the current ID exists later in the list. If it does, don't
-					// bother destroying it.
-					bool found = false;
-					for (unsigned int j = i + 1u; j < PredictionPSprites.Size(); ++j)
-					{
-						if (PredictionPSprites[j].ID == id)
-						{
-							found = true;
-							break;
-						}
-					}
-
-					if (found)
-						psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
-					else
+					if (!(psp->ObjectFlags & OF_EuthanizeMe))
 						psp->Destroy();
+					continue;
 				}
 
-				if (psp->ObjectFlags & OF_EuthanizeMe)
-					continue;
-
-				// These are set by the renderer so they shouldn't be restored.
-				WeaponInterp Prev = psp->Prev, Vert = psp->Vert;
-				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
-				psp->Prev = Prev;
-				psp->Vert = Vert;
-				psp->firstTic = false;
-				++i;
+				PredictionPSprites[id].Restore(*psp);
+				PredictionPSprites.Remove(id);
 			}
 
 			// Recreate any remaining ones.
-			for (; i < PredictionPSprites.Size(); ++i)
-			{
-				auto psp = player->GetPSprite((PSPLayers)PredictionPSprites[i].ID);
-				WeaponInterp Prev = psp->Prev, Vert = psp->Vert;
-				memcpy(&psp->HAlign, PredictionPSprites[i].Backup.Data(), PredictionPSprites[i].Backup.Size() - ((uint8_t*)&psp->HAlign - (uint8_t*)psp));
-				psp->Prev = Prev;
-				psp->Vert = Vert;
-				psp->firstTic = false;
-			}
+			TMap<int, PredictionPSprite>::Iterator it = { PredictionPSprites };
+			TMap<int, PredictionPSprite>::Pair* pair = nullptr;
+			while (it.NextPair(pair))
+				pair->Value.Create(*player, pair->Key);
 
 			PredictionPSprites.Clear();
 		}
-
-		// The blockmap ordering needs to remain unchanged, too.
-		// Restore sector links and refrences.
-		// [ED850] This is somewhat of a duplicate of LinkToWorld(), but we need to keep every thing the same,
-		// otherwise we end up fixing bugs in blockmap logic (i.e undefined behaviour with polyobject collisions),
-		// which we really don't want to do here.
-		if (!(act->flags & MF_NOSECTOR))
-		{
-			sector_t *sec = act->Sector;
-			AActor *me, *next;
-			AActor **link;// , **prev;
-
-			// The thinglist is just a pointer chain. We are restoring the exact same things, so we can NULL the head safely
-			sec->thinglist = NULL;
-
-			for (i = PredictionSectorListBackup.Size(); i-- > 0;)
-			{
-				me = PredictionSectorListBackup[i];
-				link = &sec->thinglist;
-				next = *link;
-				if ((me->snext = next))
-					next->sprev = &me->snext;
-				me->sprev = link;
-				*link = me;
-			}
-
-			act->touching_sectorlist = RestoreNodeList(act, ctx.sector_list, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
-			act->touching_rendersectors = RestoreNodeList(act, ctx.render_list, &sector_t::touching_renderthings, PredictionRenderSectors_sprev_Backup, PredictionRenderSectorsBackup);
-			act->touching_sectorportallist = RestoreNodeList(act, sectorportal_list, &sector_t::sectorportal_thinglist, PredictionPortalSectors_sprev_Backup, PredictionPortalSectorsBackup);
-			act->touching_lineportallist = RestoreNodeList(act, lineportal_list, &FLinePortal::lineportal_thinglist, PredictionPortalLines_sprev_Backup, PredictionPortalLinesBackup);
-		}
-
-		// Now fix the pointers in the blocknode chain
-		FBlockNode *block = act->BlockNode;
-
-		while (block != NULL)
-		{
-			*(block->PrevActor) = block;
-			if (block->NextActor != NULL)
-			{
-				block->NextActor->PrevActor = &block->NextActor;
-			}
-			block = block->NextBlock;
-		}
-
-		actInvSel = InvSel;
-		player->inventorytics = inventorytics;
-		player->ClientTic = gametic;
-		player->ClientState &= ~CS_PREDICTION_STATE;
-		// Make sure to always unset this since the renderer won't be able to if it's getting backed up.
-		act->renderflags &= ~RF_NOINTERPOLATEVIEW;
 	}
 
 	NetworkEntityManager::bWorldPredicting = false;
