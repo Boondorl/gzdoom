@@ -514,7 +514,7 @@ bool P_IsPlayerTotallyFrozen(const player_t *player);
 bool P_NoInterpolation(player_t const *player, AActor const *actor);
 
 void P_AddPredictedItem(AActor* item, bool useAll = false);
-bool CanPredict(AActor* mo);
+bool CanPredict(const AActor* mo);
 
 inline int IsPredicting(AActor* self)
 {

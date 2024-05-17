@@ -1938,7 +1938,7 @@ void TryRunTics (void)
 			M_Ticker();
 			// Repredict the player for new buffered movement
 			P_UnPredictPlayer();
-			P_PredictPlayer(&players[consoleplayer]);
+			P_PredictPlayer();
 		}
 		return;
 	}
@@ -1980,7 +1980,7 @@ void TryRunTics (void)
 			M_Ticker ();
 			// Repredict the player for new buffered movement
 			P_UnPredictPlayer();
-			P_PredictPlayer(&players[consoleplayer]);
+			P_PredictPlayer();
 			return;
 		}
 	}
@@ -2015,7 +2015,7 @@ void TryRunTics (void)
 			NetUpdate ();	// check for new console commands
 			TicStabilityEnd();
 		}
-		P_PredictPlayer(&players[consoleplayer]);
+		P_PredictPlayer();
 		S_UpdateSounds (players[consoleplayer].camera);	// move positional sounds
 	}
 	else
