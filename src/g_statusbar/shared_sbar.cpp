@@ -1233,8 +1233,6 @@ void DBaseStatusBar::DrawTopStuff (EHudState state)
 
 void DBaseStatusBar::DrawConsistancy () const
 {
-	static bool firsttime = true;
-
 	if (!netgame)
 		return;
 
@@ -1251,19 +1249,16 @@ void DBaseStatusBar::DrawConsistancy () const
 
 	if (desync)
 	{
-		if (firsttime)
+		auto lines = V_BreakLines(SmallFont, twod->GetWidth() / CleanXfac - 40, text.GetChars());
+		const int height = SmallFont->GetHeight() * CleanYfac;
+		double y = 0.0;
+		for (auto& line : lines)
 		{
-			firsttime = false;
-			if (debugfile)
-			{
-				fprintf (debugfile, "%s as of tic %d (%d)\n", text.GetChars(),
-					players[1-consoleplayer].inconsistant,
-					players[1-consoleplayer].inconsistant/ticdup);
-			}
+			DrawText(twod, SmallFont, CR_GREEN,
+				(twod->GetWidth() - SmallFont->StringWidth(line.Text) * CleanXfac) * 0.5,
+				y, line.Text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
+			y += height;
 		}
-		DrawText(twod, SmallFont, CR_GREEN,
-			(twod->GetWidth() - SmallFont->StringWidth (text)*CleanXfac) / 2,
-			0, text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
 	}
 }
 
@@ -1285,9 +1280,16 @@ void DBaseStatusBar::DrawWaiting () const
 
 	if (isWaiting)
 	{
-		DrawText(twod, SmallFont, CR_ORANGE,
-			(twod->GetWidth() - SmallFont->StringWidth (text)*CleanXfac) / 2,
-			SmallFont->GetHeight()*CleanYfac, text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
+		auto lines = V_BreakLines(SmallFont, twod->GetWidth() / CleanXfac - 40, text.GetChars());
+		const int height = SmallFont->GetHeight() * CleanYfac;
+		double y = 0.0;
+		for (auto& line : lines)
+		{
+			DrawText(twod, SmallFont, CR_ORANGE,
+				(twod->GetWidth() - SmallFont->StringWidth(line.Text) * CleanXfac) * 0.5,
+				y, line.Text.GetChars(), DTA_CleanNoMove, true, TAG_DONE);
+			y += height;
+		}
 	}
 }
 
