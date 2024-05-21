@@ -411,14 +411,15 @@ public:
 		}
 	}
 
-	bool CheckUndoMorph()
+	void TryUndoMorph()
 	{
 		// This should never happen so throw up a red flag if it does.
 		if (Actor == nullptr || (Actor->ObjectFlags & OF_EuthanizeMe))
-			return false;
+			I_Error("Actor was destroyed while predicting.");
+
 		// These can't morph back by their nature.
 		if (bUnmorphed)
-			return true;
+			return;
 
 		if (Actor->alternative != MorphActor)
 		{
@@ -427,10 +428,9 @@ public:
 			if (realAct == nullptr)
 				realAct = MorphActor->alternative != nullptr ? MorphActor->alternative : MorphActor;
 
-			return MorphPointerSubstitution(realAct, Actor, true);
+			if (!MorphPointerSubstitution(realAct, Actor, true))
+				I_Error("Could not (un)morph predicted Actor.");
 		}
-
-		return true;
 	}
 
 	void Restore()
@@ -1848,9 +1848,9 @@ void P_PredictPlayer ()
 					// might not be all that useful.
 					auto ammo1 = item->PointerVar<AActor>(NAME_Ammo1);
 					auto ammo2 = item->PointerVar<AActor>(NAME_Ammo2);
-					if (ammo1 != nullptr && !P_InBackup(ammo1))
+					if (ammo1 != nullptr && !(ammo1->ObjectFlags & OF_EuthanizeMe) && !P_InBackup(ammo1))
 						PredictionActors.Insert(ammo1, { *ammo1 });
-					if (ammo2 != nullptr && !P_InBackup(ammo2))
+					if (ammo2 != nullptr && !(ammo2->ObjectFlags & OF_EuthanizeMe) && !P_InBackup(ammo2))
 						PredictionActors.Insert(ammo2, { *ammo2 });
 				}
 			}
@@ -1987,11 +1987,7 @@ void P_UnPredictPlayer ()
 		TMap<const AActor*, PredictionActor>::Iterator it = { PredictionActors };
 		TMap<const AActor*, PredictionActor>::Pair* pair = nullptr;
 		while (it.NextPair(pair))
-		{
-			// If anything is (un)morphed, morph them back.
-			if (!pair->Value.CheckUndoMorph())
-				I_Error("Could not (un)morph predicted Actor back.");
-		}
+			pair->Value.TryUndoMorph();
 
 		// Make sure to clean up any predicted Actors before restoring the world state (in case they modify anything while destroying).
 		TArray<FName> toDestroy = {};
