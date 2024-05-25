@@ -83,6 +83,10 @@ EXTERN_CVAR(Bool, cl_capfps)
 extern uint8_t		*demo_p;		// [RH] Special "ticcmds" get recorded in demos
 extern FString	savedescription;
 extern FString	savegamefile;
+extern FRandom pr_spawnmobj;
+extern FRandom pr_acs;
+extern FRandom pr_chase;
+extern FRandom pr_damagemobj;
 
 extern short consistancy[MAXPLAYERS][BACKUPTICS];
 
@@ -91,7 +95,48 @@ extern short consistancy[MAXPLAYERS][BACKUPTICS];
 enum { NET_PeerToPeer, NET_PacketServer };
 uint8_t NetMode = NET_PeerToPeer;
 
+// Track desync states upon request.
+struct ClientSyncState
+{
+	int SpawnSeed = 0, ACSSeed = 0, ChaseSeed = 0, DamageSeed = 0;
+	int Health = 0;
+	DVector3 Pos = {};
+	DAngle Yaw = {}, Pitch = {};
 
+	void SetState(const player_t& player)
+	{
+		SpawnSeed = pr_spawnmobj.Seed();
+		ACSSeed = pr_acs.Seed();
+		ChaseSeed = pr_chase.Seed();
+		DamageSeed = pr_damagemobj.Seed();
+
+		Health = player.health;
+		Pos = player.mo->Pos();
+		Yaw = player.mo->Angles.Yaw;
+		Pitch = player.mo->Angles.Pitch;
+	}
+
+	void CompareState(int spawnSeed, int acsSeed, int chaseSeed, int damageSeed, int health, const DVector3& pos, const DAngle& yaw, const DAngle& pitch)
+	{
+		if (pos != Pos)
+			Printf("Pos: (%.4f, %.4f, %.4f) [Expected (%.4f, %.4f, %.4f)]\n", pos.X, pos.Y, pos.Z, Pos.X, Pos.Y, Pos.Z);
+		if (yaw != Yaw)
+			Printf("Yaw: %.4f [Expected %.4f]\n", yaw, Yaw);
+		if (pitch != Pitch)
+			Printf("Pitch: %.4f [Expected %.4f]\n", pitch, Pitch);
+		if (health != Health)
+			Printf("Health: %d [Expected %d]\n", health, Health);
+		if (spawnSeed != SpawnSeed)
+			Printf("Spawn Seed: %d [Expected %d]\n", spawnSeed, SpawnSeed);
+		if (acsSeed != ACSSeed)
+			Printf("ACS Seed: %d [Expected %d]\n", acsSeed, ACSSeed);
+		if (chaseSeed != ChaseSeed)
+			Printf("Chase Seed: %d [Expected %d]\n", chaseSeed, ChaseSeed);
+		if (damageSeed != DamageSeed)
+			Printf("Damage Seed: %d [Expected %d]\n", damageSeed, DamageSeed);
+	}
+};
+ClientSyncState syncState[MAXPLAYERS];
 
 //
 // NETWORKING
@@ -2757,6 +2802,54 @@ void Net_DoCommand (int type, uint8_t **stream, int player)
 	case DEM_CHANGESKILL:
 		NextSkill = ReadInt32(stream);
 		break;
+
+	case DEM_SYNC_STATUS:
+	{
+		int requester = ReadInt8(stream);
+		int reporter = ReadInt8(stream);
+		if (reporter == consoleplayer)
+		{
+			Net_WriteInt8(DEM_SYNC_REPORT);
+			Net_WriteInt8(requester);
+			Net_WriteInt8(consoleplayer);
+			Net_WriteInt32(pr_spawnmobj.Seed());
+			Net_WriteInt32(pr_acs.Seed());
+			Net_WriteInt32(pr_chase.Seed());
+			Net_WriteInt32(pr_damagemobj.Seed());
+			Net_WriteDouble(players[consoleplayer].mo->X());
+			Net_WriteDouble(players[consoleplayer].mo->Y());
+			Net_WriteDouble(players[consoleplayer].mo->Z());
+			Net_WriteDouble(players[consoleplayer].mo->Angles.Yaw.Degrees());
+			Net_WriteDouble(players[consoleplayer].mo->Angles.Pitch.Degrees());
+			Net_WriteInt32(players[consoleplayer].health);
+		}
+		else if (requester == consoleplayer)
+		{
+			syncState[reporter].SetState(players[reporter]);
+		}
+	}
+	break;
+
+	case DEM_SYNC_REPORT:
+	{
+		int requester = ReadInt8(stream);
+		int reporter = ReadInt8(stream);
+		int spawnSeed = ReadInt32(stream);
+		int acsSeed = ReadInt32(stream);
+		int chaseSeed = ReadInt32(stream);
+		int damageSeed = ReadInt32(stream);
+		DVector3 pos = { ReadDouble(stream), ReadDouble(stream), ReadDouble(stream) };
+		DAngle yaw = DAngle::fromDeg(ReadDouble(stream));
+		DAngle pitch = DAngle::fromDeg(ReadDouble(stream));
+		int health = ReadInt32(stream);
+
+		if (requester == consoleplayer)
+		{
+			Printf("Player: %s (%d)\n", players[reporter].userinfo.GetName(), reporter);
+			syncState[reporter].CompareState(spawnSeed, acsSeed, chaseSeed, damageSeed, health, pos, yaw, pitch);
+		}
+	}
+	break;
 		
 	default:
 		I_Error ("Unknown net command: %d", type);
@@ -2931,7 +3024,12 @@ void Net_SkipCommand (int type, uint8_t **stream)
 			skip = 2 + ((*stream)[1] >> 7);
 			break;
 
+		case DEM_SYNC_REPORT:
+			skip = 62;
+			break;
+
 		case DEM_SETPITCHLIMIT:
+		case DEM_SYNC_STATUS:
 			skip = 2;
 			break;
 
@@ -3113,4 +3211,25 @@ CCMD (net_listcontrollers)
 			Printf ("- %s\n", players[i].userinfo.GetName());
 		}
 	}
+}
+
+CCMD(syncstatus)
+{
+	if (!netgame)
+		return;
+
+	bool sent = false;
+	for (int i = 0; i < MAXPLAYERS; ++i)
+	{
+		if (!playeringame[i] || !players[i].inconsistant || i == consoleplayer)
+			continue;
+
+		sent = true;
+		Net_WriteInt8(DEM_SYNC_STATUS);
+		Net_WriteInt8(consoleplayer);
+		Net_WriteInt8(i);
+	}
+
+	if (!sent)
+		Printf("All players are currently synchronized.\n");
 }

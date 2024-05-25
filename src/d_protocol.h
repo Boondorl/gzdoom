@@ -165,6 +165,8 @@ enum EDemoCommand
 	DEM_ENDSCREENJOB,
 	DEM_ZSC_CMD,		// 74 String: Command, Word: Byte size of command
 	DEM_CHANGESKILL,	// 75 Int: Skill
+	DEM_SYNC_STATUS,	// 76 Byte: Requester player number, Byte: Desired player number to report back
+	DEM_SYNC_REPORT,	// 77 Byte: Requester player number; Byte: Reporter player number; 4 Ints: SpawnMobj, ACS, Chase, and Damage RNG seeds; 5 Doubles: XYZ + Yaw + Pitch; Int: Player health
 };
 
 // The following are implemented by cht_DoCheat in m_cheat.cpp
