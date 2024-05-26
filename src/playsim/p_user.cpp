@@ -1809,6 +1809,10 @@ void P_PredictPlayer ()
 	if (gametic == maxTic)
 		return;
 
+	// We need to run this before predicting to make sure any now-stale pointers don't accidentally get backed up
+	// alongside the Actor itself, otherwise the engine can easily break when unpredicting on the next tick.
+	GC::FullGC();
+
 	NetworkEntityManager::bWorldPredicting = true;
 	player->ClientState |= CS_PREDICTING;
 
@@ -1848,9 +1852,9 @@ void P_PredictPlayer ()
 					// might not be all that useful.
 					auto ammo1 = item->PointerVar<AActor>(NAME_Ammo1);
 					auto ammo2 = item->PointerVar<AActor>(NAME_Ammo2);
-					if (ammo1 != nullptr && !(ammo1->ObjectFlags & OF_EuthanizeMe) && !P_InBackup(ammo1))
+					if (ammo1 != nullptr && !P_InBackup(ammo1))
 						PredictionActors.Insert(ammo1, { *ammo1 });
-					if (ammo2 != nullptr && !(ammo2->ObjectFlags & OF_EuthanizeMe) && !P_InBackup(ammo2))
+					if (ammo2 != nullptr && !P_InBackup(ammo2))
 						PredictionActors.Insert(ammo2, { *ammo2 });
 				}
 			}
