@@ -101,11 +101,7 @@ static FRandom pr_skullpop ("SkullPop");
 CVAR(Bool, sv_singleplayerrespawn, false, CVAR_SERVERINFO | CVAR_CHEAT)
 
 // Variables for prediction
-CVAR (Bool, cl_noprediction, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_predict_specials, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-// Deprecated
-CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Float, cl_predict_lerpthreshold, 2.00f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 CUSTOM_CVAR(Float, cl_rubberband_scale, 0.3f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 {
@@ -129,6 +125,11 @@ CUSTOM_CVAR(Float, cl_rubberband_limit, 756.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG
 	if (self < 0.0f)
 		self = 0.0f;
 }
+
+// Deprecated
+CVAR(Bool, cl_noprediction, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, cl_predict_lerpscale, 0.05f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Float, cl_predict_lerpthreshold, 2.00f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 ColorSetList ColorSets;
 PainFlashList PainFlashes;
@@ -1427,8 +1428,7 @@ void P_PredictPlayer (player_t *player)
 {
 	int maxtic;
 
-	if (cl_noprediction ||
-		singletics ||
+	if (singletics ||
 		demoplayback ||
 		player->mo == NULL ||
 		player != player->mo->Level->GetConsolePlayer() ||
@@ -1526,7 +1526,6 @@ void P_PredictPlayer (player_t *player)
 			{
 				rubberband = true;
 				rubberbandPos = player->mo->Pos();
-				player->ClientState |= CS_RUBBERBANDING;
 				rubberbandLimit = cl_rubberband_limit > 0.0f && dist > cl_rubberband_limit * cl_rubberband_limit;
 			}
 		}
@@ -1536,6 +1535,7 @@ void P_PredictPlayer (player_t *player)
 		r_NoInterpolate = false;
 		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
+		player->oldbuttons = player->cmd.ucmd.buttons;
 		player->cmd = localcmds[i % LOCALCMDTICS];
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
