@@ -384,9 +384,7 @@ bool P_PredictLine(line_t *line, AActor *mo, int side, int activationType)
 
 	// Only predict a very specifc section of specials
 	if (line->special != Teleport_Line &&
-		line->special != Teleport &&
-		line->special != Teleport_NoFog &&
-		line->special != Teleport_NoStop)
+		line->special != Teleport)
 	{
 		return false;
 	}
