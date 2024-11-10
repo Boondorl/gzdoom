@@ -223,7 +223,7 @@ void P_Ticker (void)
 		Level->localEventManager->WorldTick();
 		Level->Tick();			// [RH] let the level tick
 		Level->Thinkers.RunThinkers(Level);
-		Level->ClientsideThinkers.RunClientsideThinkers(Level);
+		Level->ClientsideThinkers.RunClientsideThinkers(Level, gametic);
 
 		//if added by MC: Freeze mode.
 		if (!Level->isFrozen())

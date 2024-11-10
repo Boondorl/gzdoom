@@ -1545,6 +1545,8 @@ void P_PredictPlayer (player_t *player)
 		player->mo->ClearFOVInterpolation();
 		P_PlayerThink(player);
 		player->mo->CallTick();
+
+		player->mo->Level->ClientsideThinkers.RunClientsideThinkers(player->mo->Level, i);
 	}
 
 	if (rubberband)

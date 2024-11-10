@@ -269,12 +269,18 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 
 //==========================================================================
 //
-//
+// This version doesn't modify the level since that's already been done by
+// the networked ticking. This also runs while the player is predicting
+// to make sure it keeps ticking regardless of network game status.
 //
 //==========================================================================
 
-void FThinkerCollection::RunClientsideThinkers(FLevelLocals* Level)
+void FThinkerCollection::RunClientsideThinkers(FLevelLocals* Level, int curTic)
 {
+	if (curTic <= _maxTic)
+		return;
+
+	_maxTic = curTic;
 	int i, count;
 
 	bool dolights;

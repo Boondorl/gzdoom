@@ -79,7 +79,7 @@ struct FThinkerCollection
 	}
 
 	void RunThinkers(FLevelLocals *Level);	// The level is needed to tick the lights
-	void RunClientsideThinkers(FLevelLocals* Level);
+	void RunClientsideThinkers(FLevelLocals* Level, int curTic);
 	void DestroyAllThinkers(bool fullgc = true);
 	void SerializeThinkers(FSerializer &arc, bool keepPlayers);
 	void MarkRoots();
@@ -87,6 +87,7 @@ struct FThinkerCollection
 	void Link(DThinker *thinker, int statnum);
 
 private:
+	int _maxTic = -1;
 	FThinkerList Thinkers[MAX_STATNUM + 2];
 	FThinkerList FreshThinkers[MAX_STATNUM + 1];
 
