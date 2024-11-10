@@ -467,9 +467,10 @@ void AActor::LinkToWorld(FLinkContext *ctx, bool spawningmapthing, sector_t *sec
 	subsector = Level->PointInRenderSubsector(Pos());	// this is from the rendering nodes, not the gameplay nodes!
 	section = subsector->section;
 
+	const bool clientside = IsClientside();
 	if (!(flags & MF_NOSECTOR))
 	{
-		if (!(ObjectFlags & OF_Clientside))
+		if (!clientside)
 		{
 			// invisible things don't go into the sector links
 			// killough 8/11/98: simpler scheme using pointer-to-pointer prev
@@ -507,7 +508,7 @@ void AActor::LinkToWorld(FLinkContext *ctx, bool spawningmapthing, sector_t *sec
 
 
 	// link into blockmap (inert things don't need to be in the blockmap)
-	if (!(flags & MF_NOBLOCKMAP) && !(ObjectFlags & OF_Clientside))
+	if (!(flags & MF_NOBLOCKMAP) && !clientside)
 	{
 		FPortalGroupArray check;
 

@@ -197,7 +197,7 @@ DEFINE_FIELD(DBehavior, Level)
 
 void AActor::EnableNetworking(const bool enable)
 {
-	if (!enable && !(ObjectFlags & OF_Clientside))
+	if (!enable && !IsClientside())
 	{
 		ThrowAbortException(X_OTHER, "Cannot disable networking on Actors. Consider a Thinker or clientside Actor instead.");
 		return;
@@ -845,7 +845,7 @@ bool AActor::IsMapActor()
 
 inline int GetTics(AActor* actor, FState * newstate)
 {
-	int tics = (actor->ObjectFlags & OF_Clientside) ? newstate->GetClientsideTics() : newstate->GetTics();
+	int tics = actor->IsClientside() ? newstate->GetClientsideTics() : newstate->GetTics();
 	if (actor->isFast() && newstate->GetFast())
 	{
 		return tics - (tics>>1);
@@ -5137,7 +5137,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// Actors with zero gravity need the NOGRAVITY flag set.
 	if (actor->Gravity == 0) actor->flags |= MF_NOGRAVITY;
 
-	FRandom &rng = (actor->ObjectFlags & OF_Clientside) ? pr_spawncsmobj : (Level->BotInfo.m_Thinking ? pr_botspawnmobj : pr_spawnmobj);
+	FRandom &rng = actor->IsClientside() ? pr_spawncsmobj : (Level->BotInfo.m_Thinking ? pr_botspawnmobj : pr_spawnmobj);
 
 	if ((!!G_SkillProperty(SKILLP_InstantReaction) || actor->flags5 & MF5_ALWAYSFAST || !!(dmflags & DF_INSTANT_REACTION))
 		&& actor->flags3 & MF3_ISMONSTER)
@@ -5154,7 +5154,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// routine, it will not be called.
 	FState *st = actor->SpawnState;
 	actor->state = st;
-	actor->tics = (actor->ObjectFlags & OF_Clientside) ? st->GetClientsideTics() : st->GetTics();
+	actor->tics = actor->IsClientside() ? st->GetClientsideTics() : st->GetTics();
 	
 	actor->sprite = st->sprite;
 	actor->frame = st->GetFrame();

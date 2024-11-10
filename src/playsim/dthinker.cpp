@@ -866,7 +866,7 @@ void DThinker::ChangeStatNum (int statnum)
 		statnum = MAX_STATNUM;
 	}
 	Remove();
-	if (ObjectFlags & OF_Clientside)
+	if (IsClientside())
 		Level->ClientsideThinkers.Link(this, statnum);
 	else
 		Level->Thinkers.Link(this, statnum);
