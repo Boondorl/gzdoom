@@ -294,7 +294,7 @@ void FThinkerCollection::RunClientsideThinkers(FLevelLocals* Level, int curTic)
 	}
 
 	auto recreateLights = [=]() {
-		auto it = Level->GetThinkerIterator<AActor>(NAME_None, MAX_STATNUM + 1, true);
+		auto it = Level->GetClientsideThinkerIterator<AActor>();
 
 		// Set dynamic lights at the end of the tick, so that this catches all changes being made through the last frame.
 		while (auto ac = it.Next())

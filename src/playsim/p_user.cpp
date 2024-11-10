@@ -1620,6 +1620,12 @@ void P_UnPredictPlayer ()
 		// Unlink from all lists
 		act->UnlinkFromWorld(nullptr);
 		memcpy(&act->snext, PredictionActorBackupArray.Data(), PredictionActorBackupArray.Size() - ((uint8_t *)&act->snext - (uint8_t *)act));
+		// Clear stale pointers. The blockmap node is kept since it's the one that will be relinked back into the blockmap. Given
+		// it was removed from the list without being freed before predicting it's still valid.
+		act->touching_lineportallist = nullptr;
+		act->touching_rendersectors = act->touching_sectorlist = act->touching_sectorportallist = nullptr;
+		act->sprev = (AActor**)(size_t)0xBeefCafe;
+		act->snext = nullptr;
 
 		if (act->ViewPos != nullptr)
 		{
@@ -1655,11 +1661,8 @@ void P_UnPredictPlayer ()
 			// Only the touching list actually needs to be restored to avoid impacting gameplay. The rest is just clientside fluff that can
 			// be handled by relinking.
 			act->touching_sectorlist = RestoreNodeList(act, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
-			if (act->renderradius >= 0) act->touching_rendersectors = P_CreateSecNodeList(act, act->RenderRadius(), nullptr, &sector_t::touching_renderthings);
-			else
-			{
-				act->touching_rendersectors = nullptr;
-			}
+			if (act->renderradius >= 0.0)
+				act->touching_rendersectors = P_CreateSecNodeList(act, act->RenderRadius(), nullptr, &sector_t::touching_renderthings);
 		}
 
 		// Now fix the pointers in the blocknode chain

@@ -294,14 +294,23 @@ public:
 	{
 		return FLineIdIterator(tagManager, tag);
 	}
-	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype = NAME_None, int statnum = MAX_STATNUM+1, bool clientside = false)
+	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype = NAME_None, int statnum = MAX_STATNUM+1)
 	{
-		if (subtype == NAME_None) return TThinkerIterator<T>(this, statnum, clientside);
-		else return TThinkerIterator<T>(this, subtype, statnum, clientside);
+		if (subtype == NAME_None) return TThinkerIterator<T>(this, statnum, false);
+		else return TThinkerIterator<T>(this, subtype, statnum, false);
 	}
-	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype, int statnum, AActor *prev, bool clientside = false)
+	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype, int statnum, AActor *prev)
 	{
-		return TThinkerIterator<T>(this, subtype, statnum, prev, clientside);
+		return TThinkerIterator<T>(this, subtype, statnum, prev, false);
+	}
+	template<class T> TThinkerIterator<T> GetClientsideThinkerIterator(FName subtype = NAME_None, int statnum = MAX_STATNUM + 1)
+	{
+		if (subtype == NAME_None) return TThinkerIterator<T>(this, statnum, true);
+		else return TThinkerIterator<T>(this, subtype, statnum, true);
+	}
+	template<class T> TThinkerIterator<T> GetClientsideThinkerIterator(FName subtype, int statnum, AActor* prev)
+	{
+		return TThinkerIterator<T>(this, subtype, statnum, prev, true);
 	}
 	FActorIterator GetActorIterator(int tid)
 	{
