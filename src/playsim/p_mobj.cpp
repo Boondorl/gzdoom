@@ -5114,6 +5114,7 @@ DEFINE_ACTION_FUNCTION(AActor, UpdateWaterLevel)
 
 void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 {
+	const bool clientside = actor->IsClientside();
 	auto Level = actor->Level;
 	actor->SpawnTime = Level->totaltime;
 	actor->SpawnOrder = Level->spawnindex++;
@@ -5137,7 +5138,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// Actors with zero gravity need the NOGRAVITY flag set.
 	if (actor->Gravity == 0) actor->flags |= MF_NOGRAVITY;
 
-	FRandom &rng = actor->IsClientside() ? pr_spawncsmobj : (Level->BotInfo.m_Thinking ? pr_botspawnmobj : pr_spawnmobj);
+	FRandom &rng = clientside ? pr_spawncsmobj : (Level->BotInfo.m_Thinking ? pr_botspawnmobj : pr_spawnmobj);
 
 	if ((!!G_SkillProperty(SKILLP_InstantReaction) || actor->flags5 & MF5_ALWAYSFAST || !!(dmflags & DF_INSTANT_REACTION))
 		&& actor->flags3 & MF3_ISMONSTER)
@@ -5154,7 +5155,7 @@ void ConstructActor(AActor *actor, const DVector3 &pos, bool SpawningMapThing)
 	// routine, it will not be called.
 	FState *st = actor->SpawnState;
 	actor->state = st;
-	actor->tics = actor->IsClientside() ? st->GetClientsideTics() : st->GetTics();
+	actor->tics = clientside ? st->GetClientsideTics() : st->GetTics();
 	
 	actor->sprite = st->sprite;
 	actor->frame = st->GetFrame();
