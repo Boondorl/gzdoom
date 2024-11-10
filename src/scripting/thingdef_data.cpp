@@ -412,6 +412,7 @@ static FFlagDef ActorFlagDefs[]=
 	DEFINE_FLAG2(BOUNCE_ModifyPitch, BOUNCEMODIFIESPITCH, AActor, BounceFlags),
 	
 	DEFINE_FLAG2(OF_Transient, NOSAVEGAME, AActor, ObjectFlags),
+	DEFINE_FLAG2(OF_Clientside, CLIENTSIDE, AActor, ObjectFlags),
 
 	// Deprecated flags which need a ZScript workaround.
 	DEFINE_DEPRECATED_FLAG(MISSILEMORE, MakeVersion(4, 13, 0)),
@@ -463,7 +464,6 @@ static FFlagDef MoreFlagDefs[] =
 	// [BB] New DECORATE network related flag defines here.
 	DEFINE_DUMMY_FLAG(NONETID, false),
 	DEFINE_DUMMY_FLAG(ALLOWCLIENTSPAWN, false),
-	DEFINE_DUMMY_FLAG(CLIENTSIDEONLY, false),
 	DEFINE_DUMMY_FLAG(SERVERSIDEONLY, false),
 };
 

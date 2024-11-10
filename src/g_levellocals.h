@@ -249,6 +249,7 @@ public:
 	void SpawnExtraPlayers();
 	void Serialize(FSerializer &arc, bool hubload);
 	DThinker *FirstThinker (int statnum);
+	DThinker* FirstClientsideThinker(int statnum);
 
 	// g_Game
 	void PlayerReborn (int player);
@@ -293,14 +294,14 @@ public:
 	{
 		return FLineIdIterator(tagManager, tag);
 	}
-	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype = NAME_None, int statnum = MAX_STATNUM+1)
+	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype = NAME_None, int statnum = MAX_STATNUM+1, bool clientside = false)
 	{
-		if (subtype == NAME_None) return TThinkerIterator<T>(this, statnum);
-		else return TThinkerIterator<T>(this, subtype, statnum);
+		if (subtype == NAME_None) return TThinkerIterator<T>(this, statnum, clientside);
+		else return TThinkerIterator<T>(this, subtype, statnum, clientside);
 	}
-	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype, int statnum, AActor *prev)
+	template<class T> TThinkerIterator<T> GetThinkerIterator(FName subtype, int statnum, AActor *prev, bool clientside = false)
 	{
-		return TThinkerIterator<T>(this, subtype, statnum, prev);
+		return TThinkerIterator<T>(this, subtype, statnum, prev, clientside);
 	}
 	FActorIterator GetActorIterator(int tid)
 	{
@@ -438,6 +439,24 @@ public:
 	T* CreateThinker(Args&&... args)
 	{
 		auto thinker = static_cast<T*>(CreateThinker(RUNTIME_CLASS(T), T::DEFAULT_STAT));
+		thinker->Construct(std::forward<Args>(args)...);
+		return thinker;
+	}
+
+	DThinker* CreateClientsideThinker(PClass* cls, int statnum = STAT_DEFAULT)
+	{
+		DThinker* thinker = static_cast<DThinker*>(cls->CreateNew());
+		assert(thinker->IsKindOf(RUNTIME_CLASS(DThinker)));
+		thinker->ObjectFlags |= OF_JustSpawned | OF_Clientside;
+		ClientsideThinkers.Link(thinker, statnum);
+		thinker->Level = this;
+		return thinker;
+	}
+
+	template<typename T, typename... Args>
+	T* CreateClientsideThinker(Args&&... args)
+	{
+		auto thinker = static_cast<T*>(CreateClientsideThinker(RUNTIME_CLASS(T), T::DEFAULT_STAT));
 		thinker->Construct(std::forward<Args>(args)...);
 		return thinker;
 	}
@@ -674,6 +693,7 @@ public:
 	TArray<particle_t>	Particles;
 	TArray<uint16_t>	ParticlesInSubsec;
 	FThinkerCollection Thinkers;
+	FThinkerCollection ClientsideThinkers;
 
 	TArray<DVector2>	Scrolls;		// NULL if no DScrollers in this level
 

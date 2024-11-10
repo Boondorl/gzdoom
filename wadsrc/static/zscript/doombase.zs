@@ -199,6 +199,7 @@ class Thinker : Object native play
 class ThinkerIterator : Object native
 {
 	native static ThinkerIterator Create(class<Object> type = "Actor", int statnum=Thinker.MAX_STATNUM+1);
+	native static ThinkerIterator CreateClientside(class<Thinker> type = "Actor", int statnum=Thinker.MAX_STATNUM+1);
 	native Thinker Next(bool exact = false);
 	native void Reinit();
 }
@@ -535,6 +536,7 @@ struct LevelLocals native
 	native void ChangeSky(TextureID sky1, TextureID sky2 );
 	native void ForceLightning(int mode = 0, sound tempSound = "");
 
+	native clearscope Thinker CreateClientsideThinker(class<Thinker> type, int statnum = Thinker.STAT_DEFAULT);
 	native SectorTagIterator CreateSectorTagIterator(int tag, line defline = null);
 	native LineIdIterator CreateLineIdIterator(int tag);
 	native ActorIterator CreateActorIterator(int tid, class<Actor> type = "Actor");

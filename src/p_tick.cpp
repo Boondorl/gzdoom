@@ -144,6 +144,16 @@ void P_Ticker (void)
 					ac->SetDynamicLights();
 				}
 			}
+
+			it = Level->GetThinkerIterator<AActor>(NAME_None, MAX_STATNUM + 1, true);
+			while ((ac = it.Next()))
+			{
+				if (ac->flags8 & MF8_RECREATELIGHTS)
+				{
+					ac->flags8 &= ~MF8_RECREATELIGHTS;
+					ac->SetDynamicLights();
+				}
+			}
 		}
 		return;
 	}
@@ -196,6 +206,13 @@ void P_Ticker (void)
 			ac->ClearFOVInterpolation();
 		}
 
+		it = Level->GetThinkerIterator<AActor>(NAME_None, MAX_STATNUM + 1, true);
+		while ((ac = it.Next()))
+		{
+			ac->ClearInterpolation();
+			ac->ClearFOVInterpolation();
+		}
+
 		P_ThinkParticles(Level);	// [RH] make the particles think
 
 		for (i = 0; i < MAXPLAYERS; i++)
@@ -206,6 +223,7 @@ void P_Ticker (void)
 		Level->localEventManager->WorldTick();
 		Level->Tick();			// [RH] let the level tick
 		Level->Thinkers.RunThinkers(Level);
+		Level->ClientsideThinkers.RunClientsideThinkers(Level);
 
 		//if added by MC: Freeze mode.
 		if (!Level->isFrozen())

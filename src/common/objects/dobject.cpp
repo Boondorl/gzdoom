@@ -573,6 +573,7 @@ void DObject::Serialize(FSerializer &arc)
 	SerializeFlag("justspawned", OF_JustSpawned);
 	SerializeFlag("spawned", OF_Spawned);
 	SerializeFlag("networked", OF_Networked);
+	SerializeFlag("clientside", OF_Clientside);
 		
 	ObjectFlags |= OF_SerialSuccess;
 
@@ -668,7 +669,7 @@ void NetworkEntityManager::SetClientNetworkEntity(DObject* mo, const unsigned in
 
 void NetworkEntityManager::AddNetworkEntity(DObject* const ent)
 {
-	if (ent->IsNetworked())
+	if (ent->IsNetworked() || (ent->ObjectFlags & OF_Clientside))
 		return;
 
 	// Slot 0 is reserved for the world.
