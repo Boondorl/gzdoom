@@ -63,7 +63,7 @@ extern void ClearStrifeTypes();
 
 TArray<PClassActor *> PClassActor::AllActorClasses;
 FRandom FState::pr_statetics("StateTics");
-FRandom FState::pr_csstatetics("ClientsideStateTics");
+FCRandom FState::pr_csstatetics("ClientsideStateTics");
 
 cycle_t ActionCycles;
 
