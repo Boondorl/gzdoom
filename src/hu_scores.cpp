@@ -403,6 +403,8 @@ static void HU_DrawTimeRemaining (int y)
 //
 //==========================================================================
 
+extern uint64_t I_msTime();
+
 static void HU_DrawPlayer (player_t *player, bool highlight, int col1, int col2, int col3, int col4, int col5, int maxnamewidth, int y, int ypadding, int height)
 {
 	int color;
@@ -437,14 +439,7 @@ static void HU_DrawPlayer (player_t *player, bool highlight, int col1, int col2,
 
 	HU_DrawFontScaled(col4, y + ypadding, color, player->userinfo.GetName());
 
-	int avgdelay = 0;
-	for (int i = 0; i < BACKUPTICS; i++)
-	{
-		avgdelay += netdelay[nodeforplayer[(int)(player - players)]][i];
-	}
-	avgdelay /= BACKUPTICS;
-
-	mysnprintf(str, countof(str), "%d", (avgdelay * ticdup) * (1000 / TICRATE));
+	mysnprintf(str, countof(str), "%d", I_msTime() - ClientStates[player - players].SentTime);
 
 	HU_DrawFontScaled(col5, y + ypadding, color, str);
 

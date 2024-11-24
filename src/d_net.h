@@ -32,25 +32,80 @@
 #include "doomdef.h"
 #include "d_protocol.h"
 #include "i_net.h"
+#include <queue>
+
+uint64_t I_msTime();
 
 class FDynamicBuffer
 {
 public:
-	FDynamicBuffer ();
-	~FDynamicBuffer ();
+	FDynamicBuffer();
+	~FDynamicBuffer();
 
-	void SetData (const uint8_t *data, int len);
-	uint8_t *GetData (int *len = NULL);
+	void SetData(const uint8_t *data, int len);
+	uint8_t* GetData(int *len = nullptr);
 
 private:
-	uint8_t *m_Data;
+	uint8_t* m_Data;
 	int m_Len, m_BufferLen;
 };
 
-extern FDynamicBuffer NetSpecs[MAXPLAYERS][BACKUPTICS];
+enum EClientFlags
+{
+	CF_NONE			= 0,
+	CF_QUIT			= 1,		// If in packet server mode, this client sent an exit command and needs to be disconnected.
+	CF_MISSING_SEQ	= 1 << 1,	// If a sequence was missed/out of order, ask this client to send back over their info.
+	CF_RETRANSMIT	= 1 << 2,	// If set, this client needs data resent to them.
+};
+
+struct FClientNetState
+{
+	// Networked client data.
+	struct FNetTic {
+		FDynamicBuffer	Data;
+		usercmd_t		Command;
+	} Tics[BACKUPTICS];
+
+	FClientNetState()
+	{
+		SentTime = LastRecvTime = I_msTime();
+	}
+
+	// Local information about client.
+	uint64_t		LastRecvTime;		// The last time a packet arrived from this client.
+	uint64_t		SentTime;			// Timestamp for when the client sent out their latest packet to us.
+	unsigned int	SequenceAck = -1;		// The last sequence the client reported from us.
+	unsigned int 	CurrentSequence = -1;	// The last sequence we've gotten from this client.
+	int				Flags = 0;				// State of this client.
+
+	// Ensure that clients aren't out of sync with each other by having them send over their consistency
+	// for that 
+	std::queue<int16_t>	ConsistencyChecks;
+};
+
+// If multiple ticks are ran during a single check, make sure all of them get sent over.
+TArray<int16_t> OutgoingConsistencyChecks;
+
+// New packet structure:
+//
+// Header:
+//  One byte with net command flags.
+//  Four bytes for the base sequence the client is working from.
+//  Four bytes with the highest confirmed sequence the client got from us.
+//  Four bytes with the time in ms the packet was sent out.
+//  One byte for the net delay.
+//  If NCMD_XTICS set, another byte with the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
+//  If NCMD_QUITTERS set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
+//  If NCMD_MULTI set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
+//
+// For each tic:
+//  One byte for the delta from the base sequence.
+//  Two bytes for the consistency check.
+//  Two bytes with the remaining data size.
+//  The remaining command and event data for that player.
 
 // Create any new ticcmds and broadcast to other players.
-void NetUpdate (void);
+void NetUpdate();
 
 // Broadcasts special packets to other players
 //	to notify of game exit
@@ -60,73 +115,34 @@ void D_QuitNetGame (void);
 void TryRunTics (void);
 
 //Use for checking to see if the netgame has stalled
-void Net_CheckLastReceived(int);
+void Net_CheckLastReceived();
 
 // [RH] Functions for making and using special "ticcmds"
-void Net_NewMakeTic ();
-void Net_WriteInt8 (uint8_t);
-void Net_WriteInt16 (int16_t);
-void Net_WriteInt32 (int32_t);
+void Net_NewClientTic();
+void Net_WriteInt8(uint8_t);
+void Net_WriteInt16(int16_t);
+void Net_WriteInt32(int32_t);
 void Net_WriteInt64(int64_t);
-void Net_WriteFloat (float);
+void Net_WriteFloat(float);
 void Net_WriteDouble(double);
-void Net_WriteString (const char *);
-void Net_WriteBytes (const uint8_t *, int len);
+void Net_WriteString(const char *);
+void Net_WriteBytes(const uint8_t *, int len);
 
-void Net_DoCommand (int type, uint8_t **stream, int player);
-void Net_SkipCommand (int type, uint8_t **stream);
+void Net_DoCommand(int cmd, uint8_t **stream, int player);
+void Net_SkipCommand(int cmd, uint8_t **stream);
 
-void Net_ClearBuffers ();
-
+void Net_ClearBuffers();
 
 // Netgame stuff (buffers and pointers, i.e. indices).
 
 // This is the interface to the packet driver, a separate program
 // in DOS, but just an abstraction here.
-extern	doomcom_t		doomcom;
-
-extern	struct ticcmd_t	localcmds[LOCALCMDTICS];
-
-extern	int 			maketic;
-extern	int 			nettics[MAXNETNODES];
-extern	int				netdelay[MAXNETNODES][BACKUPTICS];
-extern	int 			nodeforplayer[MAXPLAYERS];
-
-extern	ticcmd_t		netcmds[MAXPLAYERS][BACKUPTICS];
-extern	int 			ticdup;
+extern doomcom_t		doomcom;
+extern usercmd_t		LocalCmds[LOCALCMDTICS];
+extern int				ClientTic;
+extern FClientNetState	ClientStates[MAXPLAYERS];
 
 class player_t;
 class DObject;
-
-
-// [RH]
-// New generic packet structure:
-//
-// Header:
-//  One byte with following flags.
-//  One byte with starttic
-//  One byte with master's maketic (master -> slave only!)
-//  If NCMD_RETRANSMIT set, one byte with retransmitfrom
-//  If NCMD_XTICS set, one byte with number of tics (minus 3, so theoretically up to 258 tics in one packet)
-//  If NCMD_QUITTERS, one byte with number of players followed by one byte with each player's consolenum
-//  If NCMD_MULTI, one byte with number of players followed by one byte with each player's consolenum
-//     - The first player's consolenum is not included in this list, because it always matches the sender
-//
-// For each tic:
-//  Two bytes with consistancy check, followed by tic data
-//
-// Setup packets are different, and are described just before D_ArbitrateNetStart().
-
-#define NCMD_EXIT				0x80
-#define NCMD_RETRANSMIT 		0x40
-#define NCMD_SETUP				0x20
-#define NCMD_MULTI				0x10		// multiple players in this packet
-#define NCMD_QUITTERS			0x08		// one or more players just quit (packet server only)
-#define NCMD_COMPRESSED			0x04		// remainder of packet is compressed
-
-#define NCMD_XTICS				0x03		// packet contains >2 tics
-#define NCMD_2TICS				0x02		// packet contains 2 tics
-#define NCMD_1TICS				0x01		// packet contains 1 tic
-#define NCMD_0TICS				0x00		// packet contains 0 tics
 
 #endif

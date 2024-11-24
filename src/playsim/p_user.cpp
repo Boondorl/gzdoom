@@ -1236,7 +1236,7 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckEnvironment)
 void P_CheckUse(player_t *player)
 {
 	// check for use
-	if (player->cmd.ucmd.buttons & BT_USE)
+	if (player->cmd.buttons & BT_USE)
 	{
 		if (!player->usedown)
 		{
@@ -1269,7 +1269,7 @@ DEFINE_ACTION_FUNCTION(APlayerPawn, CheckUse)
 
 void P_PlayerThink (player_t *player)
 {
-	ticcmd_t *cmd = &player->cmd;
+	usercmd_t *cmd = &player->cmd;
 
 	if (player->mo == NULL)
 	{
@@ -1309,14 +1309,14 @@ void P_PlayerThink (player_t *player)
 	{
 		fprintf (debugfile, "tic %d for pl %d: (%f, %f, %f, %f) b:%02x p:%d y:%d f:%d s:%d u:%d\n",
 			gametic, (int)(player-players), player->mo->X(), player->mo->Y(), player->mo->Z(),
-			player->mo->Angles.Yaw.Degrees(), player->cmd.ucmd.buttons,
-			player->cmd.ucmd.pitch, player->cmd.ucmd.yaw, player->cmd.ucmd.forwardmove,
-			player->cmd.ucmd.sidemove, player->cmd.ucmd.upmove);
+			player->mo->Angles.Yaw.Degrees(), player->cmd.buttons,
+			player->cmd.pitch, player->cmd.yaw, player->cmd.forwardmove,
+			player->cmd.sidemove, player->cmd.upmove);
 	}
 
 	// Make unmodified copies for ACS's GetPlayerInput.
 	player->original_oldbuttons = player->original_cmd.buttons;
-	player->original_cmd = cmd->ucmd;
+	player->original_cmd = *cmd;
 	// Don't interpolate the view for more than one tic
 	player->cheats &= ~CF_INTERPVIEW;
 	player->cheats &= ~CF_INTERPVIEWANGLES;
@@ -1465,7 +1465,7 @@ void P_PredictPlayer (player_t *player)
 		return;
 	}
 
-	maxtic = maketic;
+	maxtic = ClientTic;
 
 	if (gametic == maxtic)
 	{
@@ -1557,8 +1557,8 @@ void P_PredictPlayer (player_t *player)
 			}
 		}
 
-		player->oldbuttons = player->cmd.ucmd.buttons;
-		player->cmd = localcmds[i % LOCALCMDTICS];
+		player->oldbuttons = player->cmd.buttons;
+		player->cmd = LocalCmds[i % LOCALCMDTICS];
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
 		P_PlayerThink(player);
@@ -1900,11 +1900,11 @@ DEFINE_FIELD_X(PlayerInfo, player_t, ConversationNPC)
 DEFINE_FIELD_X(PlayerInfo, player_t, ConversationPC)
 DEFINE_FIELD_X(PlayerInfo, player_t, ConversationNPCAngle)
 DEFINE_FIELD_X(PlayerInfo, player_t, ConversationFaceTalker)
-DEFINE_FIELD_NAMED_X(PlayerInfo, player_t, cmd.ucmd, cmd)
+DEFINE_FIELD_NAMED_X(PlayerInfo, player_t, cmd, cmd)
 DEFINE_FIELD_X(PlayerInfo, player_t, original_cmd)
 DEFINE_FIELD_X(PlayerInfo, player_t, userinfo)
 DEFINE_FIELD_X(PlayerInfo, player_t, weapons)
-DEFINE_FIELD_NAMED_X(PlayerInfo, player_t, cmd.ucmd.buttons, buttons)
+DEFINE_FIELD_NAMED_X(PlayerInfo, player_t, cmd.buttons, buttons)
 DEFINE_FIELD_X(PlayerInfo, player_t, SoundClass)
 
 DEFINE_FIELD_X(UserCmd, usercmd_t, buttons)
