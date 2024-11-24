@@ -167,7 +167,7 @@ void CloseWidgetResources();
 
 bool D_CheckNetGame ();
 void D_ProcessEvents ();
-void G_BuildTiccmd (ticcmd_t* cmd);
+void G_BuildTiccmd (usercmd_t* cmd);
 void D_DoAdvanceDemo ();
 void D_LoadWadSettings ();
 void ParseGLDefs();
@@ -1229,7 +1229,7 @@ void D_DoomLoop ()
 			{
 				I_StartTic ();
 				D_ProcessEvents ();
-				G_BuildTiccmd (&netcmds[consoleplayer][maketic%BACKUPTICS]);
+				G_BuildTiccmd(&ClientStates[consoleplayer].Tics[ClientTic++ % BACKUPTICS].Command);
 				if (advancedemo)
 					D_DoAdvanceDemo ();
 				C_Ticker ();
@@ -1237,10 +1237,9 @@ void D_DoomLoop ()
 				G_Ticker ();
 				// [RH] Use the consoleplayer's camera to update sounds
 				S_UpdateSounds (players[consoleplayer].camera);	// move positional sounds
-				gametic++;
-				maketic++;
+				++gametic;
 				GC::CheckGC ();
-				Net_NewMakeTic ();
+				Net_NewClientTic ();
 			}
 			else
 			{
@@ -3465,7 +3464,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 
 	// [RH] Run any saved commands from the command line or autoexec.cfg now.
 	gamestate = GS_FULLCONSOLE;
-	Net_NewMakeTic ();
+	Net_NewClientTic ();
 	C_RunDelayedCommands();
 	gamestate = GS_STARTUP;
 
