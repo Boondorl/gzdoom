@@ -110,6 +110,8 @@ doomcom_t doomcom;
 
 constexpr int MaxPlayers = 8; // TODO: This needs to be put in some kind of unified header later
 
+FClientStack NetworkClients;
+
 //
 // NETWORKING
 //
