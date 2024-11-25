@@ -113,6 +113,7 @@ static ENetMode NetMode = NET_PeerToPeer;
 int 			ClientTic = 0;
 int				LocalDelay = 0;
 usercmd_t		LocalCmds[LOCALCMDTICS];
+TArray<int16_t> OutgoingConsistencyChecks; // If multiple ticks are ran during a single check, make sure all of them get sent over.
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
 // playback as it means in the world running code itself all player commands are built the exact same way

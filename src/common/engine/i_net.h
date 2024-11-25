@@ -59,7 +59,9 @@ struct FClientStack : public TArray<int>
 	{
 		SortedDelete(i);
 	}
-} NetworkClients;
+};
+
+extern FClientStack NetworkClients;
 
 //
 // Network packet data.

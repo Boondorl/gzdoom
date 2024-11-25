@@ -83,9 +83,6 @@ struct FClientNetState
 	std::queue<int16_t>	ConsistencyChecks;
 };
 
-// If multiple ticks are ran during a single check, make sure all of them get sent over.
-TArray<int16_t> OutgoingConsistencyChecks;
-
 // New packet structure:
 //
 // Header:
@@ -141,6 +138,7 @@ extern doomcom_t		doomcom;
 extern usercmd_t		LocalCmds[LOCALCMDTICS];
 extern int				ClientTic;
 extern FClientNetState	ClientStates[MAXPLAYERS];
+extern TArray<int16_t>	OutgoingConsistencyChecks;
 
 class player_t;
 class DObject;
