@@ -703,10 +703,11 @@ bool HostGame (int i)
 
 	if (numplayers == 1)
 	{ // Special case: Only 1 player, so don't bother starting the network
+		NetworkClients += 0;
 		netgame = false;
 		multiplayer = true;
 		doomcom.id = DOOMCOM_ID;
-		doomcom.numplayers = doomcom.numplayers = 1;
+		doomcom.numplayers = 1;
 		doomcom.consoleplayer = 0;
 		return true;
 	}
@@ -757,7 +758,6 @@ bool HostGame (int i)
 	I_NetMessage ("Total players: %d", doomcom.numplayers);
 
 	doomcom.id = DOOMCOM_ID;
-	doomcom.numplayers = doomcom.numplayers;
 
 	return true;
 }
@@ -943,14 +943,17 @@ static bool NodesOnSameNetwork()
 {
 	int net1;
 
-	net1 = PrivateNetOf(sendaddress[1].sin_addr);
+	net1 = PrivateNetOf(sendaddress[0].sin_addr);
 //	Printf("net1 = %08x\n", net1);
 	if (net1 == 0)
 	{
 		return false;
 	}
-	for (int i = 2; i < doomcom.numplayers; ++i)
+	for (int i = 0; i < doomcom.numplayers; ++i)
 	{
+		if (i == doomcom.consoleplayer)
+			continue;
+
 		int net = PrivateNetOf(sendaddress[i].sin_addr);
 //		Printf("Net[%d] = %08x\n", i, net);
 		if (net != net1)
@@ -1005,6 +1008,7 @@ int I_InitNetwork (void)
 	else
 	{
 		// single player game
+		NetworkClients += 0;
 		netgame = false;
 		multiplayer = false;
 		doomcom.id = DOOMCOM_ID;

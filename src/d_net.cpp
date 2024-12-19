@@ -100,9 +100,6 @@ struct FNetGameInfo
 	uint8_t GotSetup[MAXPLAYERS];
 };
 
-#define NetBuffer (doomcom.data)
-static ENetMode NetMode = NET_PeerToPeer;
-
 // NETWORKING
 //
 // gametic is the tic about to (or currently being) run.
@@ -110,10 +107,13 @@ static ENetMode NetMode = NET_PeerToPeer;
 //
 // A world tick cannot be ran until CurrentSequence > gametic for all clients.
 
-int 			ClientTic = 0;
-int				LocalDelay = 0;
-usercmd_t		LocalCmds[LOCALCMDTICS];
-TArray<int16_t> OutgoingConsistencyChecks; // If multiple ticks are ran during a single check, make sure all of them get sent over.
+#define NetBuffer (doomcom.data)
+ENetMode NetMode = NET_PeerToPeer;
+int 				ClientTic = 0;
+int					LocalDelay = 0;
+usercmd_t			LocalCmds[LOCALCMDTICS];
+FClientNetState		ClientStates[MAXPLAYERS] = {};
+FConsistencyCheck	OutgoingConsistencyChecks; // If multiple ticks are ran during a single check, make sure all of them get sent over.
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
 // playback as it means in the world running code itself all player commands are built the exact same way
@@ -122,7 +122,6 @@ TArray<int16_t> OutgoingConsistencyChecks; // If multiple ticks are ran during a
 static size_t	LocalNetBufferSize = 0;
 static uint8_t	LocalNetBuffer[MAX_MSGLEN];
 
-FClientNetState ClientStates[MAXPLAYERS] = {};
 // Used for storing network delay times. This is separate since it's not actually tied to
 // whatever sequence a client is currently on, only how many packets we've gotten from them.
 static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
@@ -324,11 +323,9 @@ void Net_ClearBuffers()
 	NetworkClients += 0;
 }
 
-//
 // [RH] Rewritten to properly calculate the packet size
 //		with our variable length Command.
-//
-int GetNetBufferSize()
+static int GetNetBufferSize()
 {
 	if (NetBuffer[0] & NCMD_EXIT)
 		return 1;
@@ -392,10 +389,8 @@ static void HSendPacket(int client, size_t size)
 	I_NetCmd();
 }
 
-//
 // HGetPacket
 // Returns false if no packet is waiting
-//
 static bool HGetPacket()
 {
 	if (demoplayback)
@@ -422,7 +417,7 @@ static bool HGetPacket()
 	int sizeCheck = GetNetBufferSize();
 	if (doomcom.datalength != sizeCheck)
 	{
-		Printf("Incorrect packet size %d (expected %d)\n", sizeCheck, doomcom.datalength);
+		Printf("Incorrect packet size %d (expected %d)\n", doomcom.datalength, sizeCheck);
 		return false;
 	}
 
@@ -526,10 +521,6 @@ static void GetPackets()
 			clientState.Flags |= CF_RETRANSMIT;
 
 		int curByte = 17;
-		int totalTics = (NetBuffer[curByte] & NCMD_XTICS);
-		if (totalTics == NCMD_XTICS)
-			totalTics += NetBuffer[curByte++];
-
 		if (NetBuffer[0] & NCMD_QUITTERS)
 		{
 			int numPlayers = NetBuffer[curByte++];
@@ -537,18 +528,11 @@ static void GetPackets()
 				DisconnectClient(NetBuffer[curByte++]);
 		}
 
-		int playerCount = 1;
-		uint8_t clientNums[MAXPLAYERS];
-		if (NetBuffer[0] & NCMD_MULTI)
-		{
-			playerCount = NetBuffer[curByte++];
-			memcpy(clientNums, &NetBuffer[curByte], playerCount);
-			curByte += playerCount;
-		}
-		else
-		{
-			clientNums[0] = clientNum;
-		}
+		int playerCount = NetBuffer[curByte++];
+
+		int totalTics = (NetBuffer[0] & NCMD_XTICS);
+		if (totalTics == NCMD_XTICS)
+			totalTics += NetBuffer[curByte++];
 
 		// Each tic within a given packet is given a sequence number to ensure that things were put
 		// back together correctly. Normally this wouldn't matter as much but since we need to keep
@@ -569,11 +553,17 @@ static void GetPackets()
 				break;
 			}
 
-			uint8_t* start = &NetBuffer[curByte];
 			for (int i = 0; i < playerCount; ++i)
 			{
-				SkipTicCmd(start); // ??? Reading already does this.
-				ReadTicCmd(start, clientNums[i], seq);
+				const int pNum = NetBuffer[curByte++];
+
+				uint8_t* start = &NetBuffer[curByte];
+				SkipTicCmd(start); // Boon TODO: ??? Reading already does this.
+				ReadTicCmd(start, pNum, seq);
+
+				// Set this on the individual player as well so host migration is easier in
+				// packet server mode.
+				ClientStates[pNum].CurrentSequence = seq;
 			}
 
 			clientState.CurrentSequence = seq;
@@ -719,14 +709,10 @@ void NetUpdate()
 		return;
 	}
 
-	// Listen for other packets. We want to make sure our information is as up-to-date as possible before sending
-	// anything else out.
-	GetPackets();
-
 	// If ClientTic didn't cross a doomcom.ticdup boundary, only send packets
 	// to players waiting for resends.
 	bool resendOnly = (ClientTic / doomcom.ticdup) == (ClientTic - i) / doomcom.ticdup;
-	const int startSequence = (gametic + 1) / doomcom.ticdup;
+	const int startSequence = gametic / doomcom.ticdup;
 	int endSequence = ClientTic / doomcom.ticdup;
 
 	int quitters = 0;
@@ -741,17 +727,10 @@ void NetUpdate()
 			// The host has special handling when disconnecting in a packet server game.
 			if (ClientStates[client].Flags & CF_QUIT)
 				quitNums[quitters++] = client;
-
-			// If playing in packet server mode, we need to check that the host has any new inputs
-			// to send out in the first place.
-			if (ClientStates[client].CurrentSequence < endSequence)
-				endSequence = ClientStates[client].CurrentSequence;
 		}
-
-		if (endSequence <= startSequence)
-			resendOnly = true;
 	}
 
+	const int time = I_msTime();
 	for (auto client : NetworkClients)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
@@ -772,33 +751,22 @@ void NetUpdate()
 
 		NetBuffer[0] = (curState.Flags & CF_MISSING_SEQ) ? NCMD_RETRANSMIT : 0;
 		// Sequence basis for our own packet.
-		NetBuffer[1] = (sequenceNum >> 24) & 0xFF;
-		NetBuffer[2] = (sequenceNum >> 16) & 0xFF;
-		NetBuffer[3] = (sequenceNum >> 8) & 0xFF;
-		NetBuffer[4] = sequenceNum & 0xFF;
+		NetBuffer[1] = (sequenceNum >> 24);
+		NetBuffer[2] = (sequenceNum >> 16);
+		NetBuffer[3] = (sequenceNum >> 8);
+		NetBuffer[4] = sequenceNum;
 		// Last sequence we got from this client.
-		NetBuffer[5] = (curState.CurrentSequence >> 24) & 0xFF;
-		NetBuffer[6] = (curState.CurrentSequence >> 16) & 0xFF;
-		NetBuffer[7] = (curState.CurrentSequence >> 8) & 0xFF;
-		NetBuffer[8] = curState.CurrentSequence & 0xFF;
+		NetBuffer[5] = (curState.CurrentSequence >> 24);
+		NetBuffer[6] = (curState.CurrentSequence >> 16);
+		NetBuffer[7] = (curState.CurrentSequence >> 8);
+		NetBuffer[8] = curState.CurrentSequence;
 
-		// Network delay. Determined by how many tics we've had to wait since the last world
-		// update. Can be used to help smooth out network jittering.
-		NetBuffer[9] = (ClientTic - numTics - gametic) / doomcom.ticdup;
+		NetBuffer[9] = (time >> 24);
+		NetBuffer[10] = (time >> 16);
+		NetBuffer[11] = (time >> 8);
+		NetBuffer[12] = time;
 
-		size_t size = 10;
-		if (numTics < 3)
-		{
-			NetBuffer[size++] |= numTics;
-		}
-		else
-		{
-			NetBuffer[size++] |= NCMD_XTICS;
-			NetBuffer[size++] = numTics - 3;
-		}
-
-		// Packet server only data.
-
+		size_t size = 13;
 		if (quitters > 0)
 		{
 			NetBuffer[0] |= NCMD_QUITTERS;
@@ -807,37 +775,44 @@ void NetUpdate()
 				NetBuffer[size++] = quitNums[i];
 		}
 
-		// If we're not the host or in P2P mode, only send our own data.
+		int playerNums[MAXPLAYERS];
 		int playerCount = NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator ? NetworkClients.Size() : 1;
-		uint8_t playerNums[MAXPLAYERS];
+		NetBuffer[size++] = playerCount;
 		if (playerCount > 1)
 		{
-			NetBuffer[0] |= NCMD_MULTI;
-			NetBuffer[size++] = playerCount;
-
 			int i = 0;
 			for (auto cl : NetworkClients)
-			{
 				playerNums[i++] = cl;
-				NetBuffer[size++] = cl;
-			}
 		}
 		else
 		{
 			playerNums[0] = consoleplayer;
 		}
+		
+		if (numTics < 3)
+		{
+			NetBuffer[0] |= numTics;
+		}
+		else
+		{
+			NetBuffer[0] |= NCMD_XTICS;
+			NetBuffer[size++] = numTics - 3;
+		}
 
 		// Client commands.
 
 		uint8_t* cmd = &NetBuffer[size];
-		for (int j = 0; j < numTics; ++j)
+		for (int t = 0; t < numTics; ++t)
 		{
-			cmd[0] = j;
+			cmd[0] = t;
 			++cmd;
 
 			for (int i = 0; i < playerCount; ++i)
 			{
-				int curTic = sequenceNum + j, lastTic = curTic - 1;
+				cmd[0] = playerNums[i];
+				++cmd;
+
+				int curTic = sequenceNum + t, lastTic = curTic - 1;
 				if (playerNums[i] == consoleplayer)
 				{
 					int realTic = (curTic * doomcom.ticdup) % LOCALCMDTICS;
@@ -873,9 +848,14 @@ void NetUpdate()
 		}
 
 		HSendPacket(client, int(cmd - NetBuffer));
-		if (net_extratic)
+		if (client != consoleplayer && net_extratic)
 			HSendPacket(client, int(cmd - NetBuffer));
 	}
+
+	// Listen for other packets. This has to come after sending so the player that sent
+	// data to themselves gets it immediately (important for singleplayer; otherwise there
+	// would always be a one-tic delay).
+	GetPackets();
 }
 
 // User info packets look like this:
@@ -1121,16 +1101,8 @@ static void SendSetup(const FNetGameInfo& info, int len)
 // Connects players to each other if needed.
 bool D_CheckNetGame()
 {
-	// Packet server has proven to be rather slow over the internet. Print a warning about it.
 	const char* v = Args->CheckValue("-netmode");
-	if (v != nullptr && atoi(v))
-	{
-		Printf(TEXTCOLOR_YELLOW "Notice: Using PacketServer (netmode 1) over the internet is prone to running too slow on some internet configurations."
-			"\nIf the game is running well below expected speeds, use netmode 0 (P2P) instead.\n");
-	}
-
-	int result = I_InitNetwork();
-	// I_InitNetwork sets doomcom and netgame
+	int result = I_InitNetwork(); // I_InitNetwork sets doomcom and netgame
 	if (result == -1)
 		return false;
 	else if (result > 0 && v == nullptr) // Don't override manual netmode setting.
@@ -1171,8 +1143,7 @@ bool D_CheckNetGame()
 	if (consoleplayer != Net_Arbitrator && doomcom.numplayers > 1)
 		Printf("Host selected " TEXTCOLOR_BLUE "%s" TEXTCOLOR_NORMAL " networking mode.\n", NetMode == NET_PeerToPeer ? "peer to peer" : "packet server");
 
-	if (!batchrun)
-		Printf("player %d of %d\n", consoleplayer + 1, doomcom.numplayers);
+	Printf("player %d of %d\n", consoleplayer + 1, doomcom.numplayers);
 	
 	return true;
 }
@@ -2365,7 +2336,7 @@ static void Network_Controller(int pNum, bool add)
 		return;
 	}
 
-	if (!NetworkClients[pNum])
+	if (!NetworkClients.InGame(pNum))
 	{
 		Printf("Player %d is not a valid client\n", pNum);
 		return;

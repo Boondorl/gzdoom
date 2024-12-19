@@ -1129,6 +1129,17 @@ static uint32_t StaticSumSeeds()
 		pr_damagemobj.Seed();
 }
 
+static uint32_t CalculateConsistency(int client, uint32_t seed)
+{
+	if (players[client].mo != nullptr)
+	{
+		seed += int((players[client].mo->X() + players[client].mo->Y() + players[client].mo->Z()) * 257) + players[client].mo->Angles.Yaw.BAMs() + players[client].mo->Angles.Pitch.BAMs();
+		seed ^= players[client].health;
+	}
+
+	return seed;
+}
+
 //
 // G_Ticker
 // Make ticcmd_ts for the players.
@@ -1247,7 +1258,8 @@ void G_Ticker ()
 
 	// [RH] Include some random seeds and player stuff in the consistancy
 	// check, not just the player's x position like BOOM.
-	const uint32_t rngSum = StaticSumSeeds();
+	uint32_t rngSum = StaticSumSeeds();
+	const bool doConsistency = netgame && !demoplayback && !(gametic % doomcom.ticdup);
 
 	//Added by MC: For some of that bot stuff. The main bot function.
 	primaryLevel->BotInfo.Main (primaryLevel);
@@ -1257,21 +1269,11 @@ void G_Ticker ()
 		usercmd_t *cmd = &players[client].cmd;
 		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic].Command;
 
-		// Boon TODO: So how this needs to be done is whenever a tick is ran, store a queue of consistencies
-		// and what sequence they belong to, then send those out. That'll allow us to catch it the next tick and
-		// when playing back even multiple ticks, we'll have the right set of consistencies to calculate. When reading
-		// the packet, count how many consistencies there are and read them in, assigning them to the appropriate
-		// sequences.
-		if (netgame && !demoplayback && curTic > 0 && !(gametic % doomcom.ticdup))
+		// Make sure that players are where they should be across each other's machines. The host in packet
+		// server mode doesn't bother with this because they have the ultimate authority over where players are.
+		if (doConsistency && (NetMode == NET_PeerToPeer || consoleplayer != Net_Arbitrator))
 		{
-			int16_t consistency = rngSum;
-			if (players[client].mo != nullptr)
-			{
-				uint32_t sum = rngSum + int((players[client].mo->X() + players[client].mo->Y() + players[client].mo->Z()) * 257) + players[client].mo->Angles.Yaw.BAMs() + players[client].mo->Angles.Pitch.BAMs();
-				sum ^= players[client].health;
-				consistency = sum;
-			}
-
+			int16_t consistency = CalculateConsistency(client, rngSum);
 			if (!ClientStates[client].ConsistencyChecks.size())
 			{
 				players[client].inconsistant = true;
@@ -1302,26 +1304,9 @@ void G_Ticker ()
 
 		// check for turbo cheats
 		if (multiplayer && turbo > 100.f && cmd->forwardmove > TURBOTHRESHOLD &&
-			!(gametic&31) && ((gametic>>5)&(MAXPLAYERS-1)) == client )
+			!(gametic & 31) && ((gametic >> 5) & (MAXPLAYERS-1)) == client)
 		{
-			Printf ("%s is turbo!\n", players[client].userinfo.GetName());
-		}
-
-		// Boon TODO: What happens is that every packet sent out needs to send over the consistency alongside what
-		// sequence it belongs to. From here, we can check if the player's consistency matches our own placement for
-		// them. This is a bit trickier than it seems because we want clients to shoot out packets in advance but they
-		// naturally won't know their consistency until they actually run the tic, so predicted packets will have faulty
-		// consistencies in them. Instead we need a way to retroactively send over any unconfirmed positions and capture
-		// it on the following move after a player's position has been verified. This will add a one tic delay to when
-		// inconsistencies are caught (completely inconsequential) but allow inputs to still be correctly predicted based
-		// on the highest net delay of all the clients.
-		// New strategy: remove consistency from ticcmd. In fact, remove ticcmd altogether as it's pointless. Instead, have
-		// players store their consistency for each player before running a tic and then on the next tic compare the newly sent
-		// over consistenc(ies) to see if an oopse whoopsies happened. This will also allow first tic desyncs to be immediately caught
-		// unlike now where the game bafflingly ignores it.
-		if (netgame && !demoplayback && !(gametic % doomcom.ticdup))
-		{
-			
+			Printf("%s is turbo!\n", players[client].userinfo.GetName());
 		}
 	}
 
@@ -1368,6 +1353,43 @@ void G_Ticker ()
 
 	// [MK] Additional ticker for UI events right after all others
 	primaryLevel->localEventManager->PostUiTick();
+
+	// Ran a tick, so prep the next consistencies to send out.
+	if (doConsistency)
+	{
+		rngSum = StaticSumSeeds();
+		// Hosts in packet server games need special logic due to the unique way packet dropping is handled. They'll
+		// have to hold on to older consistencies for longer in case a player who went quiet needs the older ones.
+		// Standard clients only send them out in P2P mode since the server doesn't care about what they have to
+		// say about their own game state.
+		if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
+		{
+			int lowSeq = (gametic - 1) / doomcom.ticdup;
+			for (auto client : NetworkClients)
+			{
+				if (client != Net_Arbitrator && ClientStates[client].SequenceAck < lowSeq)
+					lowSeq = ClientStates[client].SequenceAck;
+
+				OutgoingConsistencyChecks.ClientConsistencies[client].push(CalculateConsistency(client, rngSum));
+			}
+
+			// Boon TODO: Ugly and inefficient
+			while (OutgoingConsistencyChecks.Sequence <= lowSeq)
+			{
+				++OutgoingConsistencyChecks.Sequence;
+				for (auto client : NetworkClients)
+					OutgoingConsistencyChecks.ClientConsistencies[client].pop();
+			}
+		}
+		else if (NetMode == NET_PeerToPeer)
+		{
+			// In P2P mode we know every client already confirmed this tick if we ran it so we can simply
+			// discard any old consistency checks as we please.
+			++OutgoingConsistencyChecks.Sequence;
+			OutgoingConsistencyChecks.ClientConsistencies[consoleplayer].pop();
+			OutgoingConsistencyChecks.ClientConsistencies[consoleplayer].push(CalculateConsistency(consoleplayer, rngSum));
+		}
+	}
 }
 
 
