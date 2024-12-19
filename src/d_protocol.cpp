@@ -194,18 +194,18 @@ FSerializer& Serialize(FSerializer& arc, const char* key, usercmd_t& cmd, usercm
 }
 
 // Returns the number of bytes read
-int UnpackUserCmd(usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
+int UnpackUserCmd(usercmd_t& cmd, const usercmd_t* basis, uint8_t*& stream)
 {
 	uint8_t* start = stream;
 
 	if (basis != nullptr)
 	{
-		if (basis != &ucmd)
-			memcpy(&ucmd, basis, sizeof(usercmd_t));
+		if (basis != &cmd)
+			memcpy(&cmd, basis, sizeof(usercmd_t));
 	}
 	else
 	{
-		memset(&ucmd, 0, sizeof(usercmd_t));
+		memset(&cmd, 0, sizeof(usercmd_t));
 	}
 
 	uint8_t flags = ReadInt8(&stream);
@@ -217,7 +217,7 @@ int UnpackUserCmd(usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 		if (flags & UCMDF_BUTTONS)
 		{
 			uint8_t in = ReadInt8(&stream);
-			uint32_t buttons = (ucmd.buttons & ~0x7F) | (in & 0x7F);
+			uint32_t buttons = (cmd.buttons & ~0x7F) | (in & 0x7F);
 			if (in & MoreButtons)
 			{
 				in = ReadInt8(&stream);
@@ -233,26 +233,26 @@ int UnpackUserCmd(usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 					}
 				}
 			}
-			ucmd.buttons = buttons;
+			cmd.buttons = buttons;
 		}
 		if (flags & UCMDF_PITCH)
-			ucmd.pitch = ReadInt16(&stream);
+			cmd.pitch = ReadInt16(&stream);
 		if (flags & UCMDF_YAW)
-			ucmd.yaw = ReadInt16(&stream);
+			cmd.yaw = ReadInt16(&stream);
 		if (flags & UCMDF_FORWARDMOVE)
-			ucmd.forwardmove = ReadInt16(&stream);
+			cmd.forwardmove = ReadInt16(&stream);
 		if (flags & UCMDF_SIDEMOVE)
-			ucmd.sidemove = ReadInt16(&stream);
+			cmd.sidemove = ReadInt16(&stream);
 		if (flags & UCMDF_UPMOVE)
-			ucmd.upmove = ReadInt16(&stream);
+			cmd.upmove = ReadInt16(&stream);
 		if (flags & UCMDF_ROLL)
-			ucmd.roll = ReadInt16(&stream);
+			cmd.roll = ReadInt16(&stream);
 	}
 
 	return int(stream - start);
 }
 
-int PackUserCmd(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
+int PackUserCmd(const usercmd_t& cmd, const usercmd_t* basis, uint8_t*& stream)
 {
 	uint8_t flags = 0;
 	uint8_t* start = stream;
@@ -265,13 +265,13 @@ int PackUserCmd(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 	}
 
 	++stream; // Make room for the flags.
-	uint32_t buttons_changed = ucmd.buttons ^ basis->buttons;
+	uint32_t buttons_changed = cmd.buttons ^ basis->buttons;
 	if (buttons_changed != 0)
 	{
-		uint8_t bytes[4] = {  uint8_t(ucmd.buttons       & 0x7F),
-							uint8_t((ucmd.buttons >> 7)  & 0x7F),
-							uint8_t((ucmd.buttons >> 14) & 0x7F),
-							uint8_t((ucmd.buttons >> 21) & 0xFF) };
+		uint8_t bytes[4] = {  uint8_t(cmd.buttons       & 0x7F),
+							uint8_t((cmd.buttons >> 7)  & 0x7F),
+							uint8_t((cmd.buttons >> 14) & 0x7F),
+							uint8_t((cmd.buttons >> 21) & 0xFF) };
 
 		flags |= UCMDF_BUTTONS;
 		if (buttons_changed & 0xFFFFFF80)
@@ -296,35 +296,35 @@ int PackUserCmd(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 			}
 		}
 	}
-	if (ucmd.pitch != basis->pitch)
+	if (cmd.pitch != basis->pitch)
 	{
 		flags |= UCMDF_PITCH;
-		WriteInt16(ucmd.pitch, &stream);
+		WriteInt16(cmd.pitch, &stream);
 	}
-	if (ucmd.yaw != basis->yaw)
+	if (cmd.yaw != basis->yaw)
 	{
 		flags |= UCMDF_YAW;
-		WriteInt16 (ucmd.yaw, &stream);
+		WriteInt16 (cmd.yaw, &stream);
 	}
-	if (ucmd.forwardmove != basis->forwardmove)
+	if (cmd.forwardmove != basis->forwardmove)
 	{
 		flags |= UCMDF_FORWARDMOVE;
-		WriteInt16 (ucmd.forwardmove, &stream);
+		WriteInt16 (cmd.forwardmove, &stream);
 	}
-	if (ucmd.sidemove != basis->sidemove)
+	if (cmd.sidemove != basis->sidemove)
 	{
 		flags |= UCMDF_SIDEMOVE;
-		WriteInt16(ucmd.sidemove, &stream);
+		WriteInt16(cmd.sidemove, &stream);
 	}
-	if (ucmd.upmove != basis->upmove)
+	if (cmd.upmove != basis->upmove)
 	{
 		flags |= UCMDF_UPMOVE;
-		WriteInt16(ucmd.upmove, &stream);
+		WriteInt16(cmd.upmove, &stream);
 	}
-	if (ucmd.roll != basis->roll)
+	if (cmd.roll != basis->roll)
 	{
 		flags |= UCMDF_ROLL;
-		WriteInt16(ucmd.roll, &stream);
+		WriteInt16(cmd.roll, &stream);
 	}
 
 	// Write the packing bits
@@ -333,24 +333,24 @@ int PackUserCmd(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 	return int(stream - start);
 }
 
-int WriteUserCmdMessage(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
+int WriteUserCmdMessage(const usercmd_t& cmd, const usercmd_t* basis, uint8_t*& stream)
 {
 	if (basis == nullptr)
 	{
-		if (ucmd.buttons
-			|| ucmd.pitch || ucmd.yaw || ucmd.roll
-			|| ucmd.forwardmove || ucmd.sidemove || ucmd.upmove)
+		if (cmd.buttons
+			|| cmd.pitch || cmd.yaw || cmd.roll
+			|| cmd.forwardmove || cmd.sidemove || cmd.upmove)
 		{
 			WriteInt8(DEM_USERCMD, &stream);
-			return PackUserCmd(ucmd, basis, stream) + 1;
+			return PackUserCmd(cmd, basis, stream) + 1;
 		}
 	}
-	else if (ucmd.buttons != basis->buttons
-			|| ucmd.yaw != basis->yaw || ucmd.pitch != basis->pitch || ucmd.roll != basis->roll
-			|| ucmd.forwardmove != basis->forwardmove || ucmd.sidemove != basis->sidemove || ucmd.upmove != basis->upmove)
+	else if (cmd.buttons != basis->buttons
+			|| cmd.yaw != basis->yaw || cmd.pitch != basis->pitch || cmd.roll != basis->roll
+			|| cmd.forwardmove != basis->forwardmove || cmd.sidemove != basis->sidemove || cmd.upmove != basis->upmove)
 	{
 		WriteInt8(DEM_USERCMD, &stream);
-		return PackUserCmd(ucmd, basis, stream) + 1;
+		return PackUserCmd(cmd, basis, stream) + 1;
 	}
 
 	WriteInt8(DEM_EMPTYUSERCMD, &stream);
@@ -363,7 +363,6 @@ int SkipTicCmd(uint8_t*& stream)
 {
 	uint8_t* start = stream;
 
-	stream += 2; // Skip consistancy marker.
 	while (true)
 	{
 		uint8_t type = *stream++;

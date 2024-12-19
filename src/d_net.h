@@ -72,15 +72,29 @@ struct FClientNetState
 	}
 
 	// Local information about client.
-	uint64_t		LastRecvTime;		// The last time a packet arrived from this client.
-	uint64_t		SentTime;			// Timestamp for when the client sent out their latest packet to us.
-	unsigned int	SequenceAck = -1;		// The last sequence the client reported from us.
-	unsigned int 	CurrentSequence = -1;	// The last sequence we've gotten from this client.
+	uint64_t		LastRecvTime;			// The last time a packet arrived from this client.
+	uint64_t		SentTime;				// Timestamp for when the client sent out their latest packet to us.
+	int				SequenceAck = 0;		// The last sequence the client reported from us.
+	int 			CurrentSequence = 0;	// The last sequence we've gotten from this client.
 	int				Flags = 0;				// State of this client.
 
-	// Ensure that clients aren't out of sync with each other by having them send over their consistency
-	// for that 
-	std::queue<int16_t>	ConsistencyChecks;
+	std::queue<int16_t> ConsistencyChecks;
+};
+
+// This needs to be able to store everyone's consistencies since packet servers
+// will have to keep track of all of them. The sequence number is used mainly
+// for packet server mode to ensure old entries will stick around should a
+// client drop and need consistencies sent back over.
+struct FConsistencyCheck
+{
+	uint64_t Sequence = 0;
+	std::queue<int16_t> ClientConsistencies[MAXPLAYERS];
+};
+
+enum ENetMode : uint8_t
+{
+	NET_PeerToPeer,
+	NET_PacketServer
 };
 
 // New packet structure:
@@ -90,16 +104,14 @@ struct FClientNetState
 //  Four bytes for the base sequence the client is working from.
 //  Four bytes with the highest confirmed sequence the client got from us.
 //  Four bytes with the time in ms the packet was sent out.
-//  One byte for the net delay.
-//  If NCMD_XTICS set, another byte with the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
 //  If NCMD_QUITTERS set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
-//  If NCMD_MULTI set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
-//
+//  One byte for the number of players.
+//  If NCMD_XTICS set, one byte with the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
 // For each tic:
 //  One byte for the delta from the base sequence.
-//  Two bytes for the consistency check.
-//  Two bytes with the remaining data size.
-//  The remaining command and event data for that player.
+//  For each player:
+//   One byte for the player number.
+//   The remaining command and event data for that player.
 
 // Create any new ticcmds and broadcast to other players.
 void NetUpdate();
@@ -134,11 +146,12 @@ void Net_ClearBuffers();
 
 // This is the interface to the packet driver, a separate program
 // in DOS, but just an abstraction here.
-extern doomcom_t		doomcom;
-extern usercmd_t		LocalCmds[LOCALCMDTICS];
-extern int				ClientTic;
-extern FClientNetState	ClientStates[MAXPLAYERS];
-extern TArray<int16_t>	OutgoingConsistencyChecks;
+extern doomcom_t			doomcom;
+extern usercmd_t			LocalCmds[LOCALCMDTICS];
+extern int					ClientTic;
+extern FClientNetState		ClientStates[MAXPLAYERS];
+extern FConsistencyCheck	OutgoingConsistencyChecks;
+extern ENetMode				NetMode;
 
 class player_t;
 class DObject;
