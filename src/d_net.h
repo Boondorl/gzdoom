@@ -64,7 +64,7 @@ struct FClientNetState
 	struct FNetTic {
 		FDynamicBuffer	Data;
 		usercmd_t		Command;
-	} Tics[BACKUPTICS];
+	} Tics[BACKUPTICS] = {};
 
 	FClientNetState()
 	{
@@ -74,8 +74,8 @@ struct FClientNetState
 	// Local information about client.
 	uint64_t		LastRecvTime;			// The last time a packet arrived from this client.
 	uint64_t		SentTime;				// Timestamp for when the client sent out their latest packet to us.
-	int				SequenceAck = 0;		// The last sequence the client reported from us.
-	int 			CurrentSequence = 0;	// The last sequence we've gotten from this client.
+	int				SequenceAck = -1;		// The last sequence the client reported from us.
+	int 			CurrentSequence = -1;	// The last sequence we've gotten from this client.
 	int				Flags = 0;				// State of this client.
 
 	std::queue<int16_t> ConsistencyChecks;

@@ -514,8 +514,8 @@ static void GetPackets()
 
 		const unsigned int baseSequence = NetBuffer[1] << 24 | NetBuffer[2] << 16 | NetBuffer[3] << 8 | NetBuffer[4];
 		clientState.SequenceAck = NetBuffer[5] << 24 | NetBuffer[6] << 16 | NetBuffer[7] << 8 | NetBuffer[8];
-		clientState.SentTime = size_t(NetBuffer[9] << 56) | size_t(NetBuffer[10] << 48) | size_t(NetBuffer[11] << 40) | size_t(NetBuffer[12] << 32)
-								| size_t(NetBuffer[13] << 24) | size_t(NetBuffer[14] << 16) | size_t(NetBuffer[15] << 8) | size_t(NetBuffer[16]);
+		clientState.SentTime = (uint64_t(NetBuffer[9]) << 56) | (uint64_t(NetBuffer[10]) << 48) | (uint64_t(NetBuffer[11]) << 40) | (uint64_t(NetBuffer[12]) << 32)
+								| (uint64_t(NetBuffer[13]) << 24) | (uint64_t(NetBuffer[14]) << 16) | (uint64_t(NetBuffer[15]) << 8) | uint64_t(NetBuffer[16]);
 
 		if (NetBuffer[0] & NCMD_RETRANSMIT)
 			clientState.Flags |= CF_RETRANSMIT;
@@ -587,7 +587,7 @@ void NetUpdate()
 	// When playing in packet server mode, the host can strategically tell each client how long they should wait
 	// after starting before generating and sending out inputs. This significantly reduces the net latency clients
 	// have since they'll be forced to wait at minimum host -> highest latency client round trip before they can
-	// do anything anyway, so time packets sent to arrive at the host roughly the same time it does for the
+	// do anything anyway, so time packets to arrive at the host roughly the same time as it does for the
 	// highest latency player. This way the only net delay is the round trip time from this client to the host.
 	if (NetMode == NET_PacketServer && LocalDelay)
 	{
@@ -631,6 +631,7 @@ void NetUpdate()
 			break;			// can't hold any more
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
+		// Boon TODO: This doesn't check first tic properly.
 		if (doomcom.ticdup == 1 || !ClientTic)
 		{
 			// On the first maketic we don't have enough info to generate a full command
@@ -730,7 +731,7 @@ void NetUpdate()
 		}
 	}
 
-	const int time = I_msTime();
+	const uint64_t time = I_msTime();
 	for (auto client : NetworkClients)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
@@ -761,12 +762,16 @@ void NetUpdate()
 		NetBuffer[7] = (curState.CurrentSequence >> 8);
 		NetBuffer[8] = curState.CurrentSequence;
 
-		NetBuffer[9] = (time >> 24);
-		NetBuffer[10] = (time >> 16);
-		NetBuffer[11] = (time >> 8);
-		NetBuffer[12] = time;
+		NetBuffer[9] = (time >> 56);
+		NetBuffer[10] = (time >> 48);
+		NetBuffer[11] = (time >> 40);
+		NetBuffer[12] = (time >> 32);
+		NetBuffer[13] = (time >> 24);
+		NetBuffer[14] = (time >> 16);
+		NetBuffer[15] = (time >> 8);
+		NetBuffer[16] = time;
 
-		size_t size = 13;
+		size_t size = 17;
 		if (quitters > 0)
 		{
 			NetBuffer[0] |= NCMD_QUITTERS;
