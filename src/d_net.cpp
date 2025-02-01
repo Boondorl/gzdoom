@@ -562,7 +562,7 @@ static void GetPackets()
 				const int pNum = NetBuffer[curByte++];
 
 				uint8_t* start = &NetBuffer[curByte];
-				ReadTicCmd(start, pNum, seq);
+				curByte += ReadTicCmd(start, pNum, seq);
 
 				// Set this on the individual player as well so host migration is easier in
 				// packet server mode.
@@ -2268,6 +2268,10 @@ void Net_SkipCommand(int cmd, uint8_t **stream)
 
 		case DEM_SETPITCHLIMIT:
 			skip = 2;
+			break;
+
+		default:
+			I_Error("Unknown net command: %d", cmd);
 			break;
 	}
 
