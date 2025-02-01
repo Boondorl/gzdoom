@@ -195,7 +195,7 @@ private:
 		for (auto& stream : Streams)
 			Streams->Grow(MaxSize);
 
-		CurrentStream = Streams[(ClientTic / doomcom.ticdup) % BACKUPTICS].Stream + CurrentSize;
+		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream + CurrentSize;
 	}
 
 	void AddBytes(size_t bytes)
@@ -826,7 +826,7 @@ void NetUpdate()
 					int realLastTic = (lastTic * doomcom.ticdup) % LOCALCMDTICS;
 					// Write out the net events before the user commands so inputs can
 					// be used as a marker for when the given tic ends.
-					auto& stream = NetEvents.Streams[curTic];
+					auto& stream = NetEvents.Streams[curTic % BACKUPTICS];
 					if (stream.Used)
 					{
 						memcpy(cmd, stream.Stream, stream.Used);
