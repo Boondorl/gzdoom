@@ -237,7 +237,7 @@ int PackUserCmd(const usercmd_t& ucmd, const usercmd_t* basis, uint8_t*& stream)
 int WriteUserCmdMessage(const usercmd_t& ucmd, const usercmd_t *basis, uint8_t*& stream);
 
 int SkipTicCmd(uint8_t*& stream);
-void ReadTicCmd(uint8_t*& stream, int player, int tic);
+int ReadTicCmd(uint8_t*& stream, int player, int tic);
 void RunPlayerCommands(int player, int tic);
 
 uint8_t ReadInt8 (uint8_t **stream);

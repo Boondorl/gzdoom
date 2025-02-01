@@ -196,7 +196,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, usercmd_t& cmd, usercm
 // Returns the number of bytes read
 int UnpackUserCmd(usercmd_t& cmd, const usercmd_t* basis, uint8_t*& stream)
 {
-	uint8_t* start = stream;
+	const uint8_t* start = stream;
 
 	if (basis != nullptr)
 	{
@@ -361,11 +361,11 @@ int WriteUserCmdMessage(const usercmd_t& cmd, const usercmd_t* basis, uint8_t*& 
 // of the command when getting the length of the stream.
 int SkipTicCmd(uint8_t*& stream)
 {
-	uint8_t* start = stream;
+	const uint8_t* start = stream;
 
 	while (true)
 	{
-		uint8_t type = *stream++;
+		const uint8_t type = *stream++;
 		if (type == DEM_USERCMD)
 		{
 			int skip = 1;
@@ -408,33 +408,39 @@ int SkipTicCmd(uint8_t*& stream)
 	return int(stream - start);
 }
 
-void ReadTicCmd(uint8_t*& stream, int player, int tic)
+int ReadTicCmd(uint8_t*& stream, int player, int tic)
 {
 	const int ticMod = tic % BACKUPTICS;
 
 	auto& curTic = ClientStates[player].Tics[ticMod];
 	usercmd_t& ticCmd = curTic.Command;
 
-	uint8_t* start = stream;
+	const uint8_t* start = stream;
 
+	// Skip until we reach the player command. Event data will get read off once the
+	// tick is actually executed.
 	int type;
 	while ((type = ReadInt8(&stream)) != DEM_USERCMD && type != DEM_EMPTYUSERCMD)
 		Net_SkipCommand(type, &stream);
 
+	// Subtract a byte to account for the fact the stream head is now sitting on the
+	// user command.
 	curTic.Data.SetData(start, int(stream - start - 1));
 
 	if (type == DEM_USERCMD)
 	{
 		UnpackUserCmd(ticCmd,
-			tic ? &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command : nullptr, stream);
+			tic > 0 ? &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command : nullptr, stream);
 	}
 	else
 	{
-		if (tic)
+		if (tic > 0)
 			memcpy(&ticCmd, &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command, sizeof(ticCmd));
 		else
 			memset(&ticCmd, 0, sizeof(ticCmd));
 	}
+
+	return int(stream - start);
 }
 
 void RunPlayerCommands(int player, int tic)
