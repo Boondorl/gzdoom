@@ -345,7 +345,7 @@ static int GetNetBufferSize()
 	if (numTics == NCMD_XTICS)
 		numTics += NetBuffer[totalBytes++];
 
-	// Need at least 3 bytes per tic per player - 1 for tic offset, 1 for each player number, and 1 for each empty user command.
+	// Need at least 1 byte per tic and 2 per player - 1 for tic offset, 1 for each player number, and 1 for each empty user command.
 	if (doomcom.datalength < totalBytes + numTics + 2 * playerCount)
 		return totalBytes + numTics + 2 * playerCount;
 
@@ -733,7 +733,8 @@ void NetUpdate()
 	for (auto client : NetworkClients)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
-		// hand, if we're the host we send out everyone's info to everyone else.
+		// hand, if we're the host we send out everyone's info to everyone else. Whatever consistency checks
+		// we have on the host machine is used for verification (don't rely on clients to verify themselves).
 		if (NetMode == NET_PacketServer && client != Net_Arbitrator)
 			continue;
 
@@ -759,7 +760,7 @@ void NetUpdate()
 		NetBuffer[6] = (curState.CurrentSequence >> 16);
 		NetBuffer[7] = (curState.CurrentSequence >> 8);
 		NetBuffer[8] = curState.CurrentSequence;
-
+		// Time used to track latency.
 		NetBuffer[9] = (time >> 56);
 		NetBuffer[10] = (time >> 48);
 		NetBuffer[11] = (time >> 40);
@@ -925,12 +926,7 @@ bool ExchangeNetGameInfo(void *userdata)
 				if (NetBuffer[2] != VER_MAJOR % 255 || NetBuffer[3] != VER_MINOR % 255 || NetBuffer[4] != VER_REVISION % 255)
 					I_Error("Different " GAMENAME " versions cannot play a net game");
 
-				// playeringame can differ in the subtle way that bots will take up player slots but
-				// will not be added to the client list meaning any sort of networking doesn't
-				// have to worry about them.
-				playeringame[clientNum] = true;
 				NetworkClients += clientNum;
-
 				data->DetectedPlayers[consoleplayer] |= 1 << clientNum;
 
 				I_NetMessage("Found %s (%d)", players[clientNum].userinfo.GetName(), clientNum);
@@ -1058,7 +1054,6 @@ static bool D_ExchangeNetInfo()
 	FNetGameInfo info = {};
 	info.DetectedPlayers[consoleplayer] = 1 << consoleplayer;
 	info.GotSetup[consoleplayer] = consoleplayer == Net_Arbitrator;
-	playeringame[consoleplayer] = true;
 	NetworkClients += consoleplayer;
 	
 	if (consoleplayer == Net_Arbitrator)
@@ -1116,6 +1111,8 @@ bool D_CheckNetGame()
 
 	players[Net_Arbitrator].settings_controller = true;
 	consoleplayer = doomcom.consoleplayer;
+	for (auto client : NetworkClients)
+		playeringame[client] = true;
 
 	if (consoleplayer == Net_Arbitrator)
 	{

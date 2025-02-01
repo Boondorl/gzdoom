@@ -87,7 +87,7 @@ struct FClientNetState
 // client drop and need consistencies sent back over.
 struct FConsistencyCheck
 {
-	uint64_t Sequence = 0;
+	int Sequence = 0;
 	std::queue<int16_t> ClientConsistencies[MAXPLAYERS];
 };
 
@@ -103,7 +103,7 @@ enum ENetMode : uint8_t
 //  One byte with net command flags.
 //  Four bytes for the base sequence the client is working from.
 //  Four bytes with the highest confirmed sequence the client got from us.
-//  Four bytes with the time in ms the packet was sent out.
+//  Eight bytes with the time in ms the packet was sent out.
 //  If NCMD_QUITTERS set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
 //  One byte for the number of players.
 //  If NCMD_XTICS set, one byte with the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
