@@ -3464,7 +3464,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 
 	// [RH] Run any saved commands from the command line or autoexec.cfg now.
 	gamestate = GS_FULLCONSOLE;
-	Net_NewClientTic ();
+	Net_Initialize();
 	C_RunDelayedCommands();
 	gamestate = GS_STARTUP;
 

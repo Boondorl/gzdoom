@@ -128,6 +128,7 @@ void Net_CheckLastReceived();
 
 // [RH] Functions for making and using special "ticcmds"
 void Net_NewClientTic();
+void Net_Initialize();
 void Net_WriteInt8(uint8_t);
 void Net_WriteInt16(int16_t);
 void Net_WriteInt32(int32_t);
