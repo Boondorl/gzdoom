@@ -335,30 +335,29 @@ static int GetNetBufferSize()
 	if (NetBuffer[0] & NCMD_SETUP)
 		return doomcom.datalength;
 
-	int totalBytes = 10;
+	int totalBytes = 17;
+	if (NetBuffer[0] & NCMD_QUITTERS)
+		totalBytes += NetBuffer[totalBytes] + 1;
+
+	int playerCount = NetBuffer[totalBytes++];
+
 	int numTics = NetBuffer[0] & NCMD_XTICS;
 	if (numTics == NCMD_XTICS)
 		numTics += NetBuffer[totalBytes++];
 
-	if (NetBuffer[0] & NCMD_QUITTERS)
-		totalBytes += NetBuffer[totalBytes] + 1;
-
-	int playerCount = 1;
-	if (NetBuffer[0] & NCMD_MULTI)
-	{
-		playerCount = NetBuffer[totalBytes];
-		totalBytes += playerCount;
-	}
-
-	// Need at least 4 bytes per tic per player - 1 for tic delta, 2 for consistency, and 1 for empty user command.
-	if (doomcom.datalength < totalBytes + 4 * numTics * playerCount)
-		return totalBytes + 4 * numTics * playerCount;
+	// Need at least 3 bytes per tic per player - 1 for tic offset, 1 for each player number, and 1 for each empty user command.
+	if (doomcom.datalength < totalBytes + numTics + 2 * playerCount)
+		return totalBytes + numTics + 2 * playerCount;
 
 	uint8_t* skipper = &NetBuffer[totalBytes];
-	while (playerCount-- > 0)
+	for (int i = 0; i < numTics; ++i)
 	{
-		for (int i = 0; i < numTics; ++i)
+		++skipper;
+		for (int p = 0; p < playerCount; ++p)
+		{
+			++skipper;
 			SkipTicCmd(skipper);
+		}
 	}
 
 	return int(skipper - NetBuffer);
@@ -558,7 +557,6 @@ static void GetPackets()
 				const int pNum = NetBuffer[curByte++];
 
 				uint8_t* start = &NetBuffer[curByte];
-				SkipTicCmd(start); // Boon TODO: ??? Reading already does this.
 				ReadTicCmd(start, pNum, seq);
 
 				// Set this on the individual player as well so host migration is easier in
