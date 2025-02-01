@@ -625,6 +625,7 @@ void NetUpdate()
 	}
 
 	// build new ticcmds for console player
+	const int startTic = ClientTic;
 	int i = 0;
 	for (; i < newTics; ++i)
 	{
@@ -714,7 +715,7 @@ void NetUpdate()
 	// If ClientTic didn't cross a doomcom.ticdup boundary, only send packets
 	// to players waiting for resends.
 	const bool resendOnly = (ClientTic / doomcom.ticdup) == (ClientTic - i) / doomcom.ticdup;
-	const int startSequence = gametic / doomcom.ticdup;
+	const int startSequence = startTic / doomcom.ticdup;
 	const int endSequence = ClientTic / doomcom.ticdup;
 
 	int quitters = 0;
