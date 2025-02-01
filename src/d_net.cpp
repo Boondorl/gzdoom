@@ -156,8 +156,8 @@ CUSTOM_CVAR(Int, net_extratic, 0, CVAR_SERVERINFO | CVAR_NOSAVE)
 		self = 2;
 }
 
-// [RH] Special "ticcmds" get stored in here
-static struct TicSpecial
+// Used to write out all network events that occured leading up to the next tick.
+static struct NetEventData
 {
 	struct FStream {
 		uint8_t* Stream;
@@ -183,7 +183,7 @@ static struct TicSpecial
 private:
 	size_t CurrentSize = 0;
 	size_t MaxSize = 256;
-	int CurrentClientTic = -1;
+	int CurrentClientTic = 0;
 
 	// Make more room for special Command.
 	void GetMoreBytes(size_t newSize)
@@ -209,23 +209,28 @@ private:
 public:
 	uint8_t* CurrentStream = nullptr;
 
-	void NewClientTic()
+	// Boot up does some faux network events so we need to wait until after
+	// everything is initialized to actually set up the network stream.
+	void InitializeEventData()
 	{
-		const int tic = ClientTic / doomcom.ticdup;
-		if (CurrentClientTic != -1)
-		{
-			if (CurrentClientTic == tic)
-				return;
-
-			Streams[CurrentClientTic % BACKUPTICS].Used = CurrentSize;
-		}
-
-		CurrentClientTic = tic;
-		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream;
+		CurrentStream = Streams[0].Stream;
 		CurrentSize = 0;
 	}
 
-	TicSpecial& operator<<(uint8_t it)
+	void NewClientTic()
+	{
+		const int tic = ClientTic / doomcom.ticdup;
+		if (CurrentClientTic == tic)
+			return;
+
+		Streams[CurrentClientTic % BACKUPTICS].Used = CurrentSize;
+		
+		CurrentClientTic = tic;
+		CurrentStream = Streams[tic % BACKUPTICS].Stream;
+		CurrentSize = 0;
+	}
+
+	NetEventData& operator<<(uint8_t it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -235,7 +240,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(int16_t it)
+	NetEventData& operator<<(int16_t it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -245,7 +250,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(int32_t it)
+	NetEventData& operator<<(int32_t it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -255,7 +260,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(int64_t it)
+	NetEventData& operator<<(int64_t it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -265,7 +270,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(float it)
+	NetEventData& operator<<(float it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -275,7 +280,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(double it)
+	NetEventData& operator<<(double it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -285,7 +290,7 @@ public:
 		return *this;
 	}
 
-	TicSpecial& operator<<(const char *it)
+	NetEventData& operator<<(const char *it)
 	{
 		if (CurrentStream != nullptr)
 		{
@@ -630,10 +635,8 @@ void NetUpdate()
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
 		// Boon TODO: This doesn't check first tic properly.
-		if (doomcom.ticdup == 1 || !ClientTic)
+		if (doomcom.ticdup == 1)
 		{
-			// On the first maketic we don't have enough info to generate a full command
-			// across the doomcom.ticdup duration, so just make it instantly.
 			Net_NewClientTic();
 		}
 		else
@@ -710,9 +713,9 @@ void NetUpdate()
 
 	// If ClientTic didn't cross a doomcom.ticdup boundary, only send packets
 	// to players waiting for resends.
-	bool resendOnly = (ClientTic / doomcom.ticdup) == (ClientTic - i) / doomcom.ticdup;
+	const bool resendOnly = (ClientTic / doomcom.ticdup) == (ClientTic - i) / doomcom.ticdup;
 	const int startSequence = gametic / doomcom.ticdup;
-	int endSequence = ClientTic / doomcom.ticdup;
+	const int endSequence = ClientTic / doomcom.ticdup;
 
 	int quitters = 0;
 	int quitNums[MAXPLAYERS];
@@ -1433,6 +1436,11 @@ void Net_CheckLastReceived()
 void Net_NewClientTic()
 {
 	NetEvents.NewClientTic();
+}
+
+void Net_Initialize()
+{
+	NetEvents.InitializeEventData();
 }
 
 void Net_WriteInt8(uint8_t it)
