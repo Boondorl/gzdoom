@@ -696,9 +696,6 @@ void NetUpdate(int tics)
 		}
 	}
 
-	if (singletics)
-		return; 		// singletic update is synchronous
-
 	if (demoplayback)
 	{
 		// Boon TODO: What?
@@ -1343,7 +1340,6 @@ void TryRunTics()
 		M_Ticker();
 		G_Ticker();
 		++gametic;
-		GC::CheckGC();
 
 		TicStabilityEnd();
 	}
