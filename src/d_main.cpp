@@ -903,6 +903,8 @@ void D_Display ()
 	int wipe_type;
 	sector_t *viewsec;
 
+	GC::CheckGC();
+
 	if (nodrawers || screen == NULL)
 		return; 				// for comparative timing / profiling
 	
@@ -1225,19 +1227,19 @@ void D_DoomLoop ()
 			// process one or more tics
 			if (singletics)
 			{
-				I_StartTic ();
-				D_ProcessEvents ();
-				G_BuildTiccmd(&ClientStates[consoleplayer].Tics[ClientTic++ % BACKUPTICS].Command);
-				if (advancedemo)
-					D_DoAdvanceDemo ();
-				C_Ticker ();
-				M_Ticker ();
-				G_Ticker ();
-				// [RH] Use the consoleplayer's camera to update sounds
-				S_UpdateSounds (players[consoleplayer].camera);	// move positional sounds
-				++gametic;
-				GC::CheckGC ();
-				Net_NewClientTic ();
+				GC::CheckGC();
+				NetUpdate(1);
+				if (!pauseext)
+				{
+					if (advancedemo)
+						D_DoAdvanceDemo();
+					C_Ticker();
+					M_Ticker();
+					G_Ticker();
+					++gametic;
+					// [RH] Use the consoleplayer's camera to update sounds
+					S_UpdateSounds(players[consoleplayer].camera);	// move positional sounds
+				}
 			}
 			else
 			{
