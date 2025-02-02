@@ -1177,7 +1177,6 @@ void D_ErrorCleanup ()
 	Net_ClearBuffers ();
 	G_NewInit ();
 	M_ClearMenus ();
-	singletics = false;
 	playeringame[0] = 1;
 	players[0].playerstate = PST_LIVE;
 	gameaction = ga_fullconsole;
@@ -1224,27 +1223,7 @@ void D_DoomLoop ()
 			}
 			I_SetFrameTime();
 
-			// process one or more tics
-			if (singletics)
-			{
-				GC::CheckGC();
-				NetUpdate(1);
-				if (!pauseext)
-				{
-					if (advancedemo)
-						D_DoAdvanceDemo();
-					C_Ticker();
-					M_Ticker();
-					G_Ticker();
-					++gametic;
-					// [RH] Use the consoleplayer's camera to update sounds
-					S_UpdateSounds(players[consoleplayer].camera);	// move positional sounds
-				}
-			}
-			else
-			{
-				TryRunTics (); // will run at least one tic
-			}
+			TryRunTics (); // will run at least one tic
 			// Update display, next frame, with current state.
 			I_StartTic ();
 			D_ProcessEvents();

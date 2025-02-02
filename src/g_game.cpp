@@ -3031,7 +3031,6 @@ void G_TimeDemo (const char* name)
 	nodrawers = !!Args->CheckParm ("-nodraw");
 	noblit = !!Args->CheckParm ("-noblit");
 	timingdemo = true;
-	singletics = true;
 
 	defdemoname = name;
 	gameaction = (gameaction == ga_loadgame) ? ga_loadgameplaydemo : ga_playdemo;
@@ -3071,7 +3070,6 @@ bool G_CheckDemoStatus (void)
 		demoplayback = false;
 		netgame = false;
 		multiplayer = false;
-		singletics = false;
 		for (int i = 1; i < MAXPLAYERS; i++)
 			playeringame[i] = 0;
 		consoleplayer = 0;
