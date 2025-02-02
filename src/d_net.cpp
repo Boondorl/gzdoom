@@ -828,7 +828,7 @@ void NetUpdate(int tics)
 				}
 				else
 				{
-					auto& netTic = ClientStates[playerNums[i]].Tics[curTic];
+					auto& netTic = ClientStates[playerNums[i]].Tics[curTic % BACKUPTICS];
 
 					int len;
 					uint8_t* data = netTic.Data.GetData(&len);
@@ -839,7 +839,7 @@ void NetUpdate(int tics)
 					}
 
 					WriteUserCmdMessage(netTic.Command,
-						lastTic >= 0 ? &ClientStates[playerNums[i]].Tics[lastTic].Command : nullptr, cmd);
+						lastTic >= 0 ? &ClientStates[playerNums[i]].Tics[lastTic % BACKUPTICS].Command : nullptr, cmd);
 				}
 			}
 		}
