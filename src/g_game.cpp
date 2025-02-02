@@ -1254,12 +1254,12 @@ void G_Ticker ()
 	}
 
 	// get commands, check consistancy, and build new consistancy check
-	const int curTic = (gametic / doomcom.ticdup) % BACKUPTICS;
+	const int curTic = gametic / doomcom.ticdup;
 
 	// [RH] Include some random seeds and player stuff in the consistancy
 	// check, not just the player's x position like BOOM.
 	uint32_t rngSum = StaticSumSeeds();
-	const bool doConsistency = netgame && !demoplayback && !(gametic % doomcom.ticdup);
+	const bool doConsistency = false;// netgame && !demoplayback && !(gametic% doomcom.ticdup);
 
 	//Added by MC: For some of that bot stuff. The main bot function.
 	primaryLevel->BotInfo.Main (primaryLevel);
@@ -1267,7 +1267,7 @@ void G_Ticker ()
 	for (auto client : NetworkClients)
 	{
 		usercmd_t *cmd = &players[client].cmd;
-		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic].Command;
+		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic % BACKUPTICS].Command;
 
 		// Make sure that players are where they should be across each other's machines. The host in packet
 		// server mode doesn't bother with this because they have the ultimate authority over where players are.
@@ -2627,12 +2627,12 @@ void G_WriteDemoTiccmd (usercmd_t *cmd, int player, int buf)
 	}
 
 	// [RH] Write any special "ticcmds" for this player to the demo
-	if ((specdata = ClientStates[player].Tics[buf].Data.GetData (&speclen)) && !(gametic % doomcom.ticdup))
+	if ((specdata = ClientStates[player].Tics[buf % BACKUPTICS].Data.GetData (&speclen)) && !(gametic % doomcom.ticdup))
 	{
 		memcpy (demo_p, specdata, speclen);
 		demo_p += speclen;
 
-		ClientStates[player].Tics[buf].Data.SetData(nullptr, 0);
+		ClientStates[player].Tics[buf % BACKUPTICS].Data.SetData(nullptr, 0);
 	}
 
 	// [RH] Now write out a "normal" ticcmd.
