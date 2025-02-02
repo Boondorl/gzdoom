@@ -361,7 +361,7 @@ static int GetNetBufferSize()
 		for (int p = 0; p < playerCount; ++p)
 		{
 			++skipper;
-			SkipTicCmd(skipper);
+			SkipUserCmdMessage(skipper);
 		}
 	}
 
@@ -492,7 +492,7 @@ static void GetPackets()
 {						 
 	while (HGetPacket())
 	{
-		int clientNum = doomcom.remoteplayer;
+		const int clientNum = doomcom.remoteplayer;
 		auto& clientState = ClientStates[clientNum];
 		clientState.LastRecvTime = I_msTime();
 		clientState.Flags &= ~(CF_MISSING_SEQ | CF_RETRANSMIT);
@@ -547,7 +547,15 @@ static void GetPackets()
 
 			// Duplicate command, ignore it.
 			if (seq <= clientState.CurrentSequence)
+			{
+				for (int i = 0; i < playerCount; ++i)
+				{
+					uint8_t* skipper = &NetBuffer[++curByte];
+					curByte += SkipUserCmdMessage(skipper);
+				}
+
 				continue;
+			}
 
 			// Skipped a command. Packet likely got corrupted while being put back together, so have
 			// the client send over the properly ordered commands. 
@@ -562,7 +570,7 @@ static void GetPackets()
 				const int pNum = NetBuffer[curByte++];
 
 				uint8_t* start = &NetBuffer[curByte];
-				curByte += ReadTicCmd(start, pNum, seq);
+				curByte += ReadUserCmdMessage(start, pNum, seq);
 
 				// Set this on the individual player as well so host migration is easier in
 				// packet server mode.

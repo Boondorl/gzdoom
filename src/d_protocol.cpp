@@ -359,7 +359,7 @@ int WriteUserCmdMessage(const usercmd_t& cmd, const usercmd_t* basis, uint8_t*& 
 
 // Reads through the user command without actually setting any of its info. Used to get the size
 // of the command when getting the length of the stream.
-int SkipTicCmd(uint8_t*& stream)
+int SkipUserCmdMessage(uint8_t*& stream)
 {
 	const uint8_t* start = stream;
 
@@ -408,7 +408,7 @@ int SkipTicCmd(uint8_t*& stream)
 	return int(stream - start);
 }
 
-int ReadTicCmd(uint8_t*& stream, int player, int tic)
+int ReadUserCmdMessage(uint8_t*& stream, int player, int tic)
 {
 	const int ticMod = tic % BACKUPTICS;
 
