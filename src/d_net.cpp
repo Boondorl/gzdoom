@@ -1297,6 +1297,7 @@ void TryRunTics()
 		if (ClientStates[client].CurrentSequence < lowestSequence)
 			lowestSequence = ClientStates[client].CurrentSequence;
 	}
+	++lowestSequence;
 
 	const int availableTics = lowestSequence - gametic / doomcom.ticdup;
 
@@ -1340,6 +1341,7 @@ void TryRunTics()
 			if (ClientStates[client].CurrentSequence < lowestSequence)
 				lowestSequence = ClientStates[client].CurrentSequence;
 		}
+		++lowestSequence;
 
 		lowestSequence *= doomcom.ticdup;
 		if (gametic > lowestSequence)
