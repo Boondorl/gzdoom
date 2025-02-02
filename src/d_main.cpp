@@ -874,7 +874,6 @@ static void DrawRateStuff()
 
 static void DrawOverlays()
 {
-	NetUpdate ();
 	C_DrawConsole ();
 	M_Drawer ();
 	DrawRateStuff();
@@ -1153,7 +1152,6 @@ void D_Display ()
 	}
 	else
 	{
-		NetUpdate();		// send out any new accumulation
 		PerformWipe(wipestart, screen->WipeEndScreen(), wipe_type, false, DrawOverlays);
 	}
 	cycles.Unclock();
