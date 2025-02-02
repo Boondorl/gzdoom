@@ -2278,10 +2278,6 @@ void Net_SkipCommand(int cmd, uint8_t **stream)
 		case DEM_SETPITCHLIMIT:
 			skip = 2;
 			break;
-
-		default:
-			I_Error("Unknown net command: %d", cmd);
-			break;
 	}
 
 	*stream += skip;
