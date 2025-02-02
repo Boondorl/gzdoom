@@ -1276,30 +1276,37 @@ void TryRunTics()
 	if (!AppActive && vid_lowerinbackground)
 		doWait = true;
 
-	// get real tics
+	// Get the full number of tics the client can run.
 	if (doWait)
 		EnterTic = I_WaitForTic(LastEnterTic);
 	else
 		EnterTic = I_GetTime();
 
+	const int startCommand = ClientTic;
 	const int totalTics = EnterTic - LastEnterTic;
 	LastEnterTic = EnterTic;
 
-	// Get available tics
+	// Listen for other clients and send out data as needed. This is also
+	// needed for singleplayer! But is instead handled entirely through local
+	// buffers. This has a limit of 17 tics that can be generated.
 	NetUpdate();
 
+	// If the game is paused, everything we need to update has already done so.
 	if (pauseext)
 		return;
 
+	// Get the amount of tics the client can actually run. This accounts for waiting for other
+	// players over the network.
 	int lowestSequence = INT_MAX;
 	for (auto client : NetworkClients)
 	{
 		if (ClientStates[client].CurrentSequence < lowestSequence)
 			lowestSequence = ClientStates[client].CurrentSequence;
 	}
-	++lowestSequence;
 
-	const int availableTics = lowestSequence - gametic / doomcom.ticdup;
+	// If the lowest confirmed tic matches the server gametic or greater, allow the client
+	// to run some of them.
+	const int availableTics = (lowestSequence - gametic / doomcom.ticdup) + 1;
 
 	// Cap the number of tics we can run per frame if we're lagging behind. We don't
 	// want the client to accidentally get caught in a loop of trying to catch up.
@@ -1309,97 +1316,52 @@ void TryRunTics()
 	else if (totalTics < availableTics)
 		runTics = totalTics;
 	
-	// Uncapped framerate needs seprate checks
-	if (!runTics && !doWait)
+	// If there are no tics to run, check for possible stall conditions and new
+	// commands to predict.
+	if (runTics <= 0)
 	{
-		TicStabilityWait();
+		if (!doWait)
+			TicStabilityWait();
 
-		// Check possible stall conditions
+		// Check if a client dropped connection.
 		Net_CheckLastReceived();
-		if (totalTics >= 1)
+
+		// If we waited long enough to actually advance, re-predict since the client
+		// will have built a new user command.
+		if (ClientTic > startCommand)
 		{
 			C_Ticker();
 			M_Ticker();
-			// Repredict the player for new buffered movement
 			P_UnPredictPlayer();
 			P_PredictPlayer(&players[consoleplayer]);
 		}
 		return;
 	}
 
-	if (runTics < 1)
-		runTics = 1;
-
-	// wait for new tics if needed
-	const int newestTic = gametic + runTics;
-	while (lowestSequence < newestTic)
-	{
-		NetUpdate();
-		lowestSequence = INT_MAX;
-		for (auto client : NetworkClients)
-		{
-			if (ClientStates[client].CurrentSequence < lowestSequence)
-				lowestSequence = ClientStates[client].CurrentSequence;
-		}
-		++lowestSequence;
-
-		lowestSequence *= doomcom.ticdup;
-		if (gametic > lowestSequence)
-			I_Error("Client's world is in a non-server verified state");
-
-		// Check possible stall conditions
-		Net_CheckLastReceived();
-
-		// Update time returned by I_GetTime, but only if we are stuck in this loop
-		if (lowestSequence < newestTic)
-			I_SetFrameTime();
-
-		// don't stay in here forever -- give the menu a chance to work
-		if (I_GetTime() - EnterTic >= 1)
-		{
-			C_Ticker();
-			M_Ticker();
-			// Repredict the player for new buffered movement
-			P_UnPredictPlayer();
-			P_PredictPlayer(&players[consoleplayer]);
-			return;
-		}
-	}
-
 	for (int i = 0; i < MAXPLAYERS; ++i)
 		players[i].waiting = false;
 
 	// Update the last time the game tic'd.
-	LastGameUpdate = I_GetTime();
+	LastGameUpdate = EnterTic;
 
-	// run the count tics
-	if (runTics > 0)
+	// Run the available tics.
+	P_UnPredictPlayer();
+	while (runTics--)
 	{
-		P_UnPredictPlayer();
-		while (runTics--)
-		{
-			TicStabilityBegin();
-			if (gametic > lowestSequence)
-				I_Error("Client ticking before server could verify actions");
+		TicStabilityBegin();
 
-			if (advancedemo)
-				D_DoAdvanceDemo();
+		if (advancedemo)
+			D_DoAdvanceDemo();
 
-			C_Ticker();
-			M_Ticker();
-			G_Ticker();
-			++gametic;
+		C_Ticker();
+		M_Ticker();
+		G_Ticker();
+		++gametic;
 
-			NetUpdate();	// check for new console Command
-			TicStabilityEnd();
-		}
-		P_PredictPlayer(&players[consoleplayer]);
-		S_UpdateSounds(players[consoleplayer].camera);	// move positional sounds
+		TicStabilityEnd();
 	}
-	else
-	{
-		TicStabilityWait();
-	}
+	P_PredictPlayer(&players[consoleplayer]);
+	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
 }
 
 void Net_CheckLastReceived()
