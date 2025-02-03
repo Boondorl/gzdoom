@@ -111,9 +111,8 @@ struct FNetGameInfo
 ENetMode NetMode = NET_PeerToPeer;
 int 				ClientTic = 0;
 int					LocalDelay = 0;
-usercmd_t			LocalCmds[LOCALCMDTICS];
+usercmd_t			LocalCmds[LOCALCMDTICS] = {};
 FClientNetState		ClientStates[MAXPLAYERS] = {};
-FConsistencyCheck	OutgoingConsistencyChecks; // If multiple ticks are ran during a single check, make sure all of them get sent over.
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
 // playback as it means in the world running code itself all player commands are built the exact same way
@@ -343,9 +342,9 @@ static int GetNetBufferSize()
 	if (numTics == NCMD_XTICS)
 		numTics += NetBuffer[totalBytes++];
 
-	// Need at least 1 byte per tic and 2 per player - 1 for tic offset, 1 for each player number, and 1 for each empty user command.
-	if (doomcom.datalength < totalBytes + numTics + 2 * playerCount)
-		return totalBytes + numTics + 2 * playerCount;
+	// Need at least 1 byte per tic and 3 per player - 1 for tic offset, 1 for each player number, 1 for tics ran, and 1 for each empty user command.
+	if (doomcom.datalength < totalBytes + numTics + 3 * playerCount)
+		return totalBytes + numTics + 3 * playerCount;
 
 	uint8_t* skipper = &NetBuffer[totalBytes];
 	for (int i = 0; i < numTics; ++i)
@@ -354,6 +353,11 @@ static int GetNetBufferSize()
 		for (int p = 0; p < playerCount; ++p)
 		{
 			++skipper;
+			int ran = skipper[0];
+			++skipper;
+			while (ran-- > 0)
+				skipper += 2;
+
 			SkipUserCmdMessage(skipper);
 		}
 	}
@@ -541,7 +545,12 @@ static void GetPackets()
 			{
 				for (int i = 0; i < playerCount; ++i)
 				{
-					uint8_t* skipper = &NetBuffer[++curByte];
+					int ran = NetBuffer[++curByte];
+					++curByte;
+					while (ran-- > 0)
+						curByte += 2;
+
+					uint8_t* skipper = &NetBuffer[curByte];
 					curByte += SkipUserCmdMessage(skipper);
 				}
 
@@ -560,15 +569,16 @@ static void GetPackets()
 			{
 				const int pNum = NetBuffer[curByte++];
 
+				auto& pState = ClientStates[pNum];
+				int ran = NetBuffer[curByte++];
+				while (ran-- > 0)
+					pState.NetConsistency[pState.CurrentConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+
 				uint8_t* start = &NetBuffer[curByte];
 				curByte += ReadUserCmdMessage(start, pNum, seq);
 
-				// Set this on the individual player as well so host migration is easier in
-				// packet server mode.
-				ClientStates[pNum].CurrentSequence = seq;
+				pState.CurrentSequence = seq;
 			}
-
-			clientState.CurrentSequence = seq;
 		}
 	}
 }
@@ -724,8 +734,7 @@ void NetUpdate(int tics)
 	for (auto client : NetworkClients)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
-		// hand, if we're the host we send out everyone's info to everyone else. Whatever consistency checks
-		// we have on the host machine is used for verification (don't rely on clients to verify themselves).
+		// hand, if we're the host we send out everyone's info to everyone else.
 		if (NetMode == NET_PacketServer && client != Net_Arbitrator)
 			continue;
 
@@ -807,6 +816,19 @@ void NetUpdate(int tics)
 				cmd[0] = playerNums[i];
 				++cmd;
 
+				auto& clientState = ClientStates[playerNums[i]];
+				int ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
+				cmd[0] = ran;
+				++cmd;
+				for (int r = 0; r < ran; ++r)
+				{
+					const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
+					cmd[0] = clientState.LocalConsistency[r] >> 8;
+					++cmd;
+					cmd[0] = clientState.LocalConsistency[r];
+					++cmd;
+				}
+
 				int curTic = sequenceNum + t, lastTic = curTic - 1;
 				if (playerNums[i] == consoleplayer)
 				{
@@ -826,7 +848,7 @@ void NetUpdate(int tics)
 				}
 				else
 				{
-					auto& netTic = ClientStates[playerNums[i]].Tics[curTic % BACKUPTICS];
+					auto& netTic = clientState.Tics[curTic % BACKUPTICS];
 
 					int len;
 					uint8_t* data = netTic.Data.GetData(&len);
@@ -837,7 +859,7 @@ void NetUpdate(int tics)
 					}
 
 					WriteUserCmdMessage(netTic.Command,
-						lastTic >= 0 ? &ClientStates[playerNums[i]].Tics[lastTic % BACKUPTICS].Command : nullptr, cmd);
+						lastTic >= 0 ? &clientState.Tics[lastTic % BACKUPTICS].Command : nullptr, cmd);
 				}
 			}
 		}
@@ -851,6 +873,42 @@ void NetUpdate(int tics)
 	// data to themselves gets it immediately (important for singleplayer; otherwise there
 	// would always be a one-tic delay).
 	GetPackets();
+
+	// Last, check consistencies retroactively to see if there was a desync at some point. We still
+	// check the local client here because in packet server mode these could realistically desync
+	// if the client's current position doesn't agree with the host.
+	if (netgame && !demoplayback && !(gametic % doomcom.ticdup))
+	{
+		for (auto client : NetworkClients)
+		{
+			auto& clientState = ClientStates[client];
+			// Update these now that all the packets have been sent out.
+			clientState.LastSentConsistency = clientState.CurrentLocalConsistency;
+			// If previously inconsistent, always mark it as such going forward. We don't want this to
+			// accidentally go away at some point since the game state is already completely broken.
+			if (players[client].inconsistant)
+			{
+				clientState.LastCheckedConsistency = clientState.CurrentConsistency;
+			}
+			else
+			{
+				// Make sure we don't check past ticks we haven't even ran yet.
+				const int limit = min<int>(gametic, clientState.CurrentConsistency);
+				while (clientState.LastCheckedConsistency < limit)
+				{
+					const int tic = clientState.LastCheckedConsistency % BACKUPTICS;
+					if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
+					{
+						players[client].inconsistant = true;
+						clientState.LastCheckedConsistency = clientState.CurrentConsistency;
+						break;
+					}
+
+					++clientState.LastCheckedConsistency;
+				}
+			}
+		}
+	}
 }
 
 // User info packets look like this:

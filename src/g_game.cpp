@@ -1256,11 +1256,6 @@ void G_Ticker ()
 	// get commands, check consistancy, and build new consistancy check
 	const int curTic = gametic / doomcom.ticdup;
 
-	// [RH] Include some random seeds and player stuff in the consistancy
-	// check, not just the player's x position like BOOM.
-	uint32_t rngSum = StaticSumSeeds();
-	const bool doConsistency = false;// netgame && !demoplayback && !(gametic% doomcom.ticdup);
-
 	//Added by MC: For some of that bot stuff. The main bot function.
 	primaryLevel->BotInfo.Main (primaryLevel);
 
@@ -1268,24 +1263,6 @@ void G_Ticker ()
 	{
 		usercmd_t *cmd = &players[client].cmd;
 		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic % BACKUPTICS].Command;
-
-		// Make sure that players are where they should be across each other's machines. The host in packet
-		// server mode doesn't bother with this because they have the ultimate authority over where players are.
-		if (doConsistency && (NetMode == NET_PeerToPeer || consoleplayer != Net_Arbitrator))
-		{
-			int16_t consistency = CalculateConsistency(client, rngSum);
-			if (!ClientStates[client].ConsistencyChecks.size())
-			{
-				players[client].inconsistant = true;
-			}
-			else
-			{
-				int16_t check = ClientStates[client].ConsistencyChecks.front();
-				ClientStates[client].ConsistencyChecks.pop();
-				if (check != consistency)
-					players[client].inconsistant = true;
-			}
-		}
 
 		if (!(gametic % doomcom.ticdup))
 			RunPlayerCommands(client, curTic);
@@ -1355,39 +1332,15 @@ void G_Ticker ()
 	primaryLevel->localEventManager->PostUiTick();
 
 	// Ran a tick, so prep the next consistencies to send out.
-	if (doConsistency)
+	// [RH] Include some random seeds and player stuff in the consistancy
+	// check, not just the player's x position like BOOM.
+	if (netgame && !demoplayback && !(gametic % doomcom.ticdup))
 	{
-		rngSum = StaticSumSeeds();
-		// Hosts in packet server games need special logic due to the unique way packet dropping is handled. They'll
-		// have to hold on to older consistencies for longer in case a player who went quiet needs the older ones.
-		// Standard clients only send them out in P2P mode since the server doesn't care about what they have to
-		// say about their own game state.
-		if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
+		const uint32_t rngSum = StaticSumSeeds();
+		for (auto client : NetworkClients)
 		{
-			int lowSeq = (gametic - 1) / doomcom.ticdup;
-			for (auto client : NetworkClients)
-			{
-				if (client != Net_Arbitrator && ClientStates[client].SequenceAck < lowSeq)
-					lowSeq = ClientStates[client].SequenceAck;
-
-				OutgoingConsistencyChecks.ClientConsistencies[client].push(CalculateConsistency(client, rngSum));
-			}
-
-			// Boon TODO: Ugly and inefficient
-			while (OutgoingConsistencyChecks.Sequence <= lowSeq)
-			{
-				++OutgoingConsistencyChecks.Sequence;
-				for (auto client : NetworkClients)
-					OutgoingConsistencyChecks.ClientConsistencies[client].pop();
-			}
-		}
-		else if (NetMode == NET_PeerToPeer)
-		{
-			// In P2P mode we know every client already confirmed this tick if we ran it so we can simply
-			// discard any old consistency checks as we please.
-			++OutgoingConsistencyChecks.Sequence;
-			OutgoingConsistencyChecks.ClientConsistencies[consoleplayer].pop();
-			OutgoingConsistencyChecks.ClientConsistencies[consoleplayer].push(CalculateConsistency(consoleplayer, rngSum));
+			auto& clientState = ClientStates[client];
+			clientState.LocalConsistency[clientState.CurrentLocalConsistency++ % BACKUPTICS] = CalculateConsistency(client, rngSum);
 		}
 	}
 }
