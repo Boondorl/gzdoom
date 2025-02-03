@@ -78,17 +78,16 @@ struct FClientNetState
 	int 			CurrentSequence = -1;	// The last sequence we've gotten from this client.
 	int				Flags = 0;				// State of this client.
 
-	std::queue<int16_t> ConsistencyChecks;
-};
-
-// This needs to be able to store everyone's consistencies since packet servers
-// will have to keep track of all of them. The sequence number is used mainly
-// for packet server mode to ensure old entries will stick around should a
-// client drop and need consistencies sent back over.
-struct FConsistencyCheck
-{
-	int Sequence = 0;
-	std::queue<int16_t> ClientConsistencies[MAXPLAYERS];
+	// Every packet includes consistencies for tics that client ran. When
+	// a world tic is ran, the local client will store all the consistencies
+	// of the clients in their LocalConsistency. Then the consistencies will
+	// be checked against retroactively as they come in.
+	int LastCheckedConsistency = 0;				// Last consistency we checked from this client. If < CurrentConsistency, run through them.
+	int CurrentConsistency = 0;					// Current consistency checked.
+	int16_t NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
+	int LastSentConsistency = 0;				// Last consistency we sent out. If < CurrentLocalConsistency, send them out.
+	int CurrentLocalConsistency = 0;			// Amount of consistencies that were generated since the last packet.
+	int16_t LocalConsistency[BACKUPTICS] = {};	// Local consitency of the client to check against.
 };
 
 enum ENetMode : uint8_t
@@ -111,6 +110,7 @@ enum ENetMode : uint8_t
 //  One byte for the delta from the base sequence.
 //  For each player:
 //   One byte for the player number.
+//   One byte for the number of consistencies followed by two bytes for each consistency.
 //   The remaining command and event data for that player.
 
 // Create any new ticcmds and broadcast to other players.
@@ -151,7 +151,6 @@ extern doomcom_t			doomcom;
 extern usercmd_t			LocalCmds[LOCALCMDTICS];
 extern int					ClientTic;
 extern FClientNetState		ClientStates[MAXPLAYERS];
-extern FConsistencyCheck	OutgoingConsistencyChecks;
 extern ENetMode				NetMode;
 
 class player_t;
