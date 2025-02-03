@@ -999,6 +999,8 @@ int I_InitNetwork (void)
 		doomcom.consoleplayer = 0;
 		return false;
 	}
+
+	return false;
 	if (doomcom.numplayers < 3)
 	{ // Packet server mode with only two players is effectively the same as
 	  // peer-to-peer but with some slightly larger packets.
