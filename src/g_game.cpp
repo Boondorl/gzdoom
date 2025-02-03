@@ -1149,16 +1149,16 @@ void G_Ticker ()
 	gamestate_t	oldgamestate;
 
 	// do player reborns if needed
-	for (auto client : NetworkClients)
+	// TODO: These should really be moved to queues.
+	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
-		if (players[client].playerstate == PST_GONE)
-		{
-			G_DoPlayerPop(client);
-		}
-		else if (players[client].playerstate == PST_REBORN || players[client].playerstate == PST_ENTER)
-		{
-			primaryLevel->DoReborn(client, false);
-		}
+		if (!playeringame[i])
+			continue;
+
+		if (players[i].playerstate == PST_GONE)
+			G_DoPlayerPop(i);
+		else if (players[i].playerstate == PST_REBORN || players[i].playerstate == PST_ENTER)
+			primaryLevel->DoReborn(i, false);
 	}
 
 	if (ToggleFullscreen)
