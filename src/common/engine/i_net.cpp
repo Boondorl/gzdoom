@@ -374,21 +374,6 @@ sockaddr_in *PreGet (void *buffer, int bufferlen, bool noabort)
 		int err = WSAGetLastError();
 		if (err == WSAEWOULDBLOCK || (noabort && err == WSAECONNRESET))
 			return NULL;	// no packet
-
-		if (doomcom.consoleplayer == 0)
-		{
-			int node = FindNode(&fromaddress);
-			I_NetMessage("Got unexpected disconnect.");
-			for (; node < doomcom.numplayers; ++node)
-				sendaddress[node] = sendaddress[node + 1];
-
-			// Let remaining guests know that somebody left.
-			SendConAck(doomcom.numplayers, --doomcom.numplayers);
-		}
-		else
-		{
-			I_NetError("The host disbanded the game unexpectedly");
-		}
 	}
 	return &fromaddress;
 }
@@ -489,17 +474,17 @@ void StartNetwork (bool autoPort)
 #endif
 }
 
-void SendAbort (void)
+void SendAbort (int connected)
 {
 	uint8_t dis[2] = { PRE_FAKE, PRE_DISCONNECT };
 	int i, j;
 
-	if (doomcom.numplayers > 1)
+	if (connected > 1)
 	{
-		if (consoleplayer == 0)
+		if (doomcom.consoleplayer == 0)
 		{
 			// The host needs to let everyone know
-			for (i = 1; i < doomcom.numplayers; ++i)
+			for (i = 1; i < connected; ++i)
 			{
 				for (j = 4; j > 0; --j)
 				{
@@ -512,7 +497,7 @@ void SendAbort (void)
 			// Guests only need to let the host know.
 			for (i = 4; i > 0; --i)
 			{
-				PreSend (dis, 2, &sendaddress[1]);
+				PreSend (dis, 2, &sendaddress[0]);
 			}
 		}
 	}
@@ -526,17 +511,17 @@ void SendConAck (int num_connected, int num_needed)
 	packet.Message = PRE_CONACK;
 	packet.NumNodes = num_needed;
 	packet.NumPresent = num_connected;
-	for (int node = 1; node < doomcom.numplayers; ++node)
+	for (int node = 1; node < num_connected; ++node)
 	{
 		PreSend (&packet, 4, &sendaddress[node]);
 	}
-	I_NetProgress (doomcom.numplayers);
+	I_NetProgress (num_connected);
 }
 
 bool Host_CheckForConnects (void *userdata)
 {
 	PreGamePacket packet;
-	int numplayers = (int)(intptr_t)userdata;
+	int* connectedPlayers = (int*)userdata;
 	sockaddr_in *from;
 	int node;
 
@@ -550,7 +535,7 @@ bool Host_CheckForConnects (void *userdata)
 		{
 		case PRE_CONNECT:
 			node = FindNode (from);
-			if (doomcom.numplayers == numplayers)
+			if (doomcom.numplayers == *connectedPlayers)
 			{
 				if (node == -1)
 				{
@@ -566,13 +551,14 @@ bool Host_CheckForConnects (void *userdata)
 			{
 				if (node == -1)
 				{
-					node = doomcom.numplayers++;
+					node = *connectedPlayers;
+					++*connectedPlayers;
 					sendaddress[node] = *from;
 					I_NetMessage ("Got connect from node %d.", node);
 				}
 
 				// Let the new guest (and everyone else) know we got their message.
-				SendConAck (doomcom.numplayers, numplayers);
+				SendConAck (*connectedPlayers, doomcom.numplayers);
 			}
 			break;
 
@@ -581,15 +567,15 @@ bool Host_CheckForConnects (void *userdata)
 			if (node >= 0)
 			{
 				I_NetMessage ("Got disconnect from node %d.", node);
-				doomcom.numplayers--;
-				while (node < doomcom.numplayers)
+				--*connectedPlayers;
+				while (node < *connectedPlayers)
 				{
 					sendaddress[node] = sendaddress[node+1];
-					node++;
+					++node;
 				}
 
 				// Let remaining guests know that somebody left.
-				SendConAck (doomcom.numplayers, numplayers);
+				SendConAck (*connectedPlayers, doomcom.numplayers);
 			}
 			break;
 
@@ -597,10 +583,10 @@ bool Host_CheckForConnects (void *userdata)
 			break;
 		}
 	}
-	if (doomcom.numplayers < numplayers)
+	if (*connectedPlayers < doomcom.numplayers)
 	{
 		// Send message to everyone as a keepalive
-		SendConAck(doomcom.numplayers, numplayers);
+		SendConAck(*connectedPlayers, doomcom.numplayers);
 		return false;
 	}
 
@@ -614,24 +600,25 @@ bool Host_CheckForConnects (void *userdata)
 			node = FindNode (from);
 			if (node >= 0)
 			{
-				doomcom.numplayers--;
-				while (node < doomcom.numplayers)
+				--connectedPlayers;
+				while (node < *connectedPlayers)
 				{
 					sendaddress[node] = sendaddress[node+1];
-					node++;
+					++node;
 				}
 				// Let remaining guests know that somebody left.
-				SendConAck (doomcom.numplayers, numplayers);
+				SendConAck (*connectedPlayers, doomcom.numplayers);
 			}
 			break;
 		}
 	}
-	return doomcom.numplayers >= numplayers;
+	return *connectedPlayers >= doomcom.numplayers;
 }
 
 bool Host_SendAllHere (void *userdata)
 {
-	int *gotack = (int *)userdata;	// ackcount is at gotack[MaxPlayers]
+	int* gotack = (int*)userdata;
+	const int mask = (1 << doomcom.numplayers) - 1;
 	PreGamePacket packet;
 	int node;
 	sockaddr_in *from;
@@ -646,7 +633,7 @@ bool Host_SendAllHere (void *userdata)
 		int machine, spot = 0;
 
 		packet.ConsoleNum = node;
-		if (!gotack[node])
+		if (!((*gotack) & (1 << node)))
 		{
 			for (spot = 0; spot < doomcom.numplayers; spot++)
 			{
@@ -670,18 +657,14 @@ bool Host_SendAllHere (void *userdata)
 			node = FindNode (from);
 			if (node >= 0)
 			{
-				if (!gotack[node])
-				{
-					gotack[node] = true;
-					gotack[MaxPlayers]++;
-				}
+				*gotack |= 1 << node;
+				PreSend(&packet, 2, from);
 			}
-			PreSend (&packet, 2, from);
 		}
 	}
 
 	// If everybody has replied, then this loop can end.
-	return gotack[MaxPlayers] == doomcom.numplayers - 1;
+	return ((*gotack) & mask) == mask;
 }
 
 bool HostGame (int i)
@@ -689,7 +672,6 @@ bool HostGame (int i)
 	PreGamePacket packet;
 	int numplayers;
 	int node;
-	int gotack[MaxPlayers+1];
 
 	if ((i == Args->NumArgs() - 1) || !(numplayers = atoi (Args->GetArg(i+1))))
 	{	// No player count specified, assume 2
@@ -717,27 +699,26 @@ bool HostGame (int i)
 	// [JC] - this computer is starting the game, therefore it should
 	// be the Net Arbitrator.
 	doomcom.consoleplayer = 0;
-	Printf ("Console player number: %d\n", doomcom.consoleplayer);
-
-	doomcom.numplayers = 1;
+	doomcom.numplayers = numplayers;
 
 	I_NetInit ("Hosting game", numplayers);
 
-	// Wait for numplayers-1 different connections
-	if (!I_NetLoop (Host_CheckForConnects, (void *)(intptr_t)numplayers))
+	// Wait for the lobby to be full.
+	int connectedPlayers = 1;
+	if (!I_NetLoop (Host_CheckForConnects, (void *)&connectedPlayers))
 	{
-		SendAbort();
+		SendAbort(connectedPlayers);
 		return false;
 	}
 
 	// Now inform everyone of all machines involved in the game
-	memset (gotack, 0, sizeof(gotack));
+	int gotack = 1;
 	I_NetMessage ("Sending all here.");
 	I_NetInit ("Done waiting", 1);
 
-	if (!I_NetLoop (Host_SendAllHere, (void *)gotack))
+	if (!I_NetLoop (Host_SendAllHere, (void *)&gotack))
 	{
-		SendAbort();
+		SendAbort(doomcom.numplayers);
 		return false;
 	}
 
@@ -774,12 +755,12 @@ bool Guest_ContactHost (void *userdata)
 	// Let the host know we are here.
 	packet.Fake = PRE_FAKE;
 	packet.Message = PRE_CONNECT;
-	PreSend (&packet, 2, &sendaddress[1]);
+	PreSend (&packet, 2, &sendaddress[0]);
 
 	// Listen for a reply.
 	while ( (from = PreGet (&packet, sizeof(packet), true)) )
 	{
-		if (packet.Fake == PRE_FAKE && FindNode(from) == 1)
+		if (packet.Fake == PRE_FAKE && !FindNode(from))
 		{
 			if (packet.Message == PRE_CONACK)
 			{
@@ -816,7 +797,7 @@ bool Guest_WaitForOthers (void *userdata)
 
 	while ( (from = PreGet (&packet, sizeof(packet), false)) )
 	{
-		if (packet.Fake != PRE_FAKE || FindNode(from) != 1)
+		if (packet.Fake != PRE_FAKE || FindNode(from))
 		{
 			continue;
 		}
@@ -831,11 +812,12 @@ bool Guest_WaitForOthers (void *userdata)
 			{
 				doomcom.numplayers = packet.NumNodes;
 				doomcom.consoleplayer = packet.ConsoleNum;
-				sendaddress[doomcom.consoleplayer] = sendaddress[0];
+				// Don't use the address sent from the host for our own machine.
+				sendaddress[doomcom.consoleplayer] = sendaddress[1];
 
 				I_NetMessage ("Console player number: %d", doomcom.consoleplayer);
 
-				for (int node = 0; node < doomcom.numplayers; ++node)
+				for (int node = 1; node < doomcom.numplayers; ++node)
 				{
 					if (node == doomcom.consoleplayer)
 						continue;
@@ -868,7 +850,7 @@ bool Guest_WaitForOthers (void *userdata)
 
 	packet.Fake = PRE_FAKE;
 	packet.Message = PRE_KEEPALIVE;
-	PreSend(&packet, 2, &sendaddress[1]);
+	PreSend(&packet, 2, &sendaddress[0]);
 
 	return false;
 }
@@ -882,24 +864,24 @@ bool JoinGame (int i)
 
 	StartNetwork (true);
 
-	// Host is always node 1
-	BuildAddress (&sendaddress[1], Args->GetArg(i+1));
+	// Host is always node 0
+	BuildAddress (&sendaddress[0], Args->GetArg(i+1));
 	doomcom.numplayers = 2;
 	doomcom.consoleplayer = -1;
 
 	// Let host know we are here
 	I_NetInit ("Contacting host", 0);
 
-	if (!I_NetLoop (Guest_ContactHost, NULL))
+	if (!I_NetLoop (Guest_ContactHost, nullptr))
 	{
-		SendAbort();
+		SendAbort(1);
 		return false;
 	}
 
 	// Wait for everyone else to connect
-	if (!I_NetLoop (Guest_WaitForOthers, 0))
+	if (!I_NetLoop (Guest_WaitForOthers, nullptr))
 	{
-		SendAbort();
+		SendAbort(1);
 		return false;
 	}
 

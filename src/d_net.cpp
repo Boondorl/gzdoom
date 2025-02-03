@@ -948,23 +948,19 @@ bool ExchangeNetGameInfo(void *userdata)
 	{
 		bool stillWaiting = false;
 
-		// Update this dynamically in case a player dropped.
-		// Boon TODO: This isn't going to work since ClientInGame won't be filled yet.
-		int allPlayers = 1 << Net_Arbitrator;
-		for (auto client : NetworkClients)
-			allPlayers |= 1 << client;
+		// Update this dynamically.
+		int allPlayers = 0;
+		for (int i = 0; i < doomcom.numplayers; ++i)
+			allPlayers |= 1 << i;
 
-		for (auto client : NetworkClients)
+		for (int i = 0; i < doomcom.numplayers; ++i)
 		{
-			if (!data->GotSetup[client] || (data->DetectedPlayers[client] & allPlayers) != allPlayers)
+			if (!data->GotSetup[i] || (data->DetectedPlayers[i] & allPlayers) != allPlayers)
 			{
 				stillWaiting = true;
 				break;
 			}
 		}
-
-		if (!stillWaiting)
-			stillWaiting = (data->DetectedPlayers[Net_Arbitrator] & allPlayers) == allPlayers;
 
 		if (!stillWaiting)
 			return true;
@@ -1104,8 +1100,6 @@ bool D_CheckNetGame()
 
 	players[Net_Arbitrator].settings_controller = true;
 	consoleplayer = doomcom.consoleplayer;
-	for (auto client : NetworkClients)
-		playeringame[client] = true;
 
 	if (consoleplayer == Net_Arbitrator)
 	{
@@ -1132,6 +1126,9 @@ bool D_CheckNetGame()
 		if (!D_ExchangeNetInfo())
 			return false;
 	}
+
+	for (auto client : NetworkClients)
+		playeringame[client] = true;
 
 	if (consoleplayer != Net_Arbitrator && doomcom.numplayers > 1)
 		Printf("Host selected " TEXTCOLOR_BLUE "%s" TEXTCOLOR_NORMAL " networking mode.\n", NetMode == NET_PeerToPeer ? "peer to peer" : "packet server");
