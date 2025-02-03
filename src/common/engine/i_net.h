@@ -47,7 +47,7 @@ enum ENCMD
 
 struct FClientStack : public TArray<int>
 {
-	inline bool InGame(int i) const { return SortedFind(i, true) < Size(); }
+	inline bool InGame(int i) const { return Find(i) < Size(); }
 
 	void operator+=(const int i)
 	{
