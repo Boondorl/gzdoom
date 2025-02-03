@@ -57,7 +57,7 @@ struct FClientStack : public TArray<int>
 
 	void operator-=(const int i)
 	{
-		SortedDelete(i);
+		Delete(Find(i));
 	}
 };
 

@@ -433,7 +433,6 @@ static void ClientConnecting(int client)
 static void DisconnectClient(int clientNum)
 {
 	NetworkClients -= clientNum;
-	playeringame[clientNum] = false;
 	// Capture the pawn leaving in the next world tick.
 	players[clientNum].playerstate = PST_GONE;
 }
