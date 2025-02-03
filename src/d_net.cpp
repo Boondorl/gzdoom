@@ -426,8 +426,7 @@ static void ClientConnecting(int client)
 	if (consoleplayer != Net_Arbitrator)
 		return;
 
-	NetBuffer[0] = NCMD_GAMEREADY;
-	HSendPacket(client, 1);
+	// TODO: Eventually...
 }
 
 static void DisconnectClient(int clientNum)
