@@ -1243,10 +1243,14 @@ void DBaseStatusBar::DrawConsistancy() const
 	FString text = "Out of sync with:";
 	for (auto client : NetworkClients)
 	{
-		if (client != consoleplayer && players[client].inconsistant)
+		if (players[client].inconsistant)
 		{
 			desync = true;
-			text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client + 1);
+			// Fell out of sync with the host in packet server mode.
+			if (client == consoleplayer && NetMode == NET_PacketServer)
+				text.AppendFormat(" %s (%d)", players[Net_Arbitrator].userinfo.GetName(10u), Net_Arbitrator + 1);
+			else
+				text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client + 1);
 		}
 	}
 

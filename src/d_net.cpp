@@ -572,7 +572,7 @@ static void GetPackets()
 				auto& pState = ClientStates[pNum];
 				int ran = NetBuffer[curByte++];
 				while (ran-- > 0)
-					pState.NetConsistency[pState.CurrentConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+					pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
 
 				uint8_t* start = &NetBuffer[curByte];
 				curByte += ReadUserCmdMessage(start, pNum, seq);
@@ -639,7 +639,7 @@ void NetUpdate(int tics)
 			break;			// can't hold any more
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
-		if (doomcom.ticdup == 1 || ClientTic == 1)
+		if (doomcom.ticdup == 1)
 		{
 			Net_NewClientTic();
 		}
@@ -706,9 +706,10 @@ void NetUpdate(int tics)
 
 	if (demoplayback)
 	{
-		// Boon TODO: What?
 		// Don't touch net command data while playing a demo, as it'll already exist.
-		ClientStates[consoleplayer].CurrentSequence = (ClientTic / doomcom.ticdup);
+		for (auto client : NetworkClients)
+			ClientStates[client].CurrentSequence = (ClientTic / doomcom.ticdup);
+
 		return;
 	}
 
@@ -817,13 +818,18 @@ void NetUpdate(int tics)
 				++cmd;
 
 				auto& clientState = ClientStates[playerNums[i]];
-				int ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
+				int ran = 0;
+				// Don't bother sending over consistencies in packet server unless you're the host. Also only
+				// send it on the first tic to prevent it from being reread constantly.
+				if (t == 0 && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
+					ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
+
 				cmd[0] = ran;
 				++cmd;
 				for (int r = 0; r < ran; ++r)
 				{
 					const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
-					cmd[0] = clientState.LocalConsistency[r] >> 8;
+					cmd[0] = (clientState.LocalConsistency[r] >> 8);
 					++cmd;
 					cmd[0] = clientState.LocalConsistency[r];
 					++cmd;
@@ -874,7 +880,7 @@ void NetUpdate(int tics)
 		ClientStates[client].LastSentConsistency = ClientStates[client].CurrentLocalConsistency;
 
 	// Listen for other packets. This has to come after sending so the player that sent
-	// data to themselves gets it immediately (important for singleplayer; otherwise there
+	// data to themselves gets it immediately (important for singleplayer, otherwise there
 	// would always be a one-tic delay).
 	GetPackets();
 }
@@ -1296,6 +1302,40 @@ void TryRunTics()
 	// buffers. This has a limit of 17 tics that can be generated.
 	NetUpdate(totalTics);
 
+	// Check consistencies retroactively to see if there was a desync at some point. We still
+	// check the local client here because in packet server mode these could realistically desync
+	// if the client's current position doesn't agree with the host.
+	if (netgame && !demoplayback)
+	{
+		for (auto client : NetworkClients)
+		{
+			auto& clientState = ClientStates[client];
+			// If previously inconsistent, always mark it as such going forward. We don't want this to
+			// accidentally go away at some point since the game state is already completely broken.
+			if (players[client].inconsistant)
+			{
+				clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+			}
+			else
+			{
+				// Make sure we don't check past ticks we haven't even ran yet.
+				const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
+				while (clientState.LastVerifiedConsistency < limit)
+				{
+					const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
+					if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
+					{
+						players[client].inconsistant = true;
+						clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+						break;
+					}
+
+					++clientState.LastVerifiedConsistency;
+				}
+			}
+		}
+	}
+
 	// If the game is paused, everything we need to update has already done so.
 	if (pauseext)
 		return;
@@ -1321,8 +1361,7 @@ void TryRunTics()
 	else if (totalTics < availableTics)
 		runTics = totalTics;
 
-	// If we're in an in-between tic but have one available, try and run it anyway.
-	if ((runTics <= 0 && availableTics > 0) || (singletics && runTics > 1))
+	if (singletics && runTics > 1)
 		runTics = 1;
 	
 	// If there are no tics to run, check for possible stall conditions and new
@@ -1380,40 +1419,6 @@ void TryRunTics()
 	}
 	P_PredictPlayer(&players[consoleplayer]);
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
-
-	// Last, check consistencies retroactively to see if there was a desync at some point. We still
-	// check the local client here because in packet server mode these could realistically desync
-	// if the client's current position doesn't agree with the host.
-	if (netgame && !demoplayback)
-	{
-		for (auto client : NetworkClients)
-		{
-			auto& clientState = ClientStates[client];
-			// If previously inconsistent, always mark it as such going forward. We don't want this to
-			// accidentally go away at some point since the game state is already completely broken.
-			if (players[client].inconsistant)
-			{
-				clientState.LastCheckedConsistency = clientState.CurrentConsistency;
-			}
-			else
-			{
-				// Make sure we don't check past ticks we haven't even ran yet.
-				const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentConsistency);
-				while (clientState.LastCheckedConsistency < limit)
-				{
-					const int tic = clientState.LastCheckedConsistency % BACKUPTICS;
-					if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
-					{
-						players[client].inconsistant = true;
-						clientState.LastCheckedConsistency = clientState.CurrentConsistency;
-						break;
-					}
-
-					++clientState.LastCheckedConsistency;
-				}
-			}
-		}
-	}
 }
 
 void Net_CheckLastReceived()

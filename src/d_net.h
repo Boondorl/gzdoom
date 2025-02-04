@@ -82,8 +82,8 @@ struct FClientNetState
 	// a world tic is ran, the local client will store all the consistencies
 	// of the clients in their LocalConsistency. Then the consistencies will
 	// be checked against retroactively as they come in.
-	int LastCheckedConsistency = 0;				// Last consistency we checked from this client. If < CurrentConsistency, run through them.
-	int CurrentConsistency = 0;					// Current consistency checked.
+	int LastVerifiedConsistency = 0;			// Last consistency we checked from this client. If < CurrentConsistency, run through them.
+	int CurrentNetConsistency = 0;				// Current consistency checked.
 	int16_t NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
 	int LastSentConsistency = 0;				// Last consistency we sent out. If < CurrentLocalConsistency, send them out.
 	int CurrentLocalConsistency = 0;			// Amount of consistencies that were generated since the last packet.

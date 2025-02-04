@@ -1129,7 +1129,7 @@ static uint32_t StaticSumSeeds()
 		pr_damagemobj.Seed();
 }
 
-static uint32_t CalculateConsistency(int client, uint32_t seed)
+static int16_t CalculateConsistency(int client, uint32_t seed)
 {
 	if (players[client].mo != nullptr)
 	{
