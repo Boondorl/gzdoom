@@ -1285,9 +1285,7 @@ void TryRunTics()
 		EnterTic = I_GetTime();
 
 	const int startCommand = ClientTic;
-	int totalTics = EnterTic - LastEnterTic;
-	if (singletics && totalTics > 1)
-		totalTics = 1;
+	const int totalTics = EnterTic - LastEnterTic;
 
 	LastEnterTic = EnterTic;
 
@@ -1315,33 +1313,46 @@ void TryRunTics()
 	// to run some of them.
 	const int availableTics = (lowestSequence - gametic / doomcom.ticdup) + 1;
 
-	// Cap the number of tics we can run per frame if we're lagging behind. We don't
-	// want the client to accidentally get caught in a loop of trying to catch up.
+	// Make sure if the available tics is outpacing the system it doesn't try and run them
+	// all at once.
 	int runTics = availableTics;
 	if (totalTics < availableTics - 1)
 		runTics = totalTics + 1;
 	else if (totalTics < availableTics)
 		runTics = totalTics;
+
+	// If we're in an in-between tic but have one available, try and run it anyway.
+	if ((runTics <= 0 && availableTics > 0) || (singletics && runTics > 1))
+		runTics = 1;
 	
 	// If there are no tics to run, check for possible stall conditions and new
 	// commands to predict.
 	if (runTics <= 0)
 	{
-		if (!doWait)
-			TicStabilityWait();
-
 		// Check if a client dropped connection.
 		Net_CheckLastReceived();
 
-		// If we waited long enough to actually advance, re-predict since the client
-		// will have built a new user command.
-		if (ClientTic > startCommand)
+		// If we actually did have some tics available, make sure the UI
+		// still has a chance to run.
+		for (int i = 0; i < totalTics; ++i)
 		{
 			C_Ticker();
 			M_Ticker();
+		}
+
+		// If we're in between a tic, try and balance things out.
+		if (totalTics <= 0)
+			TicStabilityWait();
+
+		// If we actually advanced a command, update the player's position (even if a
+		// tic passes this isn't guaranteed to happen since it's capped to 17 in advance).
+		if (ClientTic > startCommand)
+		{
 			P_UnPredictPlayer();
 			P_PredictPlayer(&players[consoleplayer]);
+			S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
 		}
+
 		return;
 	}
 
