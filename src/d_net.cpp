@@ -325,9 +325,7 @@ void Net_ClearBuffers()
 static int GetNetBufferSize()
 {
 	if (NetBuffer[0] & NCMD_EXIT)
-		return 1;
-	if (NetBuffer[0] & NCMD_NEWHOST)
-		return 2;
+		return 1 + (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator);
 	// TODO: Need a skipper for this.
 	if (NetBuffer[0] & NCMD_SETUP)
 		return doomcom.datalength;
@@ -436,6 +434,7 @@ static void ClientConnecting(int client)
 static void DisconnectClient(int clientNum)
 {
 	NetworkClients -= clientNum;
+	I_ClearNode(clientNum);
 	// Capture the pawn leaving in the next world tick.
 	players[clientNum].playerstate = PST_GONE;
 }
@@ -455,14 +454,14 @@ static void SetArbitrator(int clientNum)
 	}
 }
 
-static void ClientQuit(int clientNum)
+static void ClientQuit(int clientNum, int newHost)
 {
 	if (!NetworkClients.InGame(clientNum))
 		return;
 
 	// This will get caught in the main loop and send it out to everyone as one big packet. The only
 	// exception is the host who will leave instantly and send out any needed data.
-	if (NetMode == NET_PacketServer)
+	if (NetMode == NET_PacketServer && clientNum != Net_Arbitrator)
 	{
 		if (consoleplayer != Net_Arbitrator)
 			DPrintf(DMSG_WARNING, "Received disconnect packet from client %d erroneously\n", clientNum);
@@ -474,7 +473,7 @@ static void ClientQuit(int clientNum)
 
 	DisconnectClient(clientNum);
 	if (clientNum == Net_Arbitrator)
-		SetArbitrator(NetworkClients[0]);
+		SetArbitrator(newHost >= 0 ? newHost : NetworkClients[0]);
 
 	if (demorecording)
 		G_CheckDemoStatus();
@@ -498,16 +497,9 @@ static void GetPackets()
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_NEWHOST)
-		{
-			DisconnectClient(clientNum);
-			SetArbitrator(NetBuffer[1]);
-			continue;
-		}
-
 		if (NetBuffer[0] & NCMD_EXIT)
 		{
-			ClientQuit(clientNum);
+			ClientQuit(clientNum, NetMode == NET_PacketServer && clientNum == Net_Arbitrator ? NetBuffer[1] : -1);
 			continue;
 		}
 
@@ -577,8 +569,14 @@ static void GetPackets()
 				uint8_t* start = &NetBuffer[curByte];
 				curByte += ReadUserCmdMessage(start, pNum, seq);
 
-				pState.CurrentSequence = seq;
+				// Make sure the host in a packet server game isn't setting the client acks from their own data. This still
+				// has to be read from each individual player.
+				if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
+					pState.CurrentSequence = seq;
 			}
+
+			// Make sure to still update the sequence from ourselves in packet server mode if we're the host.
+			clientState.CurrentSequence = seq;
 		}
 	}
 }
@@ -714,9 +712,24 @@ void NetUpdate(int tics)
 	}
 
 	// If ClientTic didn't cross a doomcom.ticdup boundary, only send packets
-	// to players waiting for resends.
-	const int startSequence = startTic / doomcom.ticdup;
-	const int endSequence = ClientTic / doomcom.ticdup;
+	// to players waiting for resends. In packet server mode special handling is
+	// used to ensure the host only sends out available tics when ready instead of
+	// constantly shotgunning them out as they're made.
+	int startSequence = startTic / doomcom.ticdup;
+	int endSequence = ClientTic / doomcom.ticdup;
+	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
+	{
+		startSequence = (gametic / doomcom.ticdup);
+		int lowestSeq = endSequence - 1;
+		for (auto client : NetworkClients)
+		{
+			if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < lowestSeq)
+				lowestSeq = ClientStates[client].CurrentSequence;
+		}
+
+		endSequence = lowestSeq + 1;
+	}
+
 	const bool resendOnly = startSequence == endSequence;
 
 	int quitters = 0;
@@ -736,7 +749,7 @@ void NetUpdate(int tics)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
 		// hand, if we're the host we send out everyone's info to everyone else.
-		if (NetMode == NET_PacketServer && client != Net_Arbitrator)
+		if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator && client != Net_Arbitrator)
 			continue;
 
 		auto& curState = ClientStates[client];
@@ -1179,12 +1192,12 @@ void D_QuitNetGame()
 		return;
 
 	// Send a bunch of packets for stability.
+	NetBuffer[0] = NCMD_EXIT;
 	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
 	{
 		// This currently isn't much different from the regular P2P code, but it's being split off into its
 		// own branch should proper host migration be added in the future (i.e. sending over stored event
 		// data rather than just dropping it entirely).
-		NetBuffer[0] = NCMD_NEWHOST;
 		int nextHost = 0;
 		for (auto client : NetworkClients)
 		{
@@ -1209,7 +1222,6 @@ void D_QuitNetGame()
 	}
 	else
 	{
-		NetBuffer[0] = NCMD_EXIT;
 		for (int i = 0; i < 4; ++i)
 		{
 			// If in packet server mode, only the host should know about this

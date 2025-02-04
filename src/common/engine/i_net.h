@@ -5,6 +5,7 @@
 
 // Called by D_DoomMain.
 int I_InitNetwork (void);
+void I_ClearNode(int node);
 void I_NetCmd (void);
 void I_NetMessage(const char*, ...);
 void I_NetError(const char* error);
@@ -27,7 +28,6 @@ enum ENetConstants
 
 enum ENCMD
 {
-	NCMD_NEWHOST			= 0x100,	// Current host has chosen a new server host.
 	NCMD_EXIT				= 0x80,		// Client has left the game
 	NCMD_RETRANSMIT 		= 0x40,		// 
 	NCMD_SETUP				= 0x20,		// Guest is letting the host know who it is

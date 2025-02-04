@@ -202,6 +202,11 @@ void BindToLocalPort (SOCKET s, u_short port)
 		I_FatalError ("BindToPort: %s", neterror ());
 }
 
+void I_ClearNode(int node)
+{
+	memset(&sendaddress[node], 0, sizeof(sendaddress[node]));
+}
+
 int FindNode (const sockaddr_in *address)
 {
 	int i = 0;
