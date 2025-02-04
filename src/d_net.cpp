@@ -842,9 +842,9 @@ void NetUpdate(int tics)
 				for (int r = 0; r < ran; ++r)
 				{
 					const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
-					cmd[0] = (clientState.LocalConsistency[r] >> 8);
+					cmd[0] = (clientState.LocalConsistency[tic] >> 8);
 					++cmd;
-					cmd[0] = clientState.LocalConsistency[r];
+					cmd[0] = clientState.LocalConsistency[tic];
 					++cmd;
 				}
 
