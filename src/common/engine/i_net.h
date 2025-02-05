@@ -17,8 +17,9 @@ void I_NetDone();
 enum ENetConstants
 {
 	DOOMCOM_ID = 0x12345678,
-	BACKUPTICS = 36,	// number of tics to remember
+	BACKUPTICS = 35 * 5,	// Remember up to 5 seconds of data.
 	MAXTICDUP = 3,
+	MAXSENDTICS = 35 * 1,	// Only send up to 1 second of data at a time.
 	LOCALCMDTICS = (BACKUPTICS*MAXTICDUP),
 	MAX_MSGLEN = 14000,
 
