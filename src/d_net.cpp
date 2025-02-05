@@ -537,10 +537,10 @@ static void GetPackets()
 			{
 				for (int i = 0; i < playerCount; ++i)
 				{
-					int ran = NetBuffer[++curByte];
-					++curByte;
+					auto& pState = ClientStates[NetBuffer[curByte++]];
+					int ran = NetBuffer[curByte++];
 					while (ran-- > 0)
-						curByte += 2;
+						pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
 
 					uint8_t* skipper = &NetBuffer[curByte];
 					curByte += SkipUserCmdMessage(skipper);
@@ -834,7 +834,7 @@ void NetUpdate(int tics)
 				int ran = 0;
 				// Don't bother sending over consistencies in packet server unless you're the host. Also only
 				// send it on the first tic to prevent it from being reread constantly.
-				if (t == 0 && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
+				if (t == 0 && !resendOnly && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
 					ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
 
 				cmd[0] = ran;
@@ -854,7 +854,7 @@ void NetUpdate(int tics)
 					int realTic = (curTic * doomcom.ticdup) % LOCALCMDTICS;
 					int realLastTic = (lastTic * doomcom.ticdup) % LOCALCMDTICS;
 					// Write out the net events before the user commands so inputs can
-					// be used as a marker for when the given tic ends.
+					// be used as a marker for when the given command ends.
 					auto& stream = NetEvents.Streams[curTic % BACKUPTICS];
 					if (stream.Used)
 					{
@@ -889,8 +889,11 @@ void NetUpdate(int tics)
 	}
 
 	// Update these now that all the packets have been sent out.
-	for (auto client : NetworkClients)
-		ClientStates[client].LastSentConsistency = ClientStates[client].CurrentLocalConsistency;
+	if (!resendOnly)
+	{
+		for (auto client : NetworkClients)
+			ClientStates[client].LastSentConsistency = ClientStates[client].CurrentLocalConsistency;
+	}
 
 	// Listen for other packets. This has to come after sending so the player that sent
 	// data to themselves gets it immediately (important for singleplayer, otherwise there
