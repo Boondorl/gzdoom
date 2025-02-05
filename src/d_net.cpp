@@ -633,7 +633,7 @@ void NetUpdate(int tics)
 	{
 		I_StartTic();
 		D_ProcessEvents();
-		if (pauseext || (ClientTic - gametic) / doomcom.ticdup >= BACKUPTICS / 2 - 1)
+		if (pauseext || (ClientTic - gametic) / doomcom.ticdup >= BACKUPTICS)
 			break;			// can't hold any more
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
@@ -731,6 +731,8 @@ void NetUpdate(int tics)
 	}
 
 	const bool resendOnly = startSequence == endSequence;
+	// Boon TODO: In resend only mode, always send out the latest packet
+	// so that any clients can request a retransmit for not having the correct packet.
 
 	int quitters = 0;
 	int quitNums[MAXPLAYERS];
