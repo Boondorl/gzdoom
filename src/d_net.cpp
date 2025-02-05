@@ -594,7 +594,7 @@ void NetUpdate(int tics)
 	{
 		I_StartTic();
 		D_ProcessEvents();
-		if (pauseext || (ClientTic - gametic) / doomcom.ticdup >= BACKUPTICS)
+		if (pauseext || (ClientTic - gametic) / doomcom.ticdup >= MAXSENDTICS)
 			break;			// can't hold any more
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
@@ -723,8 +723,15 @@ void NetUpdate(int tics)
 		// Only send over our newest tics. If a client missed one, they'll let us know.
 		const int sequenceNum = (curState.Flags & CF_RETRANSMIT) ? curState.SequenceAck + 1 : startSequence;
 		int numTics = endSequence - sequenceNum;
-		if (numTics > BACKUPTICS)
-			I_Error("Player %d missed too many tics", client);
+		if (numTics > MAXSENDTICS)
+		{
+			// TODO: Split this up into smaller packets. Strategy
+			// -Set a desired ticks
+			// -Knock off MAXSENDTICS at a time
+			// -Do this until the value is zero
+			// Don't retransmit until it's been fully resent, then go back to
+			// sending inputs like normal.
+		}
 
 		NetBuffer[0] = (curState.Flags & CF_MISSING_SEQ) ? NCMD_RETRANSMIT : 0;
 		// Sequence basis for our own packet.
@@ -2286,13 +2293,13 @@ void Net_SkipCommand(int cmd, uint8_t **stream)
 int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 {
 	int consoleDelay = 0, arbiDelay = 0;
-	for (int i = 0; i < BACKUPTICS; ++i)
+	for (int i = 0; i < MAXSENDTICS; ++i)
 	{
 		//arbiDelay += ClientStates[Net_Arbitrator].Delay[i];
 		//consoleDelay += ClientStates[consoleplayer].Delay[i];
 	}
 
-	const int gameDelayMs = max<int>(consoleDelay, arbiDelay) * doomcom.ticdup * 1000 / (BACKUPTICS * TICRATE);
+	const int gameDelayMs = max<int>(consoleDelay, arbiDelay) * doomcom.ticdup * 1000 / (MAXSENDTICS * TICRATE);
 	int severity = 0;
 	if (gameDelayMs >= 160)
 		severity = 3;
