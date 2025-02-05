@@ -110,7 +110,6 @@ struct FNetGameInfo
 #define NetBuffer (doomcom.data)
 ENetMode NetMode = NET_PeerToPeer;
 int 				ClientTic = 0;
-int					LocalDelay = 0;
 usercmd_t			LocalCmds[LOCALCMDTICS] = {};
 FClientNetState		ClientStates[MAXPLAYERS] = {};
 
@@ -583,44 +582,6 @@ static void GetPackets()
 
 void NetUpdate(int tics)
 {
-	// When playing in packet server mode, the host can strategically tell each client how long they should wait
-	// after starting before generating and sending out inputs. This significantly reduces the net latency clients
-	// have since they'll be forced to wait at minimum host -> highest latency client round trip before they can
-	// do anything anyway, so time packets to arrive at the host roughly the same time as it does for the
-	// highest latency player. This way the only net delay is the round trip time from this client to the host.
-	if (NetMode == NET_PacketServer && LocalDelay)
-	{
-		if (LocalDelay > 0)
-		{
-			if (LocalDelay >= tics)
-			{
-				LocalDelay -= tics;
-				tics = 0;
-			}
-			else
-			{
-				tics -= LocalDelay;
-				LocalDelay = 0;
-			}
-		}
-		else if (consoleplayer == Net_Arbitrator)
-		{
-			bool allFound = true;
-			for (auto client : NetworkClients)
-			{
-				if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < 0)
-				{
-					allFound = false;
-					tics = 0;
-					break;
-				}
-			}
-
-			if (allFound)
-				LocalDelay = 0;
-		}
-	}
-
 	if (tics <= 0)
 	{
 		GetPackets();
