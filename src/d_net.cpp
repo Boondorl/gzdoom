@@ -1548,13 +1548,11 @@ void TryRunTics()
 	// to run some of them.
 	const int availableTics = (lowestSequence - gametic / doomcom.ticdup) + 1;
 
-	// Make sure if the available tics is outpacing the system it doesn't try and run them
-	// all at once.
-	int runTics = availableTics;
-	if (totalTics < availableTics - 1)
-		runTics = totalTics + 1;
-	else if (totalTics < availableTics)
-		runTics = totalTics;
+	// If the amount of tics to run is falling behind the amount of available ticks,
+	// speed the playsim up a bit to help catch up.
+	int runTics = min<int>(totalTics, availableTics);
+	if (totalTics > 0 && totalTics < availableTics - 1)
+		++runTics;
 
 	if (singletics && runTics > 1)
 		runTics = 1;
