@@ -928,22 +928,20 @@ static int PrivateNetOf(in_addr in)
 
 static bool NodesOnSameNetwork()
 {
-	int net1;
+	if (doomcom.consoleplayer != 0)
+		return false;
 
-	net1 = PrivateNetOf(sendaddress[0].sin_addr);
+	const int firstClient = PrivateNetOf(sendaddress[1].sin_addr);
 //	Printf("net1 = %08x\n", net1);
-	if (net1 == 0)
+	if (firstClient == 0)
 	{
 		return false;
 	}
-	for (int i = 0; i < doomcom.numplayers; ++i)
+	for (int i = 2; i < doomcom.numplayers; ++i)
 	{
-		if (i == doomcom.consoleplayer)
-			continue;
-
-		int net = PrivateNetOf(sendaddress[i].sin_addr);
+		const int net = PrivateNetOf(sendaddress[i].sin_addr);
 //		Printf("Net[%d] = %08x\n", i, net);
-		if (net != net1)
+		if (net != firstClient)
 		{
 			return false;
 		}
@@ -1005,7 +1003,6 @@ int I_InitNetwork (void)
 		return false;
 	}
 
-	return false;
 	if (doomcom.numplayers < 3)
 	{ // Packet server mode with only two players is effectively the same as
 	  // peer-to-peer but with some slightly larger packets.
