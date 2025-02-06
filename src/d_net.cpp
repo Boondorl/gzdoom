@@ -135,6 +135,9 @@ static int	LevelStartDelay = 0; // While this is > 0, don't start generating pac
 static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
 static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
 
+static int FullLatencyCycle = MAXSENDTICS * 5;	// Give ~5 seconds to gather latency info about clients.
+static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
+
 static int 	EnterTic = 0;
 static int	LastEnterTic = 0;
 
@@ -330,6 +333,19 @@ void Net_ClearBuffers()
 	NetworkClients += 0;
 }
 
+void Net_ResetCommands()
+{
+	ClientTic = gametic;
+	for (auto client : NetworkClients)
+	{
+		ClientStates[client].Flags &= CF_QUIT;
+		ClientStates[client].CurrentSequence = ClientStates[client].SequenceAck = gametic - 1;
+	}
+
+	if (netgame && !demoplayback && NetworkClients.Size() > 1)
+		LevelStartStatus = LST_WAITING;
+}
+
 // [RH] Rewritten to properly calculate the packet size
 //		with our variable length Command.
 static int GetNetBufferSize()
@@ -346,7 +362,7 @@ static int GetNetBufferSize()
 	{
 		int bytes = 1;
 		if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator)
-			bytes += 4;
+			bytes += 2;
 
 		return bytes;
 	}
@@ -514,6 +530,24 @@ static void ClientQuit(int clientNum, int newHost)
 
 static void CheckLevelStart(int client, int delayTics)
 {
+	if (LevelStartStatus != LST_WAITING)
+	{
+		if (consoleplayer == Net_Arbitrator && client != consoleplayer)
+		{
+			// Someone might've missed the previous packet, so resend it just in case.
+			NetBuffer[0] = NCMD_LEVELREADY;
+			if (NetMode == NET_PacketServer)
+			{
+				NetBuffer[1] = 0;
+				NetBuffer[2] = 0;
+			}
+
+			HSendPacket(client, NetMode == NET_PacketServer ? 3 : 1);
+		}
+
+		return;
+	}
+
 	if (client == Net_Arbitrator)
 	{
 		LevelStartAck = 0;
@@ -525,7 +559,7 @@ static void CheckLevelStart(int client, int delayTics)
 	int mask = 0;
 	for (auto pNum : NetworkClients)
 	{
-		if (pNum != consoleplayer)
+		if (pNum != Net_Arbitrator)
 			mask |= 1 << pNum;
 	}
 
@@ -533,13 +567,36 @@ static void CheckLevelStart(int client, int delayTics)
 	if ((LevelStartAck & mask) == mask)
 	{
 		NetBuffer[0] = NCMD_LEVELREADY;
-		// Boon TODO: Eventually calculate this
-		NetBuffer[1] = 0;
-		NetBuffer[2] = 0;
-		NetBuffer[3] = 0;
-		NetBuffer[4] = 0;
+		uint16_t highestAvg = 0u;
+		if (NetMode == NET_PacketServer)
+		{
+			// Wait for enough latency info to be accepted so a better average
+			// can be calculated for everyone.
+			if (FullLatencyCycle > 0)
+				return;
+
+			for (auto client : NetworkClients)
+			{
+				if (client != Net_Arbitrator && ClientStates[client].AverageLatency > highestAvg)
+					highestAvg = ClientStates[client].AverageLatency;
+			}
+		}
+
+		constexpr double MS2Sec = 1.0 / 1000.0;
 		for (auto client : NetworkClients)
-			HSendPacket(client, 5);
+		{
+			if (NetMode == NET_PacketServer)
+			{
+				int delay = 0;
+				if (client != Net_Arbitrator)
+					delay = int(ceil((highestAvg - ClientStates[client].AverageLatency) * MS2Sec * TICRATE));
+
+				NetBuffer[1] = (delay << 8);
+				NetBuffer[2] = delay;
+			}
+
+			HSendPacket(client, NetMode == NET_PacketServer ? 3 : 1);
+		}
 	}
 }
 
@@ -606,11 +663,15 @@ static void GetPackets()
 		{
 			int delay = 0;
 			if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
-				delay = (NetBuffer[1] << 24) | (NetBuffer[2] << 16) | (NetBuffer[3] << 8) | NetBuffer[4];
+				delay = (NetBuffer[1] << 8) | NetBuffer[2];
 
 			CheckLevelStart(clientNum, delay);
 			continue;
 		}
+
+		// Make sure commands from the previous level get ignored.
+		if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
+			continue;
 
 		const unsigned int baseSequence = NetBuffer[1] << 24 | NetBuffer[2] << 16 | NetBuffer[3] << 8 | NetBuffer[4];
 		clientState.SequenceAck = NetBuffer[5] << 24 | NetBuffer[6] << 16 | NetBuffer[7] << 8 | NetBuffer[8];
@@ -701,8 +762,6 @@ static void GetPackets()
 	}
 }
 
-static int LastLatencyUpdate = 0;
-
 void NetUpdate(int tics)
 {
 	// If a tic has passed, always send out a heartbeat packet (also doubles as
@@ -713,6 +772,9 @@ void NetUpdate(int tics)
 		&& (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator))
 	{
 		LastLatencyUpdate += tics;
+		if (FullLatencyCycle > 0)
+			FullLatencyCycle = max<int>(FullLatencyCycle - tics, 0);
+
 		const uint64_t time = I_msTime();
 		for (auto client : NetworkClients)
 		{
@@ -756,14 +818,21 @@ void NetUpdate(int tics)
 	{
 		if (LevelStartStatus == LST_WAITING)
 		{
-			tics = 0;
-			if (consoleplayer != Net_Arbitrator)
+			if (NetworkClients.Size() == 1)
 			{
-				NetBuffer[0] = NCMD_LEVELREADY;
-				HSendPacket(Net_Arbitrator, 1);
+				LevelStartStatus = LST_READY;
+			}
+			else
+			{
+				tics = 0;
+				if (consoleplayer != Net_Arbitrator)
+				{
+					NetBuffer[0] = NCMD_LEVELREADY;
+					HSendPacket(Net_Arbitrator, 1);
+				}
 			}
 		}
-		else if (LevelStartDelay == LST_HOST)
+		else if (LevelStartStatus == LST_HOST)
 		{
 			// If we're the host, idly wait until all packets have arrived. There's no point in predicting since we
 			// know for a fact the game won't be started until this happens.
@@ -1548,7 +1617,7 @@ void TryRunTics()
 	// to run some of them.
 	const int availableTics = (lowestSequence - gametic / doomcom.ticdup) + 1;
 
-	// If the amount of tics to run is falling behind the amount of available ticks,
+	// If the amount of tics to run is falling behind the amount of available tics,
 	// speed the playsim up a bit to help catch up.
 	int runTics = min<int>(totalTics, availableTics);
 	if (totalTics > 0 && totalTics < availableTics - 1)
@@ -1577,7 +1646,7 @@ void TryRunTics()
 			TicStabilityWait();
 
 		// If we actually advanced a command, update the player's position (even if a
-		// tic passes this isn't guaranteed to happen since it's capped to 17 in advance).
+		// tic passes this isn't guaranteed to happen since it's capped to 35 in advance).
 		if (ClientTic > startCommand)
 		{
 			P_UnPredictPlayer();
