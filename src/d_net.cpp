@@ -528,6 +528,11 @@ static void ClientQuit(int clientNum, int newHost)
 		G_CheckDemoStatus();
 }
 
+static bool IsMapLoaded()
+{
+	return gamestate == GS_LEVEL && wipegamestate == GS_LEVEL && gameaction == ga_nothing;
+}
+
 static void CheckLevelStart(int client, int delayTics)
 {
 	if (LevelStartStatus != LST_WAITING)
@@ -564,7 +569,7 @@ static void CheckLevelStart(int client, int delayTics)
 	}
 
 	LevelStartAck |= 1 << client;
-	if ((LevelStartAck & mask) == mask)
+	if ((LevelStartAck & mask) == mask && IsMapLoaded())
 	{
 		NetBuffer[0] = NCMD_LEVELREADY;
 		uint16_t highestAvg = 0u;
@@ -825,7 +830,7 @@ void NetUpdate(int tics)
 			else
 			{
 				tics = 0;
-				if (consoleplayer != Net_Arbitrator)
+				if (consoleplayer != Net_Arbitrator && IsMapLoaded())
 				{
 					NetBuffer[0] = NCMD_LEVELREADY;
 					HSendPacket(Net_Arbitrator, 1);
@@ -1687,9 +1692,15 @@ void Net_CheckLastReceived()
 {
 	constexpr int MaxDelay = TICRATE * 3;
 
+	const int time = I_GetTime();
+	if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
+	{
+		LastGameUpdate = time;
+		return;
+	}
+
 	// [Ed850] Check to see the last time a packet was received.
 	// If it's longer then 3 seconds, a node has likely stalled.
-	const int time = I_GetTime();
 	if (time - LastGameUpdate >= MaxDelay)
 	{
 		// Try again in the next MaxDelay tics.
