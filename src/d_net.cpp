@@ -343,10 +343,17 @@ void Net_ClearBuffers()
 void Net_ResetCommands()
 {
 	ClientTic = gametic + 1;
+	const int tic = (gametic / doomcom.ticdup) % BACKUPTICS;
 	for (auto client : NetworkClients)
 	{
-		ClientStates[client].Flags &= CF_QUIT;
-		ClientStates[client].CurrentSequence = ClientStates[client].SequenceAck = gametic;
+		auto& state = ClientStates[client];
+		state.Flags &= CF_QUIT;
+		state.CurrentSequence = state.SequenceAck = gametic;
+		
+		// Make sure not to run its current command either.
+		auto& curTic = state.Tics[tic];
+		memset(&curTic.Command, 0, sizeof(curTic.Command));
+		curTic.Data.SetData(nullptr, 0);
 	}
 
 	NetEvents.ResetStream();
