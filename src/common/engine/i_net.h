@@ -35,15 +35,12 @@ enum ENCMD
 	NCMD_LEVELREADY			= 0x10,		// After loading a level, guests send this over to the host who then sends it back after all are received
 	NCMD_QUITTERS			= 0x08,		// Client is getting info about one or more players quitting (packet server only)
 	NCMD_COMPRESSED			= 0x04,		// Remainder of packet is compressed
-
-	NCMD_XTICS				= 0x03,		// Packet contains >2 net tics
-	NCMD_2TICS				= 0x02,		// Packet contains 2 net tics
-	NCMD_1TICS				= 0x01,		// Packet contains 1 net tic
-	NCMD_0TICS				= 0x00,		// Packet contains no net tics
+	NCMD_LATENCYACK			= 0x02,		// A latency packet was just read, so let the sender know.
+	NCMD_LATENCY			= 0x01,		// Latency packet, used for measuring RTT.
 
 	NCMD_USERINFO			= NCMD_SETUP + 1,	// Guest is getting another client's user info
 	NCMD_GAMEINFO			= NCMD_SETUP + 2,	// Guest is getting the state of the game from the host
-	NCMD_GAMEREADY			= NCMD_SETUP + 3,	// Host has verified the game is ready to be started
+	NCMD_GAMEREADY			= NCMD_SETUP + 3,	// Host has verified the game is ready to be started				
 };
 
 struct FClientStack : public TArray<int>

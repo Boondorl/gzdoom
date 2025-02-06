@@ -439,7 +439,27 @@ static void HU_DrawPlayer (player_t *player, bool highlight, int col1, int col2,
 
 	HU_DrawFontScaled(col4, y + ypadding, color, player->userinfo.GetName());
 
-	mysnprintf(str, countof(str), "%d", I_msTime() - ClientStates[player - players].SentTime);
+	if (player - players != consoleplayer)
+	{
+		const auto& state = ClientStates[player - players];
+		int count = 0, delta = 0;
+		for (int i = 0; i < MAXSENDTICS; ++i)
+		{
+			if (!state.SentTime[i])
+				continue;
+
+			++count;
+			const uint64_t high = state.RecvTime[i] <= state.SentTime[i] ? I_msTime() : state.RecvTime[i];
+			delta += high - state.SentTime[i];
+		}
+
+		int latency = count ? delta / count : -1;
+		mysnprintf(str, countof(str), "%d", latency);
+	}
+	else
+	{
+		mysnprintf(str, countof(str), "%d", 0);
+	}
 
 	HU_DrawFontScaled(col5, y + ypadding, color, str);
 

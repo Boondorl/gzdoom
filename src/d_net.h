@@ -66,14 +66,12 @@ struct FClientNetState
 		usercmd_t		Command;
 	} Tics[BACKUPTICS] = {};
 
-	FClientNetState()
-	{
-		SentTime = LastRecvTime = I_msTime();
-	}
-
 	// Local information about client.
-	uint64_t		LastRecvTime;			// The last time a packet arrived from this client.
-	uint64_t		SentTime;				// Timestamp for when the client sent out their latest packet to us.
+	uint8_t		CurrentLatency = 0u;		// Current latency id the client is on. If the one the client sends back is > this, update RecvTime and mark a new SentTime.
+	bool		bNewLatency = true;			// If the sequence was bumped, the next latency packet sent out should record the send time.
+	uint64_t	SentTime[MAXSENDTICS] = {};	// Timestamp for when we sent out the packet to this client.
+	uint64_t	RecvTime[MAXSENDTICS] = {};	// Timestamp for when the client acknowledged our last packet. If in packet server mode, this is the server's delta.
+
 	int				SequenceAck = -1;		// The last sequence the client reported from us.
 	int 			CurrentSequence = -1;	// The last sequence we've gotten from this client.
 	int				Flags = 0;				// State of this client.
@@ -87,8 +85,8 @@ struct FClientNetState
 	int CurrentNetConsistency = 0;				// Last consistency we got from this client.
 	int16_t NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
 	int LastSentConsistency = 0;				// Last consistency we sent out. If < CurrentLocalConsistency, send them out.
-	int CurrentLocalConsistency = 0;			// Amount of consistencies that were generated since the last packet.
-	int16_t LocalConsistency[BACKUPTICS] = {};	// Local consitency of the client to check against.
+	int CurrentLocalConsistency = 0;			// Last consistency we generated.
+	int16_t LocalConsistency[BACKUPTICS] = {};	// Local consistency of the client to check against.
 };
 
 enum ENetMode : uint8_t
