@@ -143,6 +143,7 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player);
 void Net_SkipCommand(int cmd, uint8_t **stream);
 
 void Net_ResetCommands();
+void Net_SetWaiting();
 void Net_ClearBuffers();
 
 // Netgame stuff (buffers and pointers, i.e. indices).
