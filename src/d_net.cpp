@@ -100,6 +100,13 @@ struct FNetGameInfo
 	uint8_t GotSetup[MAXPLAYERS];
 };
 
+enum ELevelStartStatus
+{
+	LST_READY,
+	LST_HOST,
+	LST_WAITING,
+};
+
 // NETWORKING
 //
 // gametic is the tic about to (or currently being) run.
@@ -123,6 +130,10 @@ static uint8_t	LocalNetBuffer[MAX_MSGLEN];
 // Used for storing network delay times. This is separate since it's not actually tied to
 // whatever sequence a client is currently on, only how many packets we've gotten from them.
 static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
+
+static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
+static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
+static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
 
 static int 	EnterTic = 0;
 static int	LastEnterTic = 0;
@@ -329,7 +340,17 @@ static int GetNetBufferSize()
 	if (NetBuffer[0] & NCMD_SETUP)
 		return doomcom.datalength;
 
-	int totalBytes = 17;
+	if (NetBuffer[0] & NCMD_LEVELREADY)
+	{
+		int bytes = 1;
+		if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator)
+			bytes += 4;
+
+		return bytes;
+	}
+
+	// Header info
+	int totalBytes = 9;
 	if (NetBuffer[0] & NCMD_QUITTERS)
 		totalBytes += NetBuffer[totalBytes] + 1;
 
@@ -339,22 +360,27 @@ static int GetNetBufferSize()
 	if (numTics == NCMD_XTICS)
 		numTics += NetBuffer[totalBytes++];
 
-	// Need at least 1 byte per tic and 3 per player - 1 for tic offset, 1 for each player number, 1 for tics ran, and 1 for each empty user command.
-	if (doomcom.datalength < totalBytes + numTics + 3 * playerCount)
-		return totalBytes + numTics + 3 * playerCount;
+	totalBytes += 4; // Consistency ack
+
+	// Minimum additional packet size per player:
+	// 1 byte for player number
+	// 8 bytes for the latency
+	// 1 byte for 0 consistencies
+	if (doomcom.datalength < totalBytes + playerCount * 10)
+		return totalBytes + playerCount * 10;
 
 	uint8_t* skipper = &NetBuffer[totalBytes];
-	for (int i = 0; i < numTics; ++i)
+	for (int p = 0; p < playerCount; ++p)
 	{
+		skipper += 9;
+		int ran = skipper[0];
 		++skipper;
-		for (int p = 0; p < playerCount; ++p)
+		while (ran-- > 0)
+			skipper += 2;
+
+		for (int i = 0; i < numTics; ++i)
 		{
 			++skipper;
-			int ran = skipper[0];
-			++skipper;
-			while (ran-- > 0)
-				skipper += 2;
-
 			SkipUserCmdMessage(skipper);
 		}
 	}
@@ -478,6 +504,37 @@ static void ClientQuit(int clientNum, int newHost)
 		G_CheckDemoStatus();
 }
 
+static void CheckLevelStart(int client, int delayTics)
+{
+	if (client == Net_Arbitrator)
+	{
+		LevelStartAck = 0;
+		LevelStartStatus = NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator ? LST_HOST : LST_READY;
+		LevelStartDelay = delayTics;
+		return;
+	}
+
+	int mask = 0;
+	for (auto pNum : NetworkClients)
+	{
+		if (pNum != consoleplayer)
+			mask |= 1 << pNum;
+	}
+
+	LevelStartAck |= 1 << client;
+	if ((LevelStartAck & mask) == mask)
+	{
+		NetBuffer[0] = NCMD_LEVELREADY;
+		// Boon TODO: Eventually calculate this
+		NetBuffer[1] = 0;
+		NetBuffer[2] = 0;
+		NetBuffer[3] = 0;
+		NetBuffer[4] = 0;
+		for (auto client : NetworkClients)
+			HSendPacket(client, 5);
+	}
+}
+
 //
 // GetPackets
 //
@@ -487,14 +544,9 @@ static void GetPackets()
 	{
 		const int clientNum = doomcom.remoteplayer;
 		auto& clientState = ClientStates[clientNum];
+
 		clientState.LastRecvTime = I_msTime();
 		clientState.Flags &= ~(CF_MISSING_SEQ | CF_RETRANSMIT);
-
-		if (NetBuffer[0] & NCMD_SETUP)
-		{
-			ClientConnecting(clientNum);
-			continue;
-		}
 
 		if (NetBuffer[0] & NCMD_EXIT)
 		{
@@ -502,15 +554,29 @@ static void GetPackets()
 			continue;
 		}
 
+		if (NetBuffer[0] & NCMD_SETUP)
+		{
+			ClientConnecting(clientNum);
+			continue;
+		}
+
+		if (NetBuffer[0] & NCMD_LEVELREADY)
+		{
+			int delay = 0;
+			if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
+				delay = (NetBuffer[1] << 24) | (NetBuffer[2] << 16) | (NetBuffer[3] << 8) | NetBuffer[4];
+
+			CheckLevelStart(clientNum, delay);
+			continue;
+		}
+
 		const unsigned int baseSequence = NetBuffer[1] << 24 | NetBuffer[2] << 16 | NetBuffer[3] << 8 | NetBuffer[4];
 		clientState.SequenceAck = NetBuffer[5] << 24 | NetBuffer[6] << 16 | NetBuffer[7] << 8 | NetBuffer[8];
-		clientState.SentTime = (uint64_t(NetBuffer[9]) << 56) | (uint64_t(NetBuffer[10]) << 48) | (uint64_t(NetBuffer[11]) << 40) | (uint64_t(NetBuffer[12]) << 32)
-								| (uint64_t(NetBuffer[13]) << 24) | (uint64_t(NetBuffer[14]) << 16) | (uint64_t(NetBuffer[15]) << 8) | uint64_t(NetBuffer[16]);
 
 		if (NetBuffer[0] & NCMD_RETRANSMIT)
 			clientState.Flags |= CF_RETRANSMIT;
 
-		int curByte = 17;
+		int curByte = 9;
 		if (NetBuffer[0] & NCMD_QUITTERS)
 		{
 			int numPlayers = NetBuffer[curByte++];
@@ -524,64 +590,111 @@ static void GetPackets()
 		if (totalTics == NCMD_XTICS)
 			totalTics += NetBuffer[curByte++];
 
-		// Each tic within a given packet is given a sequence number to ensure that things were put
-		// back together correctly. Normally this wouldn't matter as much but since we need to keep
-		// clients in lock step a misordered packet will instantly cause a desync.
-		for (int t = 0; t < totalTics; ++t)
+		const int curConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+		for (int p = 0; p < playerCount; ++p)
 		{
-			const int seq = baseSequence + NetBuffer[curByte++];
+			const int pNum = NetBuffer[curByte++];
+			auto& pState = ClientStates[pNum];
 
-			// Duplicate command, ignore it.
-			if (seq <= clientState.CurrentSequence)
+			// This gets sent over per-player so latencies are correct in packet server mode.
+			pState.SentTime = (uint64_t(NetBuffer[curByte++]) << 56) | (uint64_t(NetBuffer[curByte++]) << 48) | (uint64_t(NetBuffer[curByte++]) << 40) | (uint64_t(NetBuffer[curByte++]) << 32)
+								| (uint64_t(NetBuffer[curByte++]) << 24) | (uint64_t(NetBuffer[curByte++]) << 16) | (uint64_t(NetBuffer[curByte++]) << 8) | uint64_t(NetBuffer[curByte++]);
+
+			// Make sure client acks only get updated if from the host itself in packet server mode. Other clients
+			// won't be sending over any consistency information.
+			if (NetMode != NET_PacketServer || clientNum == Net_Arbitrator)
+				pState.ConsistencyAck = curConsistency;
+
+			int ran = NetBuffer[curByte++];
+			while (ran-- > 0)
+				pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+
+			// Each tic within a given packet is given a sequence number to ensure that things were put
+			// back together correctly. Normally this wouldn't matter as much but since we need to keep
+			// clients in lock step a misordered packet will instantly cause a desync.
+			TArray<uint8_t*> data = {};
+			for (int t = 0; t < totalTics; ++t)
 			{
-				for (int i = 0; i < playerCount; ++i)
-				{
-					auto& pState = ClientStates[NetBuffer[curByte++]];
-					int ran = NetBuffer[curByte++];
-					while (ran-- > 0)
-						pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+				// Try and reorder the tics if they're all there but end up out of order.
+				const int ofs = NetBuffer[curByte++];
+				data.Insert(ofs, &NetBuffer[curByte]);
+				uint8_t* skipper = &NetBuffer[curByte];
+				curByte += SkipUserCmdMessage(skipper);
+			}
 
-					uint8_t* skipper = &NetBuffer[curByte];
-					curByte += SkipUserCmdMessage(skipper);
+			for (int i = 0; i < data.Size(); ++i)
+			{
+				const int seq = baseSequence + i;
+				// Duplicate command, ignore it.
+				if (seq <= pState.CurrentSequence)
+					continue;
+
+				// Skipped a command. Packet likely got corrupted while being put back together, so have
+				// the client send over the properly ordered commands. 
+				if (seq > pState.CurrentSequence + 1 || data[i] == nullptr)
+				{
+					pState.Flags |= CF_MISSING_SEQ;
+					break;
 				}
 
-				continue;
-			}
-
-			// Skipped a command. Packet likely got corrupted while being put back together, so have
-			// the client send over the properly ordered commands. 
-			if (seq > clientState.CurrentSequence + 1)
-			{
-				clientState.Flags |= CF_MISSING_SEQ;
-				break;
-			}
-
-			for (int i = 0; i < playerCount; ++i)
-			{
-				const int pNum = NetBuffer[curByte++];
-
-				auto& pState = ClientStates[pNum];
-				int ran = NetBuffer[curByte++];
-				while (ran-- > 0)
-					pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
-
-				uint8_t* start = &NetBuffer[curByte];
-				curByte += ReadUserCmdMessage(start, pNum, seq);
-
-				// Make sure the host in a packet server game isn't setting the client acks from their own data. This still
-				// has to be read from each individual player.
-				if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
+				ReadUserCmdMessage(data[i], pNum, seq);
+				// The host and clients are a bit desynched here. We don't want to update the host's latest ack with their own
+				// info since they get those from the actual clients, but clients have to get them from the host since they
+				// don't commincate with each other except in P2P mode.
+				if (NetMode != NET_PacketServer || consoleplayer != Net_Arbitrator
+					|| pNum == Net_Arbitrator || clientNum != Net_Arbitrator)
+				{
 					pState.CurrentSequence = seq;
+				}
 			}
-
-			// Make sure to still update the sequence from ourselves in packet server mode if we're the host.
-			clientState.CurrentSequence = seq;
 		}
 	}
 }
 
 void NetUpdate(int tics)
 {
+	// Sit idle after the level has loaded until everyone is ready to go. This keeps players better
+	// in sync with each other than relying on tic balancing to speed up/slow down the game and mirrors
+	// how players would wait for a true server to load.
+	if (LevelStartStatus != LST_READY)
+	{
+		if (LevelStartStatus == LST_WAITING)
+		{
+			tics = 0;
+			if (consoleplayer != Net_Arbitrator)
+			{
+				NetBuffer[0] = NCMD_LEVELREADY;
+				HSendPacket(Net_Arbitrator, 1);
+			}
+		}
+		else if (LevelStartDelay == LST_HOST)
+		{
+			// If we're the host, idly wait until all packets have arrived. There's no point in predicting since we
+			// know for a fact the game won't be started until this happens.
+			int lowestSeq = gametic;
+			for (auto client : NetworkClients)
+			{
+				if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < lowestSeq)
+					lowestSeq = ClientStates[client].CurrentSequence;
+			}
+
+			if (lowestSeq >= gametic)
+				LevelStartStatus = LST_READY;
+			else
+				tics = 0;
+		}
+	}
+	else if (LevelStartDelay >= tics)
+	{
+		LevelStartDelay -= tics;
+		tics = 0;
+	}
+	else
+	{
+		tics -= LevelStartDelay;
+		LevelStartDelay = 0;
+	}
+
 	if (tics <= 0)
 	{
 		GetPackets();
@@ -620,6 +733,8 @@ void NetUpdate(int tics)
 				// Gather up the Command across the last doomcom.ticdup number of tics
 				// and average them out. These are propagated back to the local
 				// command so that they'll be predicted correctly.
+				// Boon TODO: This doesn't properly account for multiple tics crossing the threshold.
+				// Data sent over will be completely borked...
 				const int lastTic = ClientTic - doomcom.ticdup;
 
 				int pitch = 0;
@@ -672,19 +787,27 @@ void NetUpdate(int tics)
 		return;
 	}
 
-	// If ClientTic didn't cross a doomcom.ticdup boundary, only send packets
-	// to players waiting for resends. In packet server mode special handling is
-	// used to ensure the host only sends out available tics when ready instead of
-	// constantly shotgunning them out as they're made.
 	int startSequence = startTic / doomcom.ticdup;
 	int endSequence = ClientTic / doomcom.ticdup;
+	int quitters = 0;
+	int quitNums[MAXPLAYERS];
 	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
 	{
+		// Boon TODO: This is sending a lot of duplicate packets for some reason...
+		// In packet server mode special handling is used to ensure the host only
+		// sends out available tics when ready instead of constantly shotgunning
+		// them out as they're made locally.
 		startSequence = (gametic / doomcom.ticdup);
 		int lowestSeq = endSequence - 1;
 		for (auto client : NetworkClients)
 		{
-			if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < lowestSeq)
+			if (client == Net_Arbitrator)
+				continue;
+
+			// The host has special handling when disconnecting in a packet server game.
+			if (ClientStates[client].Flags & CF_QUIT)
+				quitNums[quitters++] = client;
+			else if (ClientStates[client].CurrentSequence < lowestSeq)
 				lowestSeq = ClientStates[client].CurrentSequence;
 		}
 
@@ -692,22 +815,6 @@ void NetUpdate(int tics)
 	}
 
 	const bool resendOnly = startSequence == endSequence;
-	// Boon TODO: In resend only mode, always send out the latest packet
-	// so that any clients can request a retransmit for not having the correct packet.
-
-	int quitters = 0;
-	int quitNums[MAXPLAYERS];
-	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
-	{
-		for (auto client : NetworkClients)
-		{
-			// The host has special handling when disconnecting in a packet server game.
-			if (client != Net_Arbitrator && (ClientStates[client].Flags & CF_QUIT))
-				quitNums[quitters++] = client;
-		}
-	}
-
-	const uint64_t time = I_msTime();
 	for (auto client : NetworkClients)
 	{
 		// If in packet server mode, we don't want to send information to anyone but the host. On the other
@@ -716,11 +823,21 @@ void NetUpdate(int tics)
 			continue;
 
 		auto& curState = ClientStates[client];
-		// If we can only resend, don't send clients any information that they already have.
-		if (resendOnly && !(curState.Flags & CF_RETRANSMIT))
-			continue;
+		// If we can only resend, don't send clients any information that they already have. If
+		// we couldn't generate any commands because we're at the cap, instead send out a heartbeat
+		// containing the latest command.
+		if (resendOnly)
+		{
+			if (!(curState.Flags & CF_RETRANSMIT))
+			{
+				if (tics <= 0)
+					continue;
+
+				--startSequence;
+			}
+		}
 		
-		// Only send over our newest tics. If a client missed one, they'll let us know.
+		// Only send over our newest commands. If a client missed one, they'll let us know.
 		const int sequenceNum = (curState.Flags & CF_RETRANSMIT) ? curState.SequenceAck + 1 : startSequence;
 		int numTics = endSequence - sequenceNum;
 		if (numTics > MAXSENDTICS)
@@ -744,17 +861,8 @@ void NetUpdate(int tics)
 		NetBuffer[6] = (curState.CurrentSequence >> 16);
 		NetBuffer[7] = (curState.CurrentSequence >> 8);
 		NetBuffer[8] = curState.CurrentSequence;
-		// Time used to track latency.
-		NetBuffer[9] = (time >> 56);
-		NetBuffer[10] = (time >> 48);
-		NetBuffer[11] = (time >> 40);
-		NetBuffer[12] = (time >> 32);
-		NetBuffer[13] = (time >> 24);
-		NetBuffer[14] = (time >> 16);
-		NetBuffer[15] = (time >> 8);
-		NetBuffer[16] = time;
 
-		size_t size = 17;
+		size_t size = 9;
 		if (quitters > 0)
 		{
 			NetBuffer[0] |= NCMD_QUITTERS;
@@ -787,36 +895,60 @@ void NetUpdate(int tics)
 			NetBuffer[size++] = numTics - 3;
 		}
 
+		NetBuffer[size++] = (curState.CurrentNetConsistency >> 24);
+		NetBuffer[size++] = (curState.CurrentNetConsistency >> 16);
+		NetBuffer[size++] = (curState.CurrentNetConsistency >> 8);
+		NetBuffer[size++] = curState.CurrentNetConsistency;
+
 		// Client commands.
 
 		uint8_t* cmd = &NetBuffer[size];
-		for (int t = 0; t < numTics; ++t)
+		for (int i = 0; i < playerCount; ++i)
 		{
-			cmd[0] = t;
+			cmd[0] = playerNums[i];
 			++cmd;
 
-			for (int i = 0; i < playerCount; ++i)
+			// Time used to track latency.
+			const uint64_t time = I_msTime();
+			cmd[0] = (time >> 56);
+			++cmd;
+			cmd[0] = (time >> 48);
+			++cmd;
+			cmd[0] = (time >> 40);
+			++cmd;
+			cmd[0] = (time >> 32);
+			++cmd;
+			cmd[0] = (time >> 24);
+			++cmd;
+			cmd[0] = (time >> 16);
+			++cmd;
+			cmd[0] = (time >> 8);
+			++cmd;
+			cmd[0] = time;
+			++cmd;
+
+			auto& clientState = ClientStates[playerNums[i]];
+			int ran = 0;
+			// Don't bother sending over consistencies in packet server unless you're the host. Also only
+			// send it on the first tic to prevent it from being reread constantly.
+			if (!resendOnly && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
+				ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
+
+			cmd[0] = ran;
+			++cmd;
+			for (int r = 0; r < ran; ++r)
 			{
-				cmd[0] = playerNums[i];
+				const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
+				cmd[0] = (clientState.LocalConsistency[tic] >> 8);
 				++cmd;
-
-				auto& clientState = ClientStates[playerNums[i]];
-				int ran = 0;
-				// Don't bother sending over consistencies in packet server unless you're the host. Also only
-				// send it on the first tic to prevent it from being reread constantly.
-				if (t == 0 && !resendOnly && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
-					ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
-
-				cmd[0] = ran;
+				cmd[0] = clientState.LocalConsistency[tic];
 				++cmd;
-				for (int r = 0; r < ran; ++r)
-				{
-					const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
-					cmd[0] = (clientState.LocalConsistency[tic] >> 8);
-					++cmd;
-					cmd[0] = clientState.LocalConsistency[tic];
-					++cmd;
-				}
+			}
+
+			for (int t = 0; t < numTics; ++t)
+			{
+				cmd[0] = t;
+				++cmd;
 
 				int curTic = sequenceNum + t, lastTic = curTic - 1;
 				if (playerNums[i] == consoleplayer)
