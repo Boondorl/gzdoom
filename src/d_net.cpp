@@ -223,6 +223,13 @@ public:
 		CurrentSize = 0;
 	}
 
+	void ResetStream()
+	{
+		CurrentClientTic = (ClientTic / doomcom.ticdup);
+		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream;
+		CurrentSize = 0;
+	}
+
 	void NewClientTic()
 	{
 		const int tic = ClientTic / doomcom.ticdup;
@@ -335,13 +342,18 @@ void Net_ClearBuffers()
 
 void Net_ResetCommands()
 {
-	ClientTic = gametic;
+	ClientTic = gametic + 1;
 	for (auto client : NetworkClients)
 	{
 		ClientStates[client].Flags &= CF_QUIT;
-		ClientStates[client].CurrentSequence = ClientStates[client].SequenceAck = gametic - 1;
+		ClientStates[client].CurrentSequence = ClientStates[client].SequenceAck = gametic;
 	}
 
+	NetEvents.ResetStream();
+}
+
+void Net_SetWaiting()
+{
 	if (netgame && !demoplayback && NetworkClients.Size() > 1)
 		LevelStartStatus = LST_WAITING;
 }
@@ -1628,7 +1640,8 @@ void TryRunTics()
 	if (totalTics > 0 && totalTics < availableTics - 1)
 		++runTics;
 
-	if (singletics && runTics > 1)
+	// If loading into the next level, only execute one tick.
+	if (runTics > 1 && (singletics || gameaction == ga_worlddone))
 		runTics = 1;
 	
 	// If there are no tics to run, check for possible stall conditions and new
