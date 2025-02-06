@@ -100,19 +100,20 @@ enum ENetMode : uint8_t
 // New packet structure:
 //
 // Header:
-//  One byte with net command flags.
+//  One byte for the net command flags.
 //  Four bytes for the base sequence the client is working from.
-//  Four bytes with the highest confirmed sequence the client got from us.
-//  Eight bytes with the time in ms the packet was sent out.
-//  If NCMD_QUITTERS set, one byte with number of players followed by one byte with each player's consolenum. Packet server mode only.
+//  Four bytes for the highest confirmed sequence the client got from us.
+//  If NCMD_QUITTERS set, one byte for the number of players followed by one byte for each player's consolenum. Packet server mode only.
 //  One byte for the number of players.
-//  If NCMD_XTICS set, one byte with the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
-// For each tic:
-//  One byte for the delta from the base sequence.
+//  If NCMD_XTICS set, one byte for the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
+//  Four bytes for the highest confirmed consistency the client got from us.
 //  For each player:
 //   One byte for the player number.
+//   Eight bytes for the time in ms the packet was sent out.
 //   One byte for the number of consistencies followed by two bytes for each consistency.
-//   The remaining command and event data for that player.
+//   For each tic:
+//    One byte for the delta from the base sequence.
+//    The remaining command and event data for that player.
 
 // Create any new ticcmds and broadcast to other players.
 void NetUpdate(int tics);

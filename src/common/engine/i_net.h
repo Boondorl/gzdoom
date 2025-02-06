@@ -32,7 +32,7 @@ enum ENCMD
 	NCMD_EXIT				= 0x80,		// Client has left the game
 	NCMD_RETRANSMIT 		= 0x40,		// 
 	NCMD_SETUP				= 0x20,		// Guest is letting the host know who it is
-	NCMD_MULTI				= 0x10,		// Guest is getting multiple players in this packet (packet server only)
+	NCMD_LEVELREADY			= 0x10,		// After loading a level, guests send this over to the host who then sends it back after all are received
 	NCMD_QUITTERS			= 0x08,		// Client is getting info about one or more players quitting (packet server only)
 	NCMD_COMPRESSED			= 0x04,		// Remainder of packet is compressed
 
