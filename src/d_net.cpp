@@ -362,15 +362,20 @@ static int GetNetBufferSize()
 
 	// Minimum additional packet size per player:
 	// 1 byte for player number
-	// 8 bytes for the latency
+	// 2 bytes for the average latency if in packet server
 	// 1 byte for 0 consistencies
-	if (doomcom.datalength < totalBytes + playerCount * 10)
-		return totalBytes + playerCount * 10;
+	int padding = 2;
+	if (NetMode == NET_PacketServer)
+		padding += 2;
+	if (doomcom.datalength < totalBytes + playerCount * padding)
+		return totalBytes + playerCount * padding;
 
 	uint8_t* skipper = &NetBuffer[totalBytes];
 	for (int p = 0; p < playerCount; ++p)
 	{
-		skipper += 9;
+		++skipper;
+		if (NetMode == NET_PacketServer)
+			skipper += 2;
 		int ran = skipper[0];
 		++skipper;
 		while (ran-- > 0)
@@ -474,7 +479,7 @@ static void SetArbitrator(int clientNum)
 		// in this mode).
 		for (auto client : NetworkClients)
 		{
-			ClientStates[client].CurrentLatency = 0u;
+			ClientStates[client].CurrentLatency = ClientStates[client].AverageLatency = 0u;
 			ClientStates[client].bNewLatency = true;
 			memset(ClientStates[client].SentTime, 0, sizeof(ClientStates[client].SentTime));
 			memset(ClientStates[client].RecvTime, 0, sizeof(ClientStates[client].RecvTime));
@@ -630,7 +635,13 @@ static void GetPackets()
 			auto& pState = ClientStates[pNum];
 
 			// This gets sent over per-player so latencies are correct in packet server mode.
-			curByte += 8; // Boon TODO: This is going to be packet-server exclusive eventually
+			if (NetMode == NET_PacketServer)
+			{
+				if (consoleplayer != Net_Arbitrator)
+					pState.AverageLatency = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+				else
+					curByte += 2;
+			}
 
 			// Make sure client acks only get updated if from the host itself in packet server mode. Other clients
 			// won't be sending over any consistency information.
@@ -690,6 +701,8 @@ static void GetPackets()
 	}
 }
 
+static int LastLatencyUpdate = 0;
+
 void NetUpdate(int tics)
 {
 	// If a tic has passed, always send out a heartbeat packet (also doubles as
@@ -699,12 +712,28 @@ void NetUpdate(int tics)
 	if (netgame && !demoplayback && tics > 0
 		&& (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator))
 	{
+		LastLatencyUpdate += tics;
+		const uint64_t time = I_msTime();
 		for (auto client : NetworkClients)
 		{
 			if (client == consoleplayer)
 				continue;
 
 			auto& state = ClientStates[client];
+			if (LastLatencyUpdate >= MAXSENDTICS)
+			{
+				int delta = 0;
+				const uint8_t startTic = state.CurrentLatency - MAXSENDTICS;
+				for (int i = 0; i < MAXSENDTICS; ++i)
+				{
+					const int tic = (startTic + i) % MAXSENDTICS;
+					const uint64_t high = state.RecvTime[tic] < state.SentTime[tic] ? time : state.RecvTime[tic];
+					delta += high - state.SentTime[tic];
+				}
+
+				state.AverageLatency = delta / MAXSENDTICS;
+			}
+
 			if (state.bNewLatency)
 			{
 				state.SentTime[state.CurrentLatency % MAXSENDTICS] = I_msTime();
@@ -715,6 +744,9 @@ void NetUpdate(int tics)
 			NetBuffer[1] = state.CurrentLatency;
 			HSendPacket(client, 2);
 		}
+
+		if (LastLatencyUpdate >= MAXSENDTICS)
+			LastLatencyUpdate = 0;
 	}
 
 	// Sit idle after the level has loaded until everyone is ready to go. This keeps players better
@@ -964,26 +996,16 @@ void NetUpdate(int tics)
 			cmd[0] = playerNums[i];
 			++cmd;
 
-			// Time used to track latency.
-			const uint64_t time = I_msTime();
-			cmd[0] = (time >> 56);
-			++cmd;
-			cmd[0] = (time >> 48);
-			++cmd;
-			cmd[0] = (time >> 40);
-			++cmd;
-			cmd[0] = (time >> 32);
-			++cmd;
-			cmd[0] = (time >> 24);
-			++cmd;
-			cmd[0] = (time >> 16);
-			++cmd;
-			cmd[0] = (time >> 8);
-			++cmd;
-			cmd[0] = time;
-			++cmd;
-
 			auto& clientState = ClientStates[playerNums[i]];
+			// Time used to track latency.
+			if (NetMode == NET_PacketServer)
+			{
+				cmd[0] = (clientState.AverageLatency >> 8);
+				++cmd;
+				cmd[0] = clientState.AverageLatency;
+				++cmd;
+			}
+
 			int ran = 0;
 			// Don't bother sending over consistencies in packet server unless you're the host. Also only
 			// send it on the first tic to prevent it from being reread constantly.
@@ -2513,23 +2535,8 @@ CCMD(pings)
 	// In Packet Server mode, this displays the latency each individual client has to the host
 	for (auto client : NetworkClients)
 	{
-		if (client == consoleplayer)
-			continue;
-
-		const auto& state = ClientStates[client];
-		int count = 0, delta = 0;
-		for (int i = 0; i < MAXSENDTICS; ++i)
-		{
-			if (!state.SentTime[i])
-				continue;
-
-			++count;
-			const uint64_t high = state.RecvTime[i] <= state.SentTime[i] ? I_msTime() : state.RecvTime[i];
-			delta += high - state.SentTime[i];
-		}
-
-		int latency = count ? delta / count : -1;
-		Printf("%dms %s\n", latency, players[client].userinfo.GetName());
+		if ((NetMode == NET_PeerToPeer && client != consoleplayer) || (NetMode == NET_PacketServer && client != Net_Arbitrator))
+			Printf("%ums %s\n", ClientStates[client].AverageLatency, players[client].userinfo.GetName());
 	}
 }
 

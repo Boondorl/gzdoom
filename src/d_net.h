@@ -69,6 +69,7 @@ struct FClientNetState
 	// Local information about client.
 	uint8_t		CurrentLatency = 0u;		// Current latency id the client is on. If the one the client sends back is > this, update RecvTime and mark a new SentTime.
 	bool		bNewLatency = true;			// If the sequence was bumped, the next latency packet sent out should record the send time.
+	uint16_t	AverageLatency = 0u;		// Calculate the average latency every second or so, that way it doesn't give huge variance in the scoreboard.
 	uint64_t	SentTime[MAXSENDTICS] = {};	// Timestamp for when we sent out the packet to this client.
 	uint64_t	RecvTime[MAXSENDTICS] = {};	// Timestamp for when the client acknowledged our last packet. If in packet server mode, this is the server's delta.
 
