@@ -1334,7 +1334,7 @@ void G_Ticker ()
 	// Ran a tick, so prep the next consistencies to send out.
 	// [RH] Include some random seeds and player stuff in the consistancy
 	// check, not just the player's x position like BOOM.
-	if (netgame && !demoplayback && !(gametic % doomcom.ticdup))
+	if (netgame && !demoplayback && !(gametic % doomcom.ticdup) && gamestate == GS_LEVEL)
 	{
 		const uint32_t rngSum = StaticSumSeeds();
 		for (auto client : NetworkClients)
