@@ -339,6 +339,8 @@ static int GetNetBufferSize()
 	// TODO: Need a skipper for this.
 	if (NetBuffer[0] & NCMD_SETUP)
 		return doomcom.datalength;
+	if (NetBuffer[0] & (NCMD_LATENCY | NCMD_LATENCYACK))
+		return 2;
 
 	if (NetBuffer[0] & NCMD_LEVELREADY)
 	{
@@ -355,11 +357,7 @@ static int GetNetBufferSize()
 		totalBytes += NetBuffer[totalBytes] + 1;
 
 	int playerCount = NetBuffer[totalBytes++];
-
-	int numTics = NetBuffer[0] & NCMD_XTICS;
-	if (numTics == NCMD_XTICS)
-		numTics += NetBuffer[totalBytes++];
-
+	int numTics = NetBuffer[totalBytes++];
 	totalBytes += 4; // Consistency ack
 
 	// Minimum additional packet size per player:
@@ -469,13 +467,18 @@ static void SetArbitrator(int clientNum)
 	Net_Arbitrator = clientNum;
 	players[Net_Arbitrator].settings_controller = true;
 	Printf("%s is the new host\n", players[Net_Arbitrator].userinfo.GetName());
-	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
+	if (NetMode == NET_PacketServer)
 	{
 		// Since everybody is gonna be sending us packets now, we need to reset
 		// their latency measurements (normally this comes from the host themselves
 		// in this mode).
 		for (auto client : NetworkClients)
-			ClientStates[client].SentTime = I_msTime();
+		{
+			ClientStates[client].CurrentLatency = 0u;
+			ClientStates[client].bNewLatency = true;
+			memset(ClientStates[client].SentTime, 0, sizeof(ClientStates[client].SentTime));
+			memset(ClientStates[client].RecvTime, 0, sizeof(ClientStates[client].RecvTime));
+		}
 	}
 }
 
@@ -535,17 +538,51 @@ static void CheckLevelStart(int client, int delayTics)
 	}
 }
 
+static struct FLatencyAck
+{
+	int Client;
+	uint8_t Seq;
+
+	FLatencyAck(int client, uint8_t seq) : Client(client), Seq(seq) {}
+};
+
 //
 // GetPackets
 //
 static void GetPackets()
-{						 
+{
+	TArray<FLatencyAck> latencyAcks = {};
 	while (HGetPacket())
 	{
 		const int clientNum = doomcom.remoteplayer;
 		auto& clientState = ClientStates[clientNum];
 
-		clientState.LastRecvTime = I_msTime();
+		if (NetBuffer[0] & NCMD_LATENCY)
+		{
+			int i = 0;
+			for (; i < latencyAcks.Size(); ++i)
+			{
+				if (latencyAcks[i].Client == clientNum)
+					break;
+			}
+
+			if (i >= latencyAcks.Size())
+				latencyAcks.Push({ clientNum, NetBuffer[1] });
+
+			continue;
+		}
+
+		if (NetBuffer[0] & NCMD_LATENCYACK)
+		{
+			if (NetBuffer[1] == clientState.CurrentLatency)
+			{
+				clientState.RecvTime[clientState.CurrentLatency++ % MAXSENDTICS] = I_msTime();
+				clientState.bNewLatency = true;
+			}
+
+			continue;
+		}
+
 		clientState.Flags &= ~(CF_MISSING_SEQ | CF_RETRANSMIT);
 
 		if (NetBuffer[0] & NCMD_EXIT)
@@ -584,12 +621,8 @@ static void GetPackets()
 				DisconnectClient(NetBuffer[curByte++]);
 		}
 
-		int playerCount = NetBuffer[curByte++];
-
-		int totalTics = (NetBuffer[0] & NCMD_XTICS);
-		if (totalTics == NCMD_XTICS)
-			totalTics += NetBuffer[curByte++];
-
+		const int playerCount = NetBuffer[curByte++];
+		const int totalTics = NetBuffer[curByte++];
 		const int curConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
 		for (int p = 0; p < playerCount; ++p)
 		{
@@ -597,8 +630,7 @@ static void GetPackets()
 			auto& pState = ClientStates[pNum];
 
 			// This gets sent over per-player so latencies are correct in packet server mode.
-			pState.SentTime = (uint64_t(NetBuffer[curByte++]) << 56) | (uint64_t(NetBuffer[curByte++]) << 48) | (uint64_t(NetBuffer[curByte++]) << 40) | (uint64_t(NetBuffer[curByte++]) << 32)
-								| (uint64_t(NetBuffer[curByte++]) << 24) | (uint64_t(NetBuffer[curByte++]) << 16) | (uint64_t(NetBuffer[curByte++]) << 8) | uint64_t(NetBuffer[curByte++]);
+			curByte += 8; // Boon TODO: This is going to be packet-server exclusive eventually
 
 			// Make sure client acks only get updated if from the host itself in packet server mode. Other clients
 			// won't be sending over any consistency information.
@@ -649,10 +681,42 @@ static void GetPackets()
 			}
 		}
 	}
+
+	for (const auto& ack : latencyAcks)
+	{
+		NetBuffer[0] = NCMD_LATENCYACK;
+		NetBuffer[1] = ack.Seq;
+		HSendPacket(ack.Client, 2);
+	}
 }
 
 void NetUpdate(int tics)
 {
+	// If a tic has passed, always send out a heartbeat packet (also doubles as
+	// a latency measurement tool).
+	// Boon TODO: This could probably also be used to determine if there's packets
+	// missing and a retransmission is needed.
+	if (netgame && !demoplayback && tics > 0
+		&& (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator))
+	{
+		for (auto client : NetworkClients)
+		{
+			if (client == consoleplayer)
+				continue;
+
+			auto& state = ClientStates[client];
+			if (state.bNewLatency)
+			{
+				state.SentTime[state.CurrentLatency % MAXSENDTICS] = I_msTime();
+				state.bNewLatency = false;
+			}
+
+			NetBuffer[0] = NCMD_LATENCY;
+			NetBuffer[1] = state.CurrentLatency;
+			HSendPacket(client, 2);
+		}
+	}
+
 	// Sit idle after the level has loaded until everyone is ready to go. This keeps players better
 	// in sync with each other than relying on tic balancing to speed up/slow down the game and mirrors
 	// how players would wait for a true server to load.
@@ -885,15 +949,7 @@ void NetUpdate(int tics)
 			playerNums[0] = consoleplayer;
 		}
 		
-		if (numTics < 3)
-		{
-			NetBuffer[0] |= numTics;
-		}
-		else
-		{
-			NetBuffer[0] |= NCMD_XTICS;
-			NetBuffer[size++] = numTics - 3;
-		}
+		NetBuffer[size++] = numTics;
 
 		NetBuffer[size++] = (curState.CurrentNetConsistency >> 24);
 		NetBuffer[size++] = (curState.CurrentNetConsistency >> 16);
@@ -2457,8 +2513,23 @@ CCMD(pings)
 	// In Packet Server mode, this displays the latency each individual client has to the host
 	for (auto client : NetworkClients)
 	{
-		if (client != consoleplayer || (NetMode == NET_PacketServer && client != Net_Arbitrator))
-			Printf("% 4" PRId64 "ms %s\n", I_msTime() - ClientStates[client].SentTime, players[client].userinfo.GetName());
+		if (client == consoleplayer)
+			continue;
+
+		const auto& state = ClientStates[client];
+		int count = 0, delta = 0;
+		for (int i = 0; i < MAXSENDTICS; ++i)
+		{
+			if (!state.SentTime[i])
+				continue;
+
+			++count;
+			const uint64_t high = state.RecvTime[i] <= state.SentTime[i] ? I_msTime() : state.RecvTime[i];
+			delta += high - state.SentTime[i];
+		}
+
+		int latency = count ? delta / count : -1;
+		Printf("%dms %s\n", latency, players[client].userinfo.GetName());
 	}
 }
 
