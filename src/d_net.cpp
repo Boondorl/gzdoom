@@ -860,6 +860,57 @@ static void CheckConsistencies()
 	}
 }
 
+//==========================================================================
+//
+// FRandom :: StaticSumSeeds
+//
+// This function produces a uint32_t that can be used to check the consistancy
+// of network games between different machines. Only a select few RNGs are
+// used for the sum, because not all RNGs are important to network sync.
+//
+//==========================================================================
+
+extern FRandom pr_spawnmobj;
+extern FRandom pr_acs;
+extern FRandom pr_chase;
+extern FRandom pr_damagemobj;
+
+static uint32_t StaticSumSeeds()
+{
+	return
+		pr_spawnmobj.Seed() +
+		pr_acs.Seed() +
+		pr_chase.Seed() +
+		pr_damagemobj.Seed();
+}
+
+static int16_t CalculateConsistency(int client, uint32_t seed)
+{
+	if (players[client].mo != nullptr)
+	{
+		seed += int((players[client].mo->X() + players[client].mo->Y() + players[client].mo->Z()) * 257) + players[client].mo->Angles.Yaw.BAMs() + players[client].mo->Angles.Pitch.BAMs();
+		seed ^= players[client].health;
+	}
+
+	return seed;
+}
+
+// Ran a tick, so prep the next consistencies to send out.
+// [RH] Include some random seeds and player stuff in the consistancy
+// check, not just the player's x position like BOOM.
+static void MakeConsistencies()
+{
+	if (!netgame || demoplayback || (gametic % doomcom.ticdup) || !IsMapLoaded())
+		return;
+
+	const uint32_t rngSum = StaticSumSeeds();
+	for (auto client : NetworkClients)
+	{
+		auto& clientState = ClientStates[client];
+		clientState.LocalConsistency[clientState.CurrentLocalConsistency++ % BACKUPTICS] = CalculateConsistency(client, rngSum);
+	}
+}
+
 static bool CanMakeCommands()
 {
 	if (LevelStartStatus != LST_READY || LevelStartDelay > 0)
@@ -1800,6 +1851,7 @@ void TryRunTics()
 		C_Ticker();
 		M_Ticker();
 		G_Ticker();
+		MakeConsistencies();
 		++gametic;
 
 		TicStabilityEnd();
