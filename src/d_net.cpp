@@ -131,6 +131,7 @@ static uint8_t	LocalNetBuffer[MAX_MSGLEN];
 // whatever sequence a client is currently on, only how many packets we've gotten from them.
 static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
 
+static int  LevelStartDebug = 0;
 static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
 static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
 static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
@@ -576,7 +577,7 @@ static void CheckLevelStart(int client, int delayTics)
 	{
 		LevelStartAck = 0;
 		LevelStartStatus = NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator ? LST_HOST : LST_READY;
-		LevelStartDelay = delayTics;
+		LevelStartDelay = LevelStartDebug = delayTics;
 		return;
 	}
 
@@ -1542,6 +1543,9 @@ ADD_STAT(network)
 	if (net_extratic)
 		out.AppendFormat("\nExtra tic enabled");
 
+	if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
+		out.AppendFormat("\nStart tics delay: %d", LevelStartDebug);
+
 	const int delay = max<int>((ClientTic - gametic) / doomcom.ticdup, 0);
 	const int msDelay = min<int>(delay * doomcom.ticdup * 1000.0 / TICRATE, 999);
 	out.AppendFormat("\nLocal\n\tIs arbitrator: %d\tDelay: %02d (%03dms)",
@@ -1558,20 +1562,29 @@ ADD_STAT(network)
 			out.AppendFormat("\tWaiting for arbitrator");
 	}
 
+	int lowestSeq = ClientTic / doomcom.ticdup;
 	for (auto client : NetworkClients)
 	{
 		if (client == consoleplayer)
 			continue;
 
 		auto& state = ClientStates[client];
-		const int cDelay = max<int>(state.CurrentSequence - (gametic / doomcom.ticdup), 0);
-		const int mscDelay = min<int>(cDelay * doomcom.ticdup * 1000.0 / TICRATE, 999);
-		out.AppendFormat("\n%s\n\tDelay: %02d (%03dms)\tAck: %06d\tConsistency: %06d",
-			players[client].userinfo.GetName(12),
-			cDelay, mscDelay,
-			state.SequenceAck, state.ConsistencyAck);
+		if (state.CurrentSequence < lowestSeq)
+			lowestSeq = state.CurrentSequence;
+
+		out.AppendFormat("\n%s\n", players[client].userinfo.GetName(12));
+		if (NetMode != NET_PacketServer)
+		{
+			const int cDelay = max<int>(state.CurrentSequence - (gametic / doomcom.ticdup), 0);
+			const int mscDelay = min<int>(cDelay * doomcom.ticdup * 1000.0 / TICRATE, 999);
+			out.AppendFormat("\tDelay: %02d (%03dms)", cDelay, mscDelay);
+		}
+		
+		out.AppendFormat("\tAck: %06d\tConsistency: %06d", state.SequenceAck, state.ConsistencyAck);
 	}
 
+	if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
+		out.AppendFormat("\nAvailable tics: %03d", max<int>(lowestSeq - (gametic / doomcom.ticdup), 0));
 	return out;
 }
 
