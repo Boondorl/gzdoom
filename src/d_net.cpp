@@ -1572,7 +1572,13 @@ ADD_STAT(network)
 		if (state.CurrentSequence < lowestSeq)
 			lowestSeq = state.CurrentSequence;
 
-		out.AppendFormat("\n%s\n", players[client].userinfo.GetName(12));
+		out.AppendFormat("\n%s", players[client].userinfo.GetName(12));
+		if (state.Flags & CF_RETRANSMIT)
+			out.AppendFormat("\t(RT)");
+		if (state.Flags & CF_MISSING_SEQ)
+			out.AppendFormat("\t(MISS)");
+		out.AppendFormat("\n");
+
 		if (NetMode != NET_PacketServer)
 		{
 			const int cDelay = max<int>(state.CurrentSequence - (gametic / doomcom.ticdup), 0);
