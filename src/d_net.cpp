@@ -578,6 +578,7 @@ static void CheckLevelStart(int client, int delayTics)
 		LevelStartAck = 0;
 		LevelStartStatus = NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator ? LST_HOST : LST_READY;
 		LevelStartDelay = LevelStartDebug = delayTics;
+		LastGameUpdate = EnterTic;
 		return;
 	}
 
@@ -789,6 +790,8 @@ static void GetPackets()
 
 static void SendHeartbeat()
 {
+	// Boon TODO: This could probably also be used to determine if there's packets
+	// missing and a retransmission is needed.
 	const uint64_t time = I_msTime();
 	for (auto client : NetworkClients)
 	{
@@ -823,15 +826,33 @@ static void SendHeartbeat()
 	}
 }
 
+static bool CanMakeCommands()
+{
+	if (LevelStartStatus != LST_READY || LevelStartDelay > 0)
+		return false;
+
+	bool isGood = true;
+	for (auto client : NetworkClients)
+	{
+		if (players[client].waiting)
+		{
+			isGood = false;
+			break;
+		}
+	}
+
+	return isGood;
+}
+
 void NetUpdate(int tics)
 {
 	GetPackets();
+	if (tics <= 0)
+		return;
 
 	// If a tic has passed, always send out a heartbeat packet (also doubles as
 	// a latency measurement tool).
-	// Boon TODO: This could probably also be used to determine if there's packets
-	// missing and a retransmission is needed.
-	if (netgame && !demoplayback && tics > 0
+	if (netgame && !demoplayback
 		&& (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator))
 	{
 		LastLatencyUpdate += tics;
@@ -853,11 +874,11 @@ void NetUpdate(int tics)
 		{
 			if (NetworkClients.Size() == 1)
 			{
-				LevelStartStatus = LST_READY;
+				// If we got stuck in limbo waiting, force start the map.
+				CheckLevelStart(Net_Arbitrator, 0);
 			}
 			else
 			{
-				tics = 0;
 				if (consoleplayer != Net_Arbitrator && IsMapLoaded())
 				{
 					NetBuffer[0] = NCMD_LEVELREADY;
@@ -868,42 +889,38 @@ void NetUpdate(int tics)
 		else if (LevelStartStatus == LST_HOST)
 		{
 			// If we're the host, idly wait until all packets have arrived. There's no point in predicting since we
-			// know for a fact the game won't be started until this happens.
-			int lowestSeq = gametic;
+			// know for a fact the game won't be started until everyone is accounted for. (Packet server only)
+			int lowestSeq = gametic / doomcom.ticdup;
 			for (auto client : NetworkClients)
 			{
 				if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < lowestSeq)
 					lowestSeq = ClientStates[client].CurrentSequence;
 			}
 
-			if (lowestSeq >= gametic)
+			if (lowestSeq >= gametic / doomcom.ticdup)
 				LevelStartStatus = LST_READY;
-			else
-				tics = 0;
 		}
 	}
-	else if (LevelStartDelay >= tics)
+	else if (LevelStartDelay > 0)
 	{
-		LevelStartDelay -= tics;
-		tics = 0;
-	}
-	else
-	{
-		tics -= LevelStartDelay;
-		LevelStartDelay = 0;
+		if (LevelStartDelay < tics)
+			tics -= LevelStartDelay;
+
+		LevelStartDelay = max<int>(LevelStartDelay - tics, 0);
 	}
 
-	if (tics <= 0)
-		return;
+	if (LevelStartStatus != LST_WAITING && LevelStartDelay <= 0)
+		Net_CheckLastReceived();
 
-	// build new ticcmds for console player
+	const bool makeCmds = CanMakeCommands();
 	const int startTic = ClientTic;
+	tics = min<int>(tics, TICRATE * 1 * doomcom.ticdup);
 	for (int i = 0; i < tics; ++i)
 	{
 		I_StartTic();
 		D_ProcessEvents();
-		if (pauseext || (ClientTic - gametic) / doomcom.ticdup >= MAXSENDTICS)
-			break;			// can't hold any more
+		if (pauseext || !makeCmds)
+			break;
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
 		if (doomcom.ticdup == 1)
@@ -1541,16 +1558,20 @@ ADD_STAT(network)
 		doomcom.ticdup);
 
 	if (net_extratic)
-		out.AppendFormat("\nExtra tic enabled");
+		out.AppendFormat("\tExtra tic enabled");
 
+	out.AppendFormat("\nWorld tic: %06d (sequence %06d)", gametic, gametic / doomcom.ticdup);
 	if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
-		out.AppendFormat("\nStart tics delay: %d", LevelStartDebug);
+		out.AppendFormat("\tStart tics delay: %d", LevelStartDebug);
 
 	const int delay = max<int>((ClientTic - gametic) / doomcom.ticdup, 0);
 	const int msDelay = min<int>(delay * doomcom.ticdup * 1000.0 / TICRATE, 999);
 	out.AppendFormat("\nLocal\n\tIs arbitrator: %d\tDelay: %02d (%03dms)",
 		consoleplayer == Net_Arbitrator,
 		delay, msDelay);
+
+	if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
+		out.AppendFormat("\tAvg latency: %03ums", min<unsigned int>(ClientStates[consoleplayer].AverageLatency, 999u));
 
 	if (LevelStartStatus != LST_READY)
 	{
@@ -1573,6 +1594,8 @@ ADD_STAT(network)
 			lowestSeq = state.CurrentSequence;
 
 		out.AppendFormat("\n%s", players[client].userinfo.GetName(12));
+		if (client == Net_Arbitrator)
+			out.AppendFormat("\t(Host)");
 		if (state.Flags & CF_RETRANSMIT)
 			out.AppendFormat("\t(RT)");
 		if (state.Flags & CF_MISSING_SEQ)
@@ -1587,11 +1610,47 @@ ADD_STAT(network)
 		}
 		
 		out.AppendFormat("\tAck: %06d\tConsistency: %06d", state.SequenceAck, state.ConsistencyAck);
+		if (NetMode != NET_PacketServer || client != Net_Arbitrator)
+			out.AppendFormat("\tAvg latency: %03ums", min<unsigned int>(state.AverageLatency, 999u));
 	}
 
 	if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
 		out.AppendFormat("\nAvailable tics: %03d", max<int>(lowestSeq - (gametic / doomcom.ticdup), 0));
 	return out;
+}
+
+static void CheckConsistencies()
+{
+	// Check consistencies retroactively to see if there was a desync at some point. We still
+	// check the local client here because in packet server mode these could realistically desync
+	// if the client's current position doesn't agree with the host.
+	for (auto client : NetworkClients)
+	{
+		auto& clientState = ClientStates[client];
+		// If previously inconsistent, always mark it as such going forward. We don't want this to
+		// accidentally go away at some point since the game state is already completely broken.
+		if (players[client].inconsistant)
+		{
+			clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+		}
+		else
+		{
+			// Make sure we don't check past tics we haven't even ran yet.
+			const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
+			while (clientState.LastVerifiedConsistency < limit)
+			{
+				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
+				if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
+				{
+					players[client].inconsistant = true;
+					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+					break;
+				}
+
+				++clientState.LastVerifiedConsistency;
+			}
+		}
+	}
 }
 
 // Forces playsim processing time to be consistent across frames.
@@ -1640,6 +1699,8 @@ static void TicStabilityEnd()
 //
 void TryRunTics()
 {
+	GC::CheckGC();
+	
 	bool doWait = (cl_capfps || pauseext || (r_NoInterpolate && !M_IsAnimated()));
 	if (vid_dontdowait && (vid_maxfps > 0 || vid_vsync))
 		doWait = false;
@@ -1655,48 +1716,15 @@ void TryRunTics()
 	const int startCommand = ClientTic;
 	const int totalTics = EnterTic - LastEnterTic;
 
-	LastEnterTic = EnterTic;
-
-	GC::CheckGC();
-
 	// Listen for other clients and send out data as needed. This is also
 	// needed for singleplayer! But is instead handled entirely through local
 	// buffers. This has a limit of 17 tics that can be generated.
 	NetUpdate(totalTics);
 
-	// Check consistencies retroactively to see if there was a desync at some point. We still
-	// check the local client here because in packet server mode these could realistically desync
-	// if the client's current position doesn't agree with the host.
-	if (netgame && !demoplayback)
-	{
-		for (auto client : NetworkClients)
-		{
-			auto& clientState = ClientStates[client];
-			// If previously inconsistent, always mark it as such going forward. We don't want this to
-			// accidentally go away at some point since the game state is already completely broken.
-			if (players[client].inconsistant)
-			{
-				clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-			}
-			else
-			{
-				// Make sure we don't check past ticks we haven't even ran yet.
-				const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
-				while (clientState.LastVerifiedConsistency < limit)
-				{
-					const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
-					if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
-					{
-						players[client].inconsistant = true;
-						clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-						break;
-					}
+	LastEnterTic = EnterTic;
 
-					++clientState.LastVerifiedConsistency;
-				}
-			}
-		}
-	}
+	if (netgame && !demoplayback)
+		CheckConsistencies();
 
 	// If the game is paused, everything we need to update has already done so.
 	if (pauseext)
@@ -1729,9 +1757,6 @@ void TryRunTics()
 	// commands to predict.
 	if (runTics <= 0)
 	{
-		// Check if a client dropped connection.
-		Net_CheckLastReceived();
-
 		// If we actually did have some tics available, make sure the UI
 		// still has a chance to run.
 		for (int i = 0; i < totalTics; ++i)
@@ -1756,8 +1781,8 @@ void TryRunTics()
 		return;
 	}
 
-	for (int i = 0; i < MAXPLAYERS; ++i)
-		players[i].waiting = false;
+	for (auto client : NetworkClients)
+		players[client].waiting = false;
 
 	// Update the last time the game tic'd.
 	LastGameUpdate = EnterTic;
@@ -1784,32 +1809,26 @@ void TryRunTics()
 
 void Net_CheckLastReceived()
 {
-	constexpr int MaxDelay = TICRATE * 3;
-
-	const int time = I_GetTime();
-	if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
-	{
-		LastGameUpdate = time;
-		return;
-	}
-
-	// [Ed850] Check to see the last time a packet was received.
-	// If it's longer then 3 seconds, a node has likely stalled.
-	if (time - LastGameUpdate >= MaxDelay)
+	// Check against the previous tick in case we're recovering from a huge
+	// system hiccup. If the game has taken too long to update, it's likely
+	// another client is hanging up the game.
+	const int MaxDelay = TICRATE * 1 * doomcom.ticdup;
+	if (LastEnterTic - LastGameUpdate >= MaxDelay)
 	{
 		// Try again in the next MaxDelay tics.
-		LastGameUpdate = time;
+		LastGameUpdate = EnterTic;
 
 		if (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator)
 		{
 			// For any clients that are currently lagging behind, send our data back over in case they were having trouble
 			// receiving it. We have to do this in case our data is actually the stall condition for the other client.
+			const int curTic = gametic / doomcom.ticdup;
 			for (auto client : NetworkClients)
 			{
 				if (client == consoleplayer)
 					continue;
 
-				if (ClientStates[client].CurrentSequence < gametic)
+				if (ClientStates[client].CurrentSequence < curTic)
 				{
 					ClientStates[client].Flags |= CF_RETRANSMIT;
 					players[client].waiting = true;
