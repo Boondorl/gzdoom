@@ -1520,6 +1520,56 @@ void D_QuitNetGame()
 	}
 }
 
+ADD_STAT(network)
+{
+	FString out = {};
+	if (!netgame || demoplayback)
+	{
+		out.AppendFormat("No network stats available.");
+		return out;
+	}
+
+	out.AppendFormat("Max players: %d\tNet mode: %s\tTic dup: %d",
+		doomcom.numplayers,
+		NetMode == NET_PacketServer ? "Packet server" : "Peer to peer",
+		doomcom.ticdup);
+
+	if (net_extratic)
+		out.AppendFormat("\nExtra tic enabled");
+
+	const int delay = max<int>((ClientTic - gametic) / doomcom.ticdup, 0);
+	const int msDelay = min<int>(delay * doomcom.ticdup * 1000.0 / TICRATE, 999);
+	out.AppendFormat("\nLocal\n\tIs arbitrator: %d\tDelay: %02d (%03dms)",
+		consoleplayer == Net_Arbitrator,
+		delay, msDelay);
+
+	if (LevelStartStatus != LST_READY)
+	{
+		if (LevelStartStatus == LST_HOST)
+			out.AppendFormat("\tWaiting for packets");
+		else if (consoleplayer == Net_Arbitrator)
+			out.AppendFormat("\tWaiting for acks");
+		else
+			out.AppendFormat("\tWaiting for arbitrator");
+	}
+
+	for (auto client : NetworkClients)
+	{
+		if (client == consoleplayer)
+			continue;
+
+		auto& state = ClientStates[client];
+		const int cDelay = max<int>(state.CurrentSequence - (gametic / doomcom.ticdup), 0);
+		const int mscDelay = min<int>(cDelay * doomcom.ticdup * 1000.0 / TICRATE, 999);
+		out.AppendFormat("\n%s\n\tDelay: %02d (%03dms)\tAck: %06d\tConsistency: %06d",
+			players[client].userinfo.GetName(12),
+			cDelay, mscDelay,
+			state.SequenceAck, state.ConsistencyAck);
+	}
+
+	return out;
+}
+
 // Forces playsim processing time to be consistent across frames.
 // This improves interpolation for frames in between tics.
 //
