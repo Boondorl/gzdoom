@@ -826,6 +826,40 @@ static void SendHeartbeat()
 	}
 }
 
+static void CheckConsistencies()
+{
+	// Check consistencies retroactively to see if there was a desync at some point. We still
+	// check the local client here because in packet server mode these could realistically desync
+	// if the client's current position doesn't agree with the host.
+	for (auto client : NetworkClients)
+	{
+		auto& clientState = ClientStates[client];
+		// If previously inconsistent, always mark it as such going forward. We don't want this to
+		// accidentally go away at some point since the game state is already completely broken.
+		if (players[client].inconsistant)
+		{
+			clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+		}
+		else
+		{
+			// Make sure we don't check past tics we haven't even ran yet.
+			const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
+			while (clientState.LastVerifiedConsistency < limit)
+			{
+				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
+				if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
+				{
+					players[client].inconsistant = true;
+					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
+					break;
+				}
+
+				++clientState.LastVerifiedConsistency;
+			}
+		}
+	}
+}
+
 static bool CanMakeCommands()
 {
 	if (LevelStartStatus != LST_READY || LevelStartDelay > 0)
@@ -850,19 +884,23 @@ void NetUpdate(int tics)
 	if (tics <= 0)
 		return;
 
-	// If a tic has passed, always send out a heartbeat packet (also doubles as
-	// a latency measurement tool).
-	if (netgame && !demoplayback
-		&& (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator))
+	if (netgame && !demoplayback)
 	{
-		LastLatencyUpdate += tics;
-		if (FullLatencyCycle > 0)
-			FullLatencyCycle = max<int>(FullLatencyCycle - tics, 0);
+		// If a tic has passed, always send out a heartbeat packet (also doubles as
+		// a latency measurement tool).
+		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
+		{
+			LastLatencyUpdate += tics;
+			if (FullLatencyCycle > 0)
+				FullLatencyCycle = max<int>(FullLatencyCycle - tics, 0);
 
-		SendHeartbeat();
+			SendHeartbeat();
 
-		if (LastLatencyUpdate >= MAXSENDTICS)
-			LastLatencyUpdate = 0;
+			if (LastLatencyUpdate >= MAXSENDTICS)
+				LastLatencyUpdate = 0;
+		}
+
+		CheckConsistencies();
 	}
 
 	// Sit idle after the level has loaded until everyone is ready to go. This keeps players better
@@ -1619,40 +1657,6 @@ ADD_STAT(network)
 	return out;
 }
 
-static void CheckConsistencies()
-{
-	// Check consistencies retroactively to see if there was a desync at some point. We still
-	// check the local client here because in packet server mode these could realistically desync
-	// if the client's current position doesn't agree with the host.
-	for (auto client : NetworkClients)
-	{
-		auto& clientState = ClientStates[client];
-		// If previously inconsistent, always mark it as such going forward. We don't want this to
-		// accidentally go away at some point since the game state is already completely broken.
-		if (players[client].inconsistant)
-		{
-			clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-		}
-		else
-		{
-			// Make sure we don't check past tics we haven't even ran yet.
-			const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
-			while (clientState.LastVerifiedConsistency < limit)
-			{
-				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
-				if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
-				{
-					players[client].inconsistant = true;
-					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-					break;
-				}
-
-				++clientState.LastVerifiedConsistency;
-			}
-		}
-	}
-}
-
 // Forces playsim processing time to be consistent across frames.
 // This improves interpolation for frames in between tics.
 //
@@ -1722,9 +1726,6 @@ void TryRunTics()
 	NetUpdate(totalTics);
 
 	LastEnterTic = EnterTic;
-
-	if (netgame && !demoplayback)
-		CheckConsistencies();
 
 	// If the game is paused, everything we need to update has already done so.
 	if (pauseext)
