@@ -786,8 +786,46 @@ static void GetPackets()
 	}
 }
 
+static void SendHeartbeat()
+{
+	const uint64_t time = I_msTime();
+	for (auto client : NetworkClients)
+	{
+		if (client == consoleplayer)
+			continue;
+
+		auto& state = ClientStates[client];
+		if (LastLatencyUpdate >= MAXSENDTICS)
+		{
+			int delta = 0;
+			const uint8_t startTic = state.CurrentLatency - MAXSENDTICS;
+			for (int i = 0; i < MAXSENDTICS; ++i)
+			{
+				const int tic = (startTic + i) % MAXSENDTICS;
+				const uint64_t high = state.RecvTime[tic] < state.SentTime[tic] ? time : state.RecvTime[tic];
+				delta += high - state.SentTime[tic];
+			}
+
+			state.AverageLatency = delta / MAXSENDTICS;
+		}
+
+		if (state.bNewLatency)
+		{
+			// Use the most up-to-date time here for better accuracy.
+			state.SentTime[state.CurrentLatency % MAXSENDTICS] = I_msTime();
+			state.bNewLatency = false;
+		}
+
+		NetBuffer[0] = NCMD_LATENCY;
+		NetBuffer[1] = state.CurrentLatency;
+		HSendPacket(client, 2);
+	}
+}
+
 void NetUpdate(int tics)
 {
+	GetPackets();
+
 	// If a tic has passed, always send out a heartbeat packet (also doubles as
 	// a latency measurement tool).
 	// Boon TODO: This could probably also be used to determine if there's packets
@@ -799,37 +837,7 @@ void NetUpdate(int tics)
 		if (FullLatencyCycle > 0)
 			FullLatencyCycle = max<int>(FullLatencyCycle - tics, 0);
 
-		const uint64_t time = I_msTime();
-		for (auto client : NetworkClients)
-		{
-			if (client == consoleplayer)
-				continue;
-
-			auto& state = ClientStates[client];
-			if (LastLatencyUpdate >= MAXSENDTICS)
-			{
-				int delta = 0;
-				const uint8_t startTic = state.CurrentLatency - MAXSENDTICS;
-				for (int i = 0; i < MAXSENDTICS; ++i)
-				{
-					const int tic = (startTic + i) % MAXSENDTICS;
-					const uint64_t high = state.RecvTime[tic] < state.SentTime[tic] ? time : state.RecvTime[tic];
-					delta += high - state.SentTime[tic];
-				}
-
-				state.AverageLatency = delta / MAXSENDTICS;
-			}
-
-			if (state.bNewLatency)
-			{
-				state.SentTime[state.CurrentLatency % MAXSENDTICS] = I_msTime();
-				state.bNewLatency = false;
-			}
-
-			NetBuffer[0] = NCMD_LATENCY;
-			NetBuffer[1] = state.CurrentLatency;
-			HSendPacket(client, 2);
-		}
+		SendHeartbeat();
 
 		if (LastLatencyUpdate >= MAXSENDTICS)
 			LastLatencyUpdate = 0;
@@ -885,10 +893,7 @@ void NetUpdate(int tics)
 	}
 
 	if (tics <= 0)
-	{
-		GetPackets();
 		return;
-	}
 
 	// build new ticcmds for console player
 	const int startTic = ClientTic;
@@ -1168,7 +1173,7 @@ void NetUpdate(int tics)
 			ClientStates[client].LastSentConsistency = ClientStates[client].CurrentLocalConsistency;
 	}
 
-	// Listen for other packets. This has to come after sending so the player that sent
+	// Listen for other packets. This has to also come after sending so the player that sent
 	// data to themselves gets it immediately (important for singleplayer, otherwise there
 	// would always be a one-tic delay).
 	GetPackets();
