@@ -1741,7 +1741,7 @@ ADD_STAT(network)
 			out.AppendFormat("\t(Host)");
 		if (state.Flags & CF_RETRANSMIT)
 			out.AppendFormat("\t(RT)");
-		if (state.Flags & CF_MISSING_SEQ)
+		if (state.Flags & CF_MISSING)
 			out.AppendFormat("\t(MISS)");
 		out.AppendFormat("\n");
 
