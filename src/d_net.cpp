@@ -322,23 +322,41 @@ void Net_ClearBuffers()
 	for (int i = 0; i < MAXPLAYERS; ++i)
 	{
 		playeringame[i] = false;
-		for (int j = 0; j < BACKUPTICS; ++j)
-			ClientStates[i].Tics[j].Data.SetData(nullptr, 0);
+		players[i].waiting = players[i].inconsistant = false;
+
+		auto& state = ClientStates[i];
+		state.AverageLatency = state.CurrentLatency = 0u;
+		memset(state.SentTime, 0, sizeof(state.SentTime));
+		memset(state.RecvTime, 0, sizeof(state.RecvTime));
+		state.bNewLatency = true;
+
+		state.CurrentNetConsistency = state.LastVerifiedConsistency = state.ConsistencyAck = -1;
+		state.CurrentSequence = state.SequenceAck = -1;
+		state.Flags = 0;
 	}
-
-	NetworkClients.Clear();
-	netgame = multiplayer = false;
-	LastEnterTic = EnterTic;
-	gametic = ClientTic = 0;
-	LastGameUpdate = 0;
-
-	memset(LocalCmds, 0, sizeof(LocalCmds));
-	memset(ClientStates, 0, sizeof(ClientStates));
 
 	doomcom.command = doomcom.datalength = 0;
 	doomcom.remoteplayer = -1;
 	doomcom.numplayers = doomcom.ticdup = 1;
 	consoleplayer = doomcom.consoleplayer = 0;
+	LocalNetBufferSize = 0;
+	Net_Arbitrator = 0;
+
+	NetworkClients.Clear();
+	NetMode = NET_PeerToPeer;
+	netgame = multiplayer = false;
+	LastSentConsistency = CurrentConsistency = 0;
+	LastEnterTic = LastGameUpdate = EnterTic;
+	gametic = ClientTic = 0;
+	NetEvents.ResetStream();
+
+	LevelStartAck = 0;
+	LevelStartDelay = LevelStartDebug = 0;
+	LevelStartStatus = LST_READY;
+
+	FullLatencyCycle = MAXSENDTICS * 5;
+	LastLatencyUpdate = 0;
+
 	playeringame[0] = true;
 	NetworkClients += 0;
 }
