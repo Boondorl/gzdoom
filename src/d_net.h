@@ -52,10 +52,15 @@ private:
 
 enum EClientFlags
 {
-	CF_NONE			= 0,
-	CF_QUIT			= 1,		// If in packet server mode, this client sent an exit command and needs to be disconnected.
-	CF_MISSING_SEQ	= 1 << 1,	// If a sequence was missed/out of order, ask this client to send back over their info.
-	CF_RETRANSMIT	= 1 << 2,	// If set, this client needs data resent to them.
+	CF_NONE				= 0,
+	CF_QUIT				= 1,		// If in packet server mode, this client sent an exit command and needs to be disconnected.
+	CF_MISSING_SEQ		= 1 << 1,	// If a sequence was missed/out of order, ask this client to send back over their info.
+	CF_RETRANSMIT_SEQ	= 1 << 2,	// If set, this client needs command data resent to them.
+	CF_MISSING_CON		= 1 << 3,	// If a consistency was missed/out of order, ask this client to send back over their info.
+	CF_RETRANSMIT_CON	= 1 << 4,	// If set, this client needs consistency data resent to them.
+
+	CF_RETRANSMIT = CF_RETRANSMIT_CON | CF_RETRANSMIT_SEQ,
+	CF_MISSING = CF_MISSING_CON | CF_MISSING_SEQ,
 };
 
 struct FClientNetState
@@ -82,11 +87,9 @@ struct FClientNetState
 	// of the clients in their LocalConsistency. Then the consistencies will
 	// be checked against retroactively as they come in.
 	int ConsistencyAck = -1;					// Last consistency the client reported from us.
-	int LastVerifiedConsistency = 0;			// Last consistency we checked from this client. If < CurrentNetConsistency, run through them.
-	int CurrentNetConsistency = 0;				// Last consistency we got from this client.
+	int LastVerifiedConsistency = -1;			// Last consistency we checked from this client. If < CurrentNetConsistency, run through them.
+	int CurrentNetConsistency = -1;				// Last consistency we got from this client.
 	int16_t NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
-	int LastSentConsistency = 0;				// Last consistency we sent out. If < CurrentLocalConsistency, send them out.
-	int CurrentLocalConsistency = 0;			// Last consistency we generated.
 	int16_t LocalConsistency[BACKUPTICS] = {};	// Local consistency of the client to check against.
 };
 
