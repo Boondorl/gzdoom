@@ -480,6 +480,15 @@ static bool HGetPacket()
 	if (doomcom.remoteplayer == -1)
 		return false;
 
+	// When the host randomly drops this can cause issues in packet server mode, so at
+	// least attempt to recover gracefully.
+	if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator
+		&& (NetBuffer[0] & NCMD_EXIT) && doomcom.datalength == 1)
+	{
+		NetBuffer[1] = NetworkClients[1];
+		doomcom.datalength = 2;
+	}
+
 	int sizeCheck = GetNetBufferSize();
 	if (doomcom.datalength != sizeCheck)
 	{
