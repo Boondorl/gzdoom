@@ -343,18 +343,18 @@ void Net_ClearBuffers()
 	NetworkClients += 0;
 }
 
-void Net_ResetCommands()
+void Net_ResetCommands(bool midTic)
 {
-	ClientTic = gametic + 1;
-	const int tic = (gametic / doomcom.ticdup) % BACKUPTICS;
+	ClientTic = gametic + midTic;
+	const int tic = (gametic - !midTic) / doomcom.ticdup;
 	for (auto client : NetworkClients)
 	{
 		auto& state = ClientStates[client];
 		state.Flags &= CF_QUIT;
-		state.CurrentSequence = state.SequenceAck = gametic;
+		state.CurrentSequence = state.SequenceAck = tic;
 		
 		// Make sure not to run its current command either.
-		auto& curTic = state.Tics[tic];
+		auto& curTic = state.Tics[tic % BACKUPTICS];
 		memset(&curTic.Command, 0, sizeof(curTic.Command));
 		curTic.Data.SetData(nullptr, 0);
 	}
@@ -513,16 +513,11 @@ static void SetArbitrator(int clientNum)
 	Printf("%s is the new host\n", players[Net_Arbitrator].userinfo.GetName());
 	if (NetMode == NET_PacketServer)
 	{
-		// Since everybody is gonna be sending us packets now, we need to reset
-		// their latency measurements (normally this comes from the host themselves
-		// in this mode).
 		for (auto client : NetworkClients)
-		{
-			ClientStates[client].CurrentLatency = ClientStates[client].AverageLatency = 0u;
-			ClientStates[client].bNewLatency = true;
-			memset(ClientStates[client].SentTime, 0, sizeof(ClientStates[client].SentTime));
-			memset(ClientStates[client].RecvTime, 0, sizeof(ClientStates[client].RecvTime));
-		}
+			ClientStates[client].AverageLatency = 0u;
+
+		Net_ResetCommands(false);
+		Net_SetWaiting();
 	}
 }
 

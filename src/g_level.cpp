@@ -1568,7 +1568,7 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, WorldDone)
 
 void G_DoWorldDone (void) 
 {		
-	Net_ResetCommands();
+	Net_ResetCommands(true);
 	gamestate = GS_LEVEL;
 	if (nextlevel.IsEmpty())
 	{
