@@ -118,6 +118,8 @@ enum ELevelStartStatus
 ENetMode NetMode = NET_PeerToPeer;
 int 				ClientTic = 0;
 usercmd_t			LocalCmds[LOCALCMDTICS] = {};
+int					LastSentConsistency = 0;		// Last consistency we sent out. If < CurrentConsistency, send them out.
+int					CurrentConsistency = 0;			// Last consistency we generated.
 FClientNetState		ClientStates[MAXPLAYERS] = {};
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
@@ -392,15 +394,17 @@ static int GetNetBufferSize()
 	if (NetBuffer[0] & NCMD_QUITTERS)
 		totalBytes += NetBuffer[totalBytes] + 1;
 
-	int playerCount = NetBuffer[totalBytes++];
-	int numTics = NetBuffer[totalBytes++];
+	const int playerCount = NetBuffer[totalBytes++];
+	const int numTics = NetBuffer[totalBytes++];
+	const int ranTics = NetBuffer[totalBytes++];
+	if (ranTics > 0)
+		totalBytes += 4;
 	totalBytes += 4; // Consistency ack
 
 	// Minimum additional packet size per player:
 	// 1 byte for player number
 	// 2 bytes for the average latency if in packet server
-	// 1 byte for 0 consistencies
-	int padding = 2;
+	int padding = 1;
 	if (NetMode == NET_PacketServer)
 		padding += 2;
 	if (doomcom.datalength < totalBytes + playerCount * padding)
@@ -412,10 +416,9 @@ static int GetNetBufferSize()
 		++skipper;
 		if (NetMode == NET_PacketServer)
 			skipper += 2;
-		int ran = skipper[0];
-		++skipper;
-		while (ran-- > 0)
-			skipper += 2;
+
+		for (int i = 0; i < ranTics; ++i)
+			skipper += 3;
 
 		for (int i = 0; i < numTics; ++i)
 		{
@@ -550,6 +553,8 @@ static void ClientQuit(int clientNum, int newHost)
 
 static bool IsMapLoaded()
 {
+	// Boon TODO: Something with wipegamestate breaks here on multiple local clients. Also, something
+	// deep in the renderer doesn't seem to be initialized yet. Capture that first.
 	return gamestate == GS_LEVEL && wipegamestate == GS_LEVEL && gameaction == ga_nothing;
 }
 
@@ -671,7 +676,7 @@ static void GetPackets()
 			continue;
 		}
 
-		clientState.Flags &= ~(CF_MISSING_SEQ | CF_RETRANSMIT);
+		clientState.Flags &= ~(CF_MISSING | CF_RETRANSMIT);
 
 		if (NetBuffer[0] & NCMD_EXIT)
 		{
@@ -715,7 +720,13 @@ static void GetPackets()
 
 		const int playerCount = NetBuffer[curByte++];
 		const int totalTics = NetBuffer[curByte++];
-		const int curConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+		const int ranTics = NetBuffer[curByte++];
+
+		int baseConsistency = 0;
+		if (ranTics > 0)
+			baseConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+
+		const int consistencyAck = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
 		for (int p = 0; p < playerCount; ++p)
 		{
 			const int pNum = NetBuffer[curByte++];
@@ -733,11 +744,30 @@ static void GetPackets()
 			// Make sure client acks only get updated if from the host itself in packet server mode. Other clients
 			// won't be sending over any consistency information.
 			if (NetMode != NET_PacketServer || clientNum == Net_Arbitrator)
-				pState.ConsistencyAck = curConsistency;
+				pState.ConsistencyAck = consistencyAck;
 
-			int ran = NetBuffer[curByte++];
-			while (ran-- > 0)
-				pState.NetConsistency[pState.CurrentNetConsistency++ % BACKUPTICS] = (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+			TArray<int16_t> consistencies = {};
+			for (int r = 0; r < ranTics; ++r)
+			{
+				int ofs = NetBuffer[curByte++];
+				consistencies.Insert(ofs, (NetBuffer[curByte++] << 8) | NetBuffer[curByte++]);
+			}
+
+			for (int i = 0; i < consistencies.Size(); ++i)
+			{
+				const int cTic = baseConsistency + i;
+				if (cTic <= pState.CurrentNetConsistency)
+					continue;
+
+				if (cTic > pState.CurrentNetConsistency + 1 || !consistencies[i])
+				{
+					pState.Flags |= CF_MISSING_CON;
+					break;
+				}
+
+				pState.NetConsistency[cTic % BACKUPTICS] = consistencies[i];
+				pState.CurrentNetConsistency = cTic;
+			}
 
 			// Each tic within a given packet is given a sequence number to ensure that things were put
 			// back together correctly. Normally this wouldn't matter as much but since we need to keep
@@ -843,7 +873,7 @@ static void CheckConsistencies()
 		else
 		{
 			// Make sure we don't check past tics we haven't even ran yet.
-			const int limit = min<int>(clientState.CurrentLocalConsistency, clientState.CurrentNetConsistency);
+			const int limit = min<int>(CurrentConsistency - 1, clientState.CurrentNetConsistency);
 			while (clientState.LastVerifiedConsistency < limit)
 			{
 				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
@@ -892,7 +922,8 @@ static int16_t CalculateConsistency(int client, uint32_t seed)
 		seed ^= players[client].health;
 	}
 
-	return seed;
+	// Zero value consistencies are seen as invalid, so always have a valid value.
+	return (seed & 0xFFFF) ? seed : 1;
 }
 
 // Ran a tick, so prep the next consistencies to send out.
@@ -907,8 +938,10 @@ static void MakeConsistencies()
 	for (auto client : NetworkClients)
 	{
 		auto& clientState = ClientStates[client];
-		clientState.LocalConsistency[clientState.CurrentLocalConsistency++ % BACKUPTICS] = CalculateConsistency(client, rngSum);
+		clientState.LocalConsistency[CurrentConsistency % BACKUPTICS] = CalculateConsistency(client, rngSum);
 	}
+
+	++CurrentConsistency;
 }
 
 static bool CanMakeCommands()
@@ -1127,19 +1160,11 @@ void NetUpdate(int tics)
 		// If we can only resend, don't send clients any information that they already have. If
 		// we couldn't generate any commands because we're at the cap, instead send out a heartbeat
 		// containing the latest command.
-		if (resendOnly)
-		{
-			if (!(curState.Flags & CF_RETRANSMIT))
-			{
-				if (tics <= 0)
-					continue;
-
-				--startSequence;
-			}
-		}
+		if (resendOnly && !(curState.Flags & CF_RETRANSMIT) && tics <= 0)
+			continue;
 		
 		// Only send over our newest commands. If a client missed one, they'll let us know.
-		const int sequenceNum = (curState.Flags & CF_RETRANSMIT) ? curState.SequenceAck + 1 : startSequence;
+		const int sequenceNum = (curState.Flags & CF_RETRANSMIT_SEQ) ? curState.SequenceAck + 1 : startSequence;
 		int numTics = endSequence - sequenceNum;
 		if (numTics > MAXSENDTICS)
 		{
@@ -1151,7 +1176,7 @@ void NetUpdate(int tics)
 			// sending inputs like normal.
 		}
 
-		NetBuffer[0] = (curState.Flags & CF_MISSING_SEQ) ? NCMD_RETRANSMIT : 0;
+		NetBuffer[0] = (curState.Flags & CF_MISSING) ? NCMD_RETRANSMIT : 0;
 		// Sequence basis for our own packet.
 		NetBuffer[1] = (sequenceNum >> 24);
 		NetBuffer[2] = (sequenceNum >> 16);
@@ -1186,7 +1211,23 @@ void NetUpdate(int tics)
 			playerNums[0] = consoleplayer;
 		}
 		
-		NetBuffer[size++] = numTics;
+		NetBuffer[size++] = max<int>(numTics, 0);
+
+		int ran = 0;
+		const int baseConsistency = (curState.Flags & CF_RETRANSMIT_CON) ? curState.ConsistencyAck + 1 : LastSentConsistency;
+		// Don't bother sending over consistencies in packet server unless you're the host.
+		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
+			ran = CurrentConsistency - baseConsistency;
+
+		ran = max<int>(ran, 0);
+		NetBuffer[size++] = ran;
+		if (ran > 0)
+		{
+			NetBuffer[size++] = (baseConsistency >> 24);
+			NetBuffer[size++] = (baseConsistency >> 16);
+			NetBuffer[size++] = (baseConsistency >> 8);
+			NetBuffer[size++] = baseConsistency;
+		}
 
 		NetBuffer[size++] = (curState.CurrentNetConsistency >> 24);
 		NetBuffer[size++] = (curState.CurrentNetConsistency >> 16);
@@ -1202,7 +1243,8 @@ void NetUpdate(int tics)
 			++cmd;
 
 			auto& clientState = ClientStates[playerNums[i]];
-			// Time used to track latency.
+			// Time used to track latency since in packet server mode we want each
+			// client's latency to the server itself.
 			if (NetMode == NET_PacketServer)
 			{
 				cmd[0] = (clientState.AverageLatency >> 8);
@@ -1211,17 +1253,11 @@ void NetUpdate(int tics)
 				++cmd;
 			}
 
-			int ran = 0;
-			// Don't bother sending over consistencies in packet server unless you're the host. Also only
-			// send it on the first tic to prevent it from being reread constantly.
-			if (!resendOnly && (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator))
-				ran = max<int>(clientState.CurrentLocalConsistency - clientState.LastSentConsistency, 0);
-
-			cmd[0] = ran;
-			++cmd;
 			for (int r = 0; r < ran; ++r)
 			{
-				const int tic = (clientState.LastSentConsistency + r) % BACKUPTICS;
+				cmd[0] = r;
+				++cmd;
+				const int tic = (baseConsistency + r) % BACKUPTICS;
 				cmd[0] = (clientState.LocalConsistency[tic] >> 8);
 				++cmd;
 				cmd[0] = clientState.LocalConsistency[tic];
@@ -1273,12 +1309,8 @@ void NetUpdate(int tics)
 			HSendPacket(client, int(cmd - NetBuffer));
 	}
 
-	// Update these now that all the packets have been sent out.
-	if (!resendOnly)
-	{
-		for (auto client : NetworkClients)
-			ClientStates[client].LastSentConsistency = ClientStates[client].CurrentLocalConsistency;
-	}
+	// Update this now that all the packets have been sent out.
+	LastSentConsistency = CurrentConsistency;
 
 	// Listen for other packets. This has to also come after sending so the player that sent
 	// data to themselves gets it immediately (important for singleplayer, otherwise there
