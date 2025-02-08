@@ -642,7 +642,7 @@ static void CheckLevelStart(int client, int delayTics)
 			{
 				int delay = 0;
 				if (client != Net_Arbitrator)
-					delay = int(ceil((highestAvg - ClientStates[client].AverageLatency) * MS2Sec * TICRATE));
+					delay = int(floor((highestAvg - ClientStates[client].AverageLatency) * MS2Sec * TICRATE));
 
 				NetBuffer[1] = (delay << 8);
 				NetBuffer[2] = delay;
