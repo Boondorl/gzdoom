@@ -78,14 +78,17 @@ struct FClientNetState
 	uint64_t	SentTime[MAXSENDTICS] = {};	// Timestamp for when we sent out the packet to this client.
 	uint64_t	RecvTime[MAXSENDTICS] = {};	// Timestamp for when the client acknowledged our last packet. If in packet server mode, this is the server's delta.
 
+	int				Flags = 0;				// State of this client.
+
+	int				ResendSequenceFrom = -1; // If >= 0, send from this sequence up to the most recent one, capped to 17.
 	int				SequenceAck = -1;		// The last sequence the client reported from us.
 	int 			CurrentSequence = -1;	// The last sequence we've gotten from this client.
-	int				Flags = 0;				// State of this client.
 
 	// Every packet includes consistencies for tics that client ran. When
 	// a world tic is ran, the local client will store all the consistencies
 	// of the clients in their LocalConsistency. Then the consistencies will
 	// be checked against retroactively as they come in.
+	int ResendConsistencyFrom = -1;				// If >= 0, send from this consistency up to the most recent one, capped to 17.
 	int ConsistencyAck = -1;					// Last consistency the client reported from us.
 	int LastVerifiedConsistency = -1;			// Last consistency we checked from this client. If < CurrentNetConsistency, run through them.
 	int CurrentNetConsistency = -1;				// Last consistency we got from this client.
@@ -101,18 +104,21 @@ enum ENetMode : uint8_t
 
 // New packet structure:
 //
-// Header:
 //  One byte for the net command flags.
-//  Four bytes for the base sequence the client is working from.
-//  Four bytes for the highest confirmed sequence the client got from us.
+//  Four bytes for the last sequence we got from that client.
+//  Four bytes for the last consistency we got from that client.
 //  If NCMD_QUITTERS set, one byte for the number of players followed by one byte for each player's consolenum. Packet server mode only.
 //  One byte for the number of players.
-//  If NCMD_XTICS set, one byte for the number of additional tics - 3. Otherwise NCMD_1/2TICS determines tic count.
-//  Four bytes for the highest confirmed consistency the client got from us.
+//  One byte for the number of tics.
+//   If > 0, four bytes for the base sequence being worked from.
+//  One byte for the number of world tics ran.
+//   If > 0, four bytes for the base consistency being worked from.
 //  For each player:
 //   One byte for the player number.
-//   Eight bytes for the time in ms the packet was sent out.
-//   One byte for the number of consistencies followed by two bytes for each consistency.
+//   Two bytes for the latency to the host (sent from host; packet server mode only).
+//   For each consistency:
+//    One byte for the delta from the base consistency.
+//    Two bytes for each consistency.
 //   For each tic:
 //    One byte for the delta from the base sequence.
 //    The remaining command and event data for that player.
