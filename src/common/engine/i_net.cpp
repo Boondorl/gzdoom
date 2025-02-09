@@ -583,9 +583,6 @@ bool Host_CheckForConnects (void *userdata)
 				SendConAck (*connectedPlayers, doomcom.numplayers);
 			}
 			break;
-
-		case PRE_KEEPALIVE:
-			break;
 		}
 	}
 	if (*connectedPlayers < doomcom.numplayers)
@@ -657,13 +654,30 @@ bool Host_SendAllHere (void *userdata)
 	// Check for replies.
 	while ( (from = PreGet (&packet, sizeof(packet), false)) )
 	{
-		if (packet.Fake == PRE_FAKE && packet.Message == PRE_ALLHEREACK)
+		if (packet.Fake != PRE_FAKE)
+			continue;
+
+		if (packet.Message == PRE_ALLHEREACK)
 		{
 			node = FindNode (from);
 			if (node >= 0)
-			{
 				*gotack |= 1 << node;
+		}
+		else if (packet.Message == PRE_CONNECT)
+		{
+			// If someone is still trying to connect, let them know it's either too
+			// late or that they need to move on to the next stage.
+			node = FindNode(from);
+			if (node == -1)
+			{
+				packet.Message = PRE_ALLFULL;
 				PreSend(&packet, 2, from);
+			}
+			else
+			{
+				packet.Message = PRE_CONACK;
+				packet.NumNodes = packet.NumPresent = doomcom.numplayers;
+				PreSend(&packet, 4, from);
 			}
 		}
 	}
@@ -835,9 +849,10 @@ bool Guest_WaitForOthers (void *userdata)
 					// sendaddress[] from the All Here packet.
 					sendaddress[node].sin_family = AF_INET;
 				}
+
+				I_NetMessage("Received All Here, sending ACK.");
 			}
 
-			I_NetMessage ("Received All Here, sending ACK.");
 			packet.Fake = PRE_FAKE;
 			packet.Message = PRE_ALLHEREACK;
 			PreSend (&packet, 2, &sendaddress[0]);
@@ -852,10 +867,6 @@ bool Guest_WaitForOthers (void *userdata)
 			break;
 		}
 	}
-
-	packet.Fake = PRE_FAKE;
-	packet.Message = PRE_KEEPALIVE;
-	PreSend(&packet, 2, &sendaddress[0]);
 
 	return false;
 }
