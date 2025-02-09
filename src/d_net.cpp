@@ -2842,14 +2842,7 @@ void Net_SkipCommand(int cmd, uint8_t **stream)
 // This was taken out of shared_hud, because UI code shouldn't do low level calculations that may change if the backing implementation changes.
 int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 {
-	int consoleDelay = 0, arbiDelay = 0;
-	for (int i = 0; i < MAXSENDTICS; ++i)
-	{
-		//arbiDelay += ClientStates[Net_Arbitrator].Delay[i];
-		//consoleDelay += ClientStates[consoleplayer].Delay[i];
-	}
-
-	const int gameDelayMs = max<int>(consoleDelay, arbiDelay) * doomcom.ticdup * 1000 / (MAXSENDTICS * TICRATE);
+	const int gameDelayMs = (ClientTic - gametic) * 1000 / TICRATE;
 	int severity = 0;
 	if (gameDelayMs >= 160)
 		severity = 3;
@@ -2858,8 +2851,8 @@ int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 	else if (gameDelayMs >= 80)
 		severity = 1;
 	
-	*localDelay = consoleDelay;
-	*arbitratorDelay = arbiDelay;
+	*localDelay = gameDelayMs;
+	*arbitratorDelay = NetMode == NET_PacketServer ? ClientStates[consoleplayer].AverageLatency : ClientStates[Net_Arbitrator].AverageLatency;
 	return severity;
 }
 
