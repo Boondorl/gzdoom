@@ -1278,7 +1278,7 @@ void DBaseStatusBar::DrawWaiting() const
 	bool isWaiting = false;
 	for (auto client : NetworkClients)
 	{
-		if (client != consoleplayer && players[client].waiting)
+		if (players[client].waiting)
 		{
 			isWaiting = true;
 			text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client + 1);

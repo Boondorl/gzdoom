@@ -403,8 +403,6 @@ static void HU_DrawTimeRemaining (int y)
 //
 //==========================================================================
 
-extern uint64_t I_msTime();
-
 static void HU_DrawPlayer (player_t *player, bool highlight, int col1, int col2, int col3, int col4, int col5, int maxnamewidth, int y, int ypadding, int height)
 {
 	int color;
