@@ -117,6 +117,8 @@ void I_WaitVBL(int count)
 	I_SetFrameTime();
 }
 
+void NetUpdate(int tics, bool updateOnly);
+
 int I_WaitForTic(int prevtic, double const ticrate)
 {
 	// Waits until the current tic is greater than prevtic. Time must not be frozen.
@@ -127,6 +129,10 @@ int I_WaitForTic(int prevtic, double const ticrate)
 		// Windows-specific note:
 		// The minimum amount of time a thread can sleep is controlled by timeBeginPeriod.
 		// We set this to 1 ms in DoMain.
+
+		// We still need to get packets while idling. Do this before the time calculation for better
+		// accuracy.
+		NetUpdate(0, true);
 
 		const uint64_t next = FirstFrameStartTime + TicToNS(prevtic + 1, ticrate);
 		const uint64_t now = I_nsTime();

@@ -513,6 +513,9 @@ bool Wiper_Burn::Run(int ticks)
 	return done || (BurnTime > 40);
 }
 
+void NetUpdate(int tics, bool updateOnly);
+
+extern int GameTicRate;
 
 void PerformWipe(FTexture* startimg, FTexture* endimg, int wipe_type, bool stopsound, std::function<void()> overlaydrawer)
 {
@@ -530,10 +533,18 @@ void PerformWipe(FTexture* startimg, FTexture* endimg, int wipe_type, bool stops
 	auto wiper = Wiper::Create(wipe_type);
 	wiper->SetTextures(starttex, endtex);
 
-	wipestart = I_msTime();
+	int netLastTime = wipestart = I_msTime();
 
 	do
 	{
+		// Since this hijacks the main thread we still need to listen for and send out heartbeat packets, otherwise
+		// it appears as though we disconnected.
+		const int netEnterTime = I_msTime();
+		const int tics = (netEnterTime - netLastTime) / 1000.0 * GameTicRate;
+		NetUpdate(tics, true);
+		if (tics > 0)
+			netLastTime = netEnterTime;
+
 		if (wiper->Interpolatable() && !cl_capfps)
 		{
 			nowtime = I_msTime();
