@@ -961,7 +961,7 @@ void D_Display ()
 	}
 
 	// [RH] Allow temporarily disabling wipes
-	if (NoWipe || !CanWipe())
+	if (netgame || NoWipe || !CanWipe())
 	{
 		if (NoWipe > 0) NoWipe--;
 		wipestart = nullptr;
