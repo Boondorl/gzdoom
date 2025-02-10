@@ -124,7 +124,7 @@ enum ENetMode : uint8_t
 //    The remaining command and event data for that player.
 
 // Create any new ticcmds and broadcast to other players.
-void NetUpdate(int tics);
+void NetUpdate(int tics, bool updateOnly);
 
 // Broadcasts special packets to other players
 //	to notify of game exit
