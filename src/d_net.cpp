@@ -115,7 +115,7 @@ enum ELevelStartStatus
 // A world tick cannot be ran until CurrentSequence > gametic for all clients.
 
 #define NetBuffer (doomcom.data)
-ENetMode NetMode = NET_PeerToPeer;
+ENetMode			NetMode = NET_PeerToPeer;
 int 				ClientTic = 0;
 usercmd_t			LocalCmds[LOCALCMDTICS] = {};
 int					LastSentConsistency = 0;		// Last consistency we sent out. If < CurrentConsistency, send them out.
@@ -127,10 +127,8 @@ FClientNetState		ClientStates[MAXPLAYERS] = {};
 // instead of having to rely on pulling from the correct local buffers. It also ensures all commands are
 // executed over the net at the exact same tick.
 static size_t	LocalNetBufferSize = 0;
-static uint8_t	LocalNetBuffer[MAX_MSGLEN];
+static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 
-// Used for storing network delay times. This is separate since it's not actually tied to
-// whatever sequence a client is currently on, only how many packets we've gotten from them.
 static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
 
 static int  LevelStartDebug = 0;
@@ -138,7 +136,7 @@ static int	LevelStartDelay = 0; // While this is > 0, don't start generating pac
 static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
 static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
 
-static int FullLatencyCycle = MAXSENDTICS * 5;	// Give ~5 seconds to gather latency info about clients.
+static int FullLatencyCycle = MAXSENDTICS * 5;	// Give ~5 seconds to gather latency info about clients on boot up.
 static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
 
 static int 	EnterTic = 0;
@@ -157,13 +155,7 @@ CVAR(Bool, vid_dontdowait, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, vid_lowerinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
 CVAR(Bool, net_ticbalance, false, CVAR_SERVERINFO | CVAR_NOSAVE)
-CUSTOM_CVAR(Int, net_extratic, 0, CVAR_SERVERINFO | CVAR_NOSAVE)
-{
-	if (self < 0)
-		self = 0;
-	else if (self > 2)
-		self = 2;
-}
+CVAR(Bool, net_extratic, false, CVAR_SERVERINFO | CVAR_NOSAVE)
 
 // Used to write out all network events that occured leading up to the next tick.
 static struct NetEventData
@@ -1639,9 +1631,8 @@ bool D_CheckNetGame()
 				v != nullptr ? "forced" : "auto");
 		}
 
-		// TODO: Change this to a bool
 		if (Args->CheckParm("-extratic"))
-			net_extratic = 1;
+			net_extratic = true;
 	}
 
 	// [RH] Setup user info
@@ -1967,7 +1958,7 @@ void Net_CheckLastReceived()
 		// Try again in the next MaxDelay tics.
 		LastGameUpdate = EnterTic;
 
-		if (NetMode == NET_PeerToPeer || consoleplayer == Net_Arbitrator)
+		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
 		{
 			// For any clients that are currently lagging behind, send our data back over in case they were having trouble
 			// receiving it. We have to do this in case our data is actually the stall condition for the other client.

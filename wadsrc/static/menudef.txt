@@ -2383,16 +2383,9 @@ OptionMenu NetworkOptions protected
 	Slider "$NETMNU_LERPTHRESHOLD",			"cl_rubberband_threshold", 0.0, 256.0, 8.0
 	StaticText " "
 	StaticText "$NETMNU_HOSTOPTIONS", 1
-	Option "$NETMNU_EXTRATICS",				"net_extratic", "ExtraTicMode"
+	Option "$NETMNU_EXTRATICS",				"net_extratic", "OnOff"
 	Option "$NETMNU_TICBALANCE",			"net_ticbalance", "OnOff"
 
-}
-
-OptionValue ExtraTicMode
-{
-	0, "$OPTVAL_NONE"
-	1, "1"
-	2, "$OPTVAL_ALLUNACKNOWLEDGED"
 }
 
 OptionValue "LookupOrder"
