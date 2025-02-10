@@ -996,7 +996,7 @@ static bool CanMakeCommands()
 	return isGood;
 }
 
-void NetUpdate(int tics, bool updateOnly)
+void NetUpdate(int tics)
 {
 	GetPackets();
 	if (tics <= 0)
@@ -1020,9 +1020,6 @@ void NetUpdate(int tics, bool updateOnly)
 
 		CheckConsistencies();
 	}
-
-	if (updateOnly)
-		return;
 
 	// Sit idle after the level has loaded until everyone is ready to go. This keeps players better
 	// in sync with each other than relying on tic balancing to speed up/slow down the game and mirrors
@@ -1876,7 +1873,7 @@ void TryRunTics()
 	// Listen for other clients and send out data as needed. This is also
 	// needed for singleplayer! But is instead handled entirely through local
 	// buffers. This has a limit of 17 tics that can be generated.
-	NetUpdate(totalTics, false);
+	NetUpdate(totalTics);
 
 	LastEnterTic = EnterTic;
 
