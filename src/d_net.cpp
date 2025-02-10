@@ -570,9 +570,7 @@ static void ClientQuit(int clientNum, int newHost)
 
 static bool IsMapLoaded()
 {
-	// Boon TODO: Something with wipegamestate breaks here on multiple local clients. Also, something
-	// deep in the renderer doesn't seem to be initialized yet. Capture that first.
-	return gamestate == GS_LEVEL && wipegamestate == GS_LEVEL && gameaction == ga_nothing;
+	return gamestate == GS_LEVEL;
 }
 
 static void CheckLevelStart(int client, int delayTics)
