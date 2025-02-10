@@ -1836,6 +1836,15 @@ static void TicStabilityEnd()
 	stabilityticduration = min(stabilityendtime - stabilitystarttime, (uint64_t)1'000'000);
 }
 
+// Don't stabilize tics that are going to have incredibly long pauses in them.
+static bool ShouldStabilizeTick()
+{
+	return gameaction != ga_recordgame && gameaction != ga_newgame && gameaction != ga_newgame2
+			&& gameaction != ga_loadgame && gameaction != ga_loadgamehidecon && gameaction != ga_autoloadgame && gameaction != ga_loadgameplaydemo
+			&& gameaction != ga_savegame && gameaction != ga_autosave
+			&& gameaction != ga_worlddone && gameaction != ga_completed && gameaction != ga_screenshot && gameaction != ga_fullconsole;
+}
+
 //
 // TryRunTics
 //
@@ -1855,8 +1864,11 @@ void TryRunTics()
 	else
 		EnterTic = I_GetTime();
 
+	const bool stabilize = ShouldStabilizeTick();
 	const int startCommand = ClientTic;
-	const int totalTics = EnterTic - LastEnterTic;
+	int totalTics = EnterTic - LastEnterTic;
+	if (totalTics > 1 && (singletics || !stabilize))
+		totalTics = 1;
 
 	// Listen for other clients and send out data as needed. This is also
 	// needed for singleplayer! But is instead handled entirely through local
@@ -1885,12 +1897,8 @@ void TryRunTics()
 	// If the amount of tics to run is falling behind the amount of available tics,
 	// speed the playsim up a bit to help catch up.
 	int runTics = min<int>(totalTics, availableTics);
-	if (totalTics > 0 && totalTics < availableTics - 1)
+	if (totalTics > 0 && totalTics < availableTics - 1 && !singletics && stabilize)
 		++runTics;
-
-	// If loading into the next level, only execute one tick.
-	if (runTics > 1 && (singletics || gameaction == ga_worlddone))
-		runTics = 1;
 	
 	// If there are no tics to run, check for possible stall conditions and new
 	// commands to predict.
@@ -1930,7 +1938,8 @@ void TryRunTics()
 	P_UnPredictPlayer();
 	while (runTics--)
 	{
-		TicStabilityBegin();
+		if (stabilize)
+			TicStabilityBegin();
 
 		if (advancedemo)
 			D_DoAdvanceDemo();
@@ -1941,7 +1950,8 @@ void TryRunTics()
 		MakeConsistencies();
 		++gametic;
 
-		TicStabilityEnd();
+		if (stabilize)
+			TicStabilityEnd();
 	}
 	P_PredictPlayer(&players[consoleplayer]);
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
