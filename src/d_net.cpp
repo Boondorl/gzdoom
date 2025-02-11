@@ -142,6 +142,10 @@ static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
 static int 	EnterTic = 0;
 static int	LastEnterTic = 0;
 
+static int	CommandsAhead = 0;		// In packet server mode, the host will let us know if we're outpacing them.
+static int	SkipCommandTimer = 0;	// Tracker for when to check for skipping commands. ~0.5 seconds in a row of being ahead will start skipping.
+static int	SkipCommandAmount = 0;	// Amount of commands to skip. Try and batch skip them all at once since we won't be able to get an update until the full RTT.
+
 void D_ProcessEvents(void); 
 void G_BuildTiccmd(usercmd_t *cmd);
 void D_DoAdvanceDemo(void);
@@ -340,6 +344,7 @@ void Net_ClearBuffers()
 	LastSentConsistency = CurrentConsistency = 0;
 	LastEnterTic = LastGameUpdate = EnterTic;
 	gametic = ClientTic = 0;
+	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 	NetEvents.ResetStream();
 
 	LevelStartAck = 0;
@@ -355,6 +360,7 @@ void Net_ClearBuffers()
 
 void Net_ResetCommands(bool midTic)
 {
+	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 	ClientTic = gametic + midTic;
 	const int tic = (gametic - !midTic) / doomcom.ticdup;
 	for (auto client : NetworkClients)
@@ -413,10 +419,12 @@ static int GetNetBufferSize()
 	const int ranTics = NetBuffer[totalBytes++];
 	if (ranTics > 0)
 		totalBytes += 4;
+	if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator)
+		++totalBytes;
 
 	// Minimum additional packet size per player:
 	// 1 byte for player number
-	// 2 bytes for the average latency if in packet server
+	// If in packet server mode and from the host, 2 bytes for the latency to the host
 	int padding = 1;
 	if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator)
 		padding += 2;
@@ -752,6 +760,9 @@ static void GetPackets()
 		const int ranTics = NetBuffer[curByte++];
 		if (ranTics > 0)
 			baseConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+
+		if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
+			CommandsAhead = NetBuffer[curByte++];
 		
 		for (int p = 0; p < playerCount; ++p)
 		{
@@ -976,22 +987,115 @@ static void MakeConsistencies()
 	++CurrentConsistency;
 }
 
-static bool CanMakeCommands()
+static bool Net_UpdateStatus()
 {
-	if (LevelStartStatus != LST_READY || LevelStartDelay > 0)
+	if (!netgame || demoplayback || NetworkClients.Size() <= 1)
+		return true;
+
+	if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
 		return false;
 
-	bool isGood = true;
-	for (auto client : NetworkClients)
+	// Check against the previous tick in case we're recovering from a huge
+	// system hiccup. If the game has taken too long to update, it's likely
+	// another client is hanging up the game.
+	if (LastEnterTic - LastGameUpdate >= MAXSENDTICS * doomcom.ticdup)
 	{
-		if (players[client].waiting)
+		// Try again in the next MaxDelay tics.
+		LastGameUpdate = EnterTic;
+
+		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
 		{
-			isGood = false;
-			break;
+			// Use a missing packet here to tell the other players to retransmit instead of simply retransmitting our
+			// own data over instantly. This avoids flooding the network at a time where it's not opportune to do so.
+			const int curTic = gametic / doomcom.ticdup;
+			for (auto client : NetworkClients)
+			{
+				if (client == consoleplayer)
+					continue;
+
+				if (ClientStates[client].CurrentSequence < curTic)
+				{
+					ClientStates[client].Flags |= CF_MISSING;
+					players[client].waiting = true;
+				}
+				else
+				{
+					players[client].waiting = false;
+				}
+			}
+		}
+		else
+		{
+			// In packet server mode, the client is waiting for data from the host and hasn't recieved it yet. Send
+			// our data back over in case the host is waiting for us.
+			ClientStates[Net_Arbitrator].Flags |= CF_MISSING;
+			players[Net_Arbitrator].waiting = true;
 		}
 	}
 
-	return isGood;
+	if (LevelStartStatus == LST_HOST)
+		return false;
+
+	for (auto client : NetworkClients)
+	{
+		if (players[client].waiting)
+			return false;
+	}
+
+	// Wait for the game to stabilize a bit after launch before skipping commands.
+	int lowestDiff = INT_MIN;
+	if (gametic > TICRATE * 3 * doomcom.ticdup)
+	{
+		lowestDiff = INT_MAX;
+		if (NetMode != NET_PacketServer)
+		{
+			// Check if everyone has a buffer for us. If they do, we're too far ahead.
+			for (auto client : NetworkClients)
+			{
+				if (client != consoleplayer)
+				{
+					int diff = ClientStates[client].SequenceAck - ClientStates[client].CurrentSequence;
+					if (diff < lowestDiff)
+						lowestDiff = diff;
+				}
+			}
+		}
+		else if (consoleplayer == Net_Arbitrator)
+		{
+			// If we're consistenty ahead of the highest sequence player, slow down.
+			const int curTic = ClientTic / doomcom.ticdup;
+			for (auto client : NetworkClients)
+			{
+				if (client != Net_Arbitrator)
+				{
+					int diff = curTic - ClientStates[client].CurrentSequence;
+					if (diff < lowestDiff)
+						lowestDiff = diff;
+				}
+			}
+		}
+		else
+		{
+			// Check if the host is reporting that we're too far ahead of them.
+			lowestDiff = CommandsAhead;
+		}
+	}
+
+	if (lowestDiff > 0)
+	{
+		if (SkipCommandTimer++ > (TICRATE / 2) * doomcom.ticdup)
+		{
+			SkipCommandTimer = 0;
+			if (SkipCommandAmount <= 0)
+				SkipCommandAmount = lowestDiff;
+		}
+	}
+	else
+	{
+		SkipCommandTimer = 0;
+	}
+
+	return true;
 }
 
 void NetUpdate(int tics)
@@ -1062,19 +1166,22 @@ void NetUpdate(int tics)
 
 		LevelStartDelay = max<int>(LevelStartDelay - tics, 0);
 	}
-
-	if (LevelStartStatus != LST_WAITING && LevelStartDelay <= 0)
-		Net_CheckLastReceived();
-
-	const bool makeCmds = CanMakeCommands();
+		
+	const bool netGood = Net_UpdateStatus();
 	const int startTic = ClientTic;
-	tics = min<int>(tics, TICRATE * 1 * doomcom.ticdup);
+	tics = min<int>(tics, MAXSENDTICS * doomcom.ticdup);
 	for (int i = 0; i < tics; ++i)
 	{
 		I_StartTic();
 		D_ProcessEvents();
-		if (pauseext || !makeCmds)
+		if (pauseext || !netGood)
 			break;
+
+		if (SkipCommandAmount > 0)
+		{
+			--SkipCommandAmount;
+			continue;
+		}
 		
 		G_BuildTiccmd(&LocalCmds[ClientTic++ % LOCALCMDTICS]);
 		if (doomcom.ticdup == 1)
@@ -1144,22 +1251,23 @@ void NetUpdate(int tics)
 		}
 	}
 
+	const int newestTic = ClientTic / doomcom.ticdup;
 	if (demoplayback)
 	{
 		// Don't touch net command data while playing a demo, as it'll already exist.
 		for (auto client : NetworkClients)
-			ClientStates[client].CurrentSequence = (ClientTic / doomcom.ticdup);
+			ClientStates[client].CurrentSequence = newestTic;
 
 		return;
 	}
 
 	int startSequence = startTic / doomcom.ticdup;
-	int endSequence = ClientTic / doomcom.ticdup;
+	int endSequence = newestTic;
 	int quitters = 0;
 	int quitNums[MAXPLAYERS];
 	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
 	{
-		// Boon TODO: This is sending a lot of duplicate packets for some reason...
+		// TODO: This is sending a lot of duplicate packets for some reason...
 		// In packet server mode special handling is used to ensure the host only
 		// sends out available tics when ready instead of constantly shotgunning
 		// them out as they're made locally.
@@ -1241,7 +1349,7 @@ void NetUpdate(int tics)
 		}
 
 		const int sequenceNum = curState.ResendSequenceFrom >= 0 ? curState.ResendSequenceFrom : startSequence;
-		const int numTics = clamp<int>(endSequence - sequenceNum, 0, 17);
+		const int numTics = clamp<int>(endSequence - sequenceNum, 0, MAXSENDTICS);
 		if (curState.ResendSequenceFrom >= 0)
 		{
 			curState.ResendSequenceFrom += numTics;
@@ -1270,7 +1378,7 @@ void NetUpdate(int tics)
 		int ran = 0;
 		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
 		{
-			ran = clamp<int>(CurrentConsistency - baseConsistency, 0, 17);
+			ran = clamp<int>(CurrentConsistency - baseConsistency, 0, MAXSENDTICS);
 			if (curState.ResendConsistencyFrom >= 0)
 			{
 				curState.ResendConsistencyFrom += ran;
@@ -1287,6 +1395,9 @@ void NetUpdate(int tics)
 			NetBuffer[size++] = (baseConsistency >> 8);
 			NetBuffer[size++] = baseConsistency;
 		}
+
+		if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
+			NetBuffer[size++] = client == Net_Arbitrator ? 0 : max<int>(curState.CurrentSequence - newestTic, 0);
 
 		// Client commands.
 
@@ -1953,48 +2064,6 @@ void TryRunTics()
 	}
 	P_PredictPlayer(&players[consoleplayer]);
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
-}
-
-void Net_CheckLastReceived()
-{
-	// Check against the previous tick in case we're recovering from a huge
-	// system hiccup. If the game has taken too long to update, it's likely
-	// another client is hanging up the game.
-	const int MaxDelay = TICRATE * 1 * doomcom.ticdup;
-	if (LastEnterTic - LastGameUpdate >= MaxDelay)
-	{
-		// Try again in the next MaxDelay tics.
-		LastGameUpdate = EnterTic;
-
-		if (NetMode != NET_PacketServer || consoleplayer == Net_Arbitrator)
-		{
-			// For any clients that are currently lagging behind, send our data back over in case they were having trouble
-			// receiving it. We have to do this in case our data is actually the stall condition for the other client.
-			const int curTic = gametic / doomcom.ticdup;
-			for (auto client : NetworkClients)
-			{
-				if (client == consoleplayer)
-					continue;
-
-				if (ClientStates[client].CurrentSequence < curTic)
-				{
-					ClientStates[client].Flags |= CF_RETRANSMIT;
-					players[client].waiting = true;
-				}
-				else
-				{
-					players[client].waiting = false;
-				}
-			}
-		}
-		else
-		{
-			// In packet server mode, the client is waiting for data from the host and hasn't recieved it yet. Send
-			// our data back over in case the host is waiting for us.
-			ClientStates[Net_Arbitrator].Flags |= CF_RETRANSMIT;
-			players[Net_Arbitrator].waiting = true;
-		}
-	}
 }
 
 void Net_NewClientTic()
