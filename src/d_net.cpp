@@ -129,6 +129,7 @@ FClientNetState		ClientStates[MAXPLAYERS] = {};
 static size_t	LocalNetBufferSize = 0;
 static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 
+static uint8_t	CurrentLobbyID = 0u;	// Ignore commands not from this lobby (useful when transitioning levels).
 static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
 
 static int  LevelStartDebug = 0;
@@ -338,6 +339,7 @@ void Net_ClearBuffers()
 	LocalNetBufferSize = 0;
 	Net_Arbitrator = 0;
 
+	CurrentLobbyID = 0u;
 	NetworkClients.Clear();
 	NetMode = NET_PeerToPeer;
 	netgame = multiplayer = false;
@@ -360,6 +362,7 @@ void Net_ClearBuffers()
 
 void Net_ResetCommands(bool midTic)
 {
+	++CurrentLobbyID;
 	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 	ClientTic = gametic + midTic;
 	const int tic = (gametic - !midTic) / doomcom.ticdup;
@@ -408,7 +411,7 @@ static int GetNetBufferSize()
 	}
 
 	// Header info
-	int totalBytes = 9;
+	int totalBytes = 10;
 	if (NetBuffer[0] & NCMD_QUITTERS)
 		totalBytes += NetBuffer[totalBytes] + 1;
 
@@ -731,17 +734,14 @@ static void GetPackets()
 			continue;
 		}
 
-		// Make sure commands from the previous level get ignored.
-		if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
-			continue;
-
 		if (NetBuffer[0] & NCMD_RETRANSMIT)
 			clientState.Flags |= CF_RETRANSMIT;
 
-		clientState.SequenceAck = (NetBuffer[1] << 24) | (NetBuffer[2] << 16) | (NetBuffer[3] << 8) | NetBuffer[4];
-		const int consistencyAck = (NetBuffer[5] << 24) | (NetBuffer[6] << 16) | (NetBuffer[7] << 8) | NetBuffer[8];
+		const bool validID = NetBuffer[1] == CurrentLobbyID;
+		clientState.SequenceAck = (NetBuffer[2] << 24) | (NetBuffer[3] << 16) | (NetBuffer[4] << 8) | NetBuffer[5];
+		const int consistencyAck = (NetBuffer[6] << 24) | (NetBuffer[7] << 16) | (NetBuffer[8] << 8) | NetBuffer[9];
 
-		int curByte = 9;
+		int curByte = 10;
 		if (NetBuffer[0] & NCMD_QUITTERS)
 		{
 			int numPlayers = NetBuffer[curByte++];
@@ -818,6 +818,10 @@ static void GetPackets()
 				uint8_t* skipper = &NetBuffer[curByte];
 				curByte += SkipUserCmdMessage(skipper);
 			}
+
+			// If it's from a previous waiting period, the commands are no longer relevant.
+			if (!validID)
+				continue;
 
 			for (int i = 0; i < data.Size(); ++i)
 			{
@@ -1044,7 +1048,7 @@ static bool Net_UpdateStatus()
 
 	// Wait for the game to stabilize a bit after launch before skipping commands.
 	int lowestDiff = INT_MIN;
-	if (gametic > TICRATE * 3 * doomcom.ticdup)
+	if (gametic > TICRATE * 2 * doomcom.ticdup)
 	{
 		lowestDiff = INT_MAX;
 		if (NetMode != NET_PacketServer)
@@ -1306,18 +1310,19 @@ void NetUpdate(int tics)
 		NetBuffer[0] = (curState.Flags & CF_MISSING) ? NCMD_RETRANSMIT : 0;
 		curState.Flags &= ~CF_MISSING;
 
+		NetBuffer[1] = CurrentLobbyID;
 		// Last sequence we got from this client.
-		NetBuffer[1] = (curState.CurrentSequence >> 24);
-		NetBuffer[2] = (curState.CurrentSequence >> 16);
-		NetBuffer[3] = (curState.CurrentSequence >> 8);
-		NetBuffer[4] = curState.CurrentSequence;
+		NetBuffer[2] = (curState.CurrentSequence >> 24);
+		NetBuffer[3] = (curState.CurrentSequence >> 16);
+		NetBuffer[4] = (curState.CurrentSequence >> 8);
+		NetBuffer[5] = curState.CurrentSequence;
 		// Last consistency we got from this client.
-		NetBuffer[5] = (curState.CurrentNetConsistency >> 24);
-		NetBuffer[6] = (curState.CurrentNetConsistency >> 16);
-		NetBuffer[7] = (curState.CurrentNetConsistency >> 8);
-		NetBuffer[8] = curState.CurrentNetConsistency;
+		NetBuffer[6] = (curState.CurrentNetConsistency >> 24);
+		NetBuffer[7] = (curState.CurrentNetConsistency >> 16);
+		NetBuffer[8] = (curState.CurrentNetConsistency >> 8);
+		NetBuffer[9] = curState.CurrentNetConsistency;
 
-		size_t size = 9;
+		size_t size = 10;
 		if (quitters > 0)
 		{
 			NetBuffer[0] |= NCMD_QUITTERS;
