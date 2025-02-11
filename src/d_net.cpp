@@ -124,7 +124,7 @@ static int	LevelStartDelay = 0; // While this is > 0, don't start generating pac
 static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
 static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
 
-static int FullLatencyCycle = MAXSENDTICS * 5;	// Give ~5 seconds to gather latency info about clients on boot up.
+static int FullLatencyCycle = MAXSENDTICS * 3;	// Give ~3 seconds to gather latency info about clients on boot up.
 static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
 
 static int 	EnterTic = 0;
@@ -722,7 +722,8 @@ static void GetPackets()
 			clientState.Flags |= CF_RETRANSMIT;
 
 		const bool validID = NetBuffer[1] == CurrentLobbyID;
-		clientState.SequenceAck = (NetBuffer[2] << 24) | (NetBuffer[3] << 16) | (NetBuffer[4] << 8) | NetBuffer[5];
+		if (validID)
+			clientState.SequenceAck = (NetBuffer[2] << 24) | (NetBuffer[3] << 16) | (NetBuffer[4] << 8) | NetBuffer[5];
 		const int consistencyAck = (NetBuffer[6] << 24) | (NetBuffer[7] << 16) | (NetBuffer[8] << 8) | NetBuffer[9];
 
 		int curByte = 10;
@@ -746,7 +747,12 @@ static void GetPackets()
 			baseConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
 
 		if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
-			CommandsAhead = NetBuffer[curByte++];
+		{
+			if (validID)
+				CommandsAhead = NetBuffer[curByte++];
+			else
+				++curByte;
+		}
 		
 		for (int p = 0; p < playerCount; ++p)
 		{
@@ -851,7 +857,7 @@ static void GetPackets()
 
 static void SendHeartbeat()
 {
-	// Boon TODO: This could probably also be used to determine if there's packets
+	// TODO: This could probably also be used to determine if there's packets
 	// missing and a retransmission is needed.
 	const uint64_t time = I_msTime();
 	for (auto client : NetworkClients)
@@ -1956,10 +1962,9 @@ void TryRunTics()
 	else
 		EnterTic = I_GetTime();
 
-	const bool stabilize = ShouldStabilizeTick();
 	const int startCommand = ClientTic;
 	int totalTics = EnterTic - LastEnterTic;
-	if (totalTics > 1 && (singletics || !stabilize))
+	if (totalTics > 1 && singletics)
 		totalTics = 1;
 
 	// Listen for other clients and send out data as needed. This is also
@@ -1989,7 +1994,7 @@ void TryRunTics()
 	// If the amount of tics to run is falling behind the amount of available tics,
 	// speed the playsim up a bit to help catch up.
 	int runTics = min<int>(totalTics, availableTics);
-	if (totalTics > 0 && totalTics < availableTics - 1 && !singletics && stabilize)
+	if (totalTics > 0 && totalTics < availableTics - 1 && !singletics)
 		++runTics;
 	
 	// If there are no tics to run, check for possible stall conditions and new
@@ -2030,6 +2035,8 @@ void TryRunTics()
 	P_UnPredictPlayer();
 	while (runTics--)
 	{
+		const bool loadBarrier = gameaction == ga_worlddone;
+		const bool stabilize = ShouldStabilizeTick();
 		if (stabilize)
 			TicStabilityBegin();
 
@@ -2044,6 +2051,9 @@ void TryRunTics()
 
 		if (stabilize)
 			TicStabilityEnd();
+
+		if (loadBarrier)
+			break;
 	}
 	P_PredictPlayer(&players[consoleplayer]);
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
