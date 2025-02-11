@@ -133,9 +133,6 @@ void D_QuitNetGame (void);
 //? how many ticks to run?
 void TryRunTics (void);
 
-//Use for checking to see if the netgame has stalled
-void Net_CheckLastReceived();
-
 // [RH] Functions for making and using special "ticcmds"
 void Net_NewClientTic();
 void Net_Initialize();
