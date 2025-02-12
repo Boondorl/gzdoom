@@ -1960,6 +1960,7 @@ void FinishLoadingCVars();
 
 void G_DoLoadGame ()
 {
+	Net_ResetCommands(true);
 	SetupLoadingCVars();
 	bool hidecon;
 
