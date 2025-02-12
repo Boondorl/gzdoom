@@ -58,6 +58,7 @@ enum EClientFlags
 	CF_RETRANSMIT_SEQ	= 1 << 2,	// If set, this client needs command data resent to them.
 	CF_MISSING_CON		= 1 << 3,	// If a consistency was missed/out of order, ask this client to send back over their info.
 	CF_RETRANSMIT_CON	= 1 << 4,	// If set, this client needs consistency data resent to them.
+	CF_UPDATED			= 1 << 5,	// Got an updated packet from this client.
 
 	CF_RETRANSMIT = CF_RETRANSMIT_CON | CF_RETRANSMIT_SEQ,
 	CF_MISSING = CF_MISSING_CON | CF_MISSING_SEQ,
@@ -80,7 +81,7 @@ struct FClientNetState
 
 	int				Flags = 0;				// State of this client.
 
-	int				ResendSequenceFrom = -1; // If >= 0, send from this sequence up to the most recent one, capped to 17.
+	int				ResendSequenceFrom = -1; // If >= 0, send from this sequence up to the most recent one, capped to MAXSENDTICS.
 	int				SequenceAck = -1;		// The last sequence the client reported from us.
 	int 			CurrentSequence = -1;	// The last sequence we've gotten from this client.
 
@@ -88,7 +89,7 @@ struct FClientNetState
 	// a world tic is ran, the local client will store all the consistencies
 	// of the clients in their LocalConsistency. Then the consistencies will
 	// be checked against retroactively as they come in.
-	int ResendConsistencyFrom = -1;				// If >= 0, send from this consistency up to the most recent one, capped to 17.
+	int ResendConsistencyFrom = -1;				// If >= 0, send from this consistency up to the most recent one, capped to MAXSENDTICS.
 	int ConsistencyAck = -1;					// Last consistency the client reported from us.
 	int LastVerifiedConsistency = -1;			// Last consistency we checked from this client. If < CurrentNetConsistency, run through them.
 	int CurrentNetConsistency = -1;				// Last consistency we got from this client.
