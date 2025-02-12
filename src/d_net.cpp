@@ -739,7 +739,11 @@ static void GetPackets()
 
 		const bool validID = NetBuffer[1] == CurrentLobbyID;
 		if (validID)
+		{
+			clientState.Flags |= CF_UPDATED;
 			clientState.SequenceAck = (NetBuffer[2] << 24) | (NetBuffer[3] << 16) | (NetBuffer[4] << 8) | NetBuffer[5];
+		}
+
 		const int consistencyAck = (NetBuffer[6] << 24) | (NetBuffer[7] << 16) | (NetBuffer[8] << 8) | NetBuffer[9];
 
 		int curByte = 10;
@@ -784,10 +788,12 @@ static void GetPackets()
 					curByte += 2;
 			}
 
-			// Make sure client acks only get updated if from the host itself in packet server mode. Other clients
-			// won't be sending over any consistency information.
-			if (NetMode != NET_PacketServer || clientNum == Net_Arbitrator)
+			// Make sure the host doesn't update a player's last consistency ack with their own data.
+			if (NetMode != NET_PacketServer || consoleplayer != Net_Arbitrator
+				|| pNum == Net_Arbitrator || clientNum != Net_Arbitrator)
+			{
 				pState.ConsistencyAck = consistencyAck;
+			}
 
 			TArray<int16_t> consistencies = {};
 			for (int r = 0; r < ranTics; ++r)
@@ -1053,21 +1059,24 @@ static bool Net_UpdateStatus()
 	}
 
 	// Wait for the game to stabilize a bit after launch before skipping commands.
-	int lowestDiff = INT_MIN;
+	bool updated = false;
+	int lowestDiff = INT_MAX;
 	if (gametic > TICRATE * 2 * doomcom.ticdup)
 	{
-		lowestDiff = INT_MAX;
 		if (NetMode != NET_PacketServer)
 		{
 			// Check if everyone has a buffer for us. If they do, we're too far ahead.
 			for (auto client : NetworkClients)
 			{
-				if (client != consoleplayer)
+				if (client != consoleplayer && (ClientStates[client].Flags & CF_UPDATED))
 				{
+					updated = true;
 					int diff = ClientStates[client].SequenceAck - ClientStates[client].CurrentSequence;
 					if (diff < lowestDiff)
 						lowestDiff = diff;
 				}
+
+				ClientStates[client].Flags &= ~CF_UPDATED;
 			}
 		}
 		else if (consoleplayer == Net_Arbitrator)
@@ -1076,33 +1085,41 @@ static bool Net_UpdateStatus()
 			const int curTic = ClientTic / doomcom.ticdup;
 			for (auto client : NetworkClients)
 			{
-				if (client != Net_Arbitrator)
+				if (client != Net_Arbitrator && (ClientStates[client].Flags & CF_UPDATED))
 				{
+					updated = true;
 					int diff = curTic - ClientStates[client].CurrentSequence;
 					if (diff < lowestDiff)
 						lowestDiff = diff;
 				}
+
+				ClientStates[client].Flags &= ~CF_UPDATED;
+			}
+		}
+		else if (ClientStates[Net_Arbitrator].Flags & CF_UPDATED)
+		{
+			// Check if the host is reporting that we're too far ahead of them.
+			updated = true;
+			lowestDiff = CommandsAhead;
+			ClientStates[Net_Arbitrator].Flags &= ~CF_UPDATED;
+		}
+	}
+
+	if (updated)
+	{
+		if (lowestDiff > 0)
+		{
+			if (SkipCommandTimer++ > (TICRATE / 2) * doomcom.ticdup)
+			{
+				SkipCommandTimer = 0;
+				if (SkipCommandAmount <= 0)
+					SkipCommandAmount = lowestDiff;
 			}
 		}
 		else
 		{
-			// Check if the host is reporting that we're too far ahead of them.
-			lowestDiff = CommandsAhead;
-		}
-	}
-
-	if (lowestDiff > 0)
-	{
-		if (SkipCommandTimer++ > (TICRATE / 2) * doomcom.ticdup)
-		{
 			SkipCommandTimer = 0;
-			if (SkipCommandAmount <= 0)
-				SkipCommandAmount = lowestDiff;
 		}
-	}
-	else
-	{
-		SkipCommandTimer = 0;
 	}
 
 	return true;
@@ -1486,7 +1503,8 @@ void NetUpdate(int tics)
 	}
 
 	// Update this now that all the packets have been sent out.
-	LastSentConsistency = CurrentConsistency;
+	if (!resendOnly)
+		LastSentConsistency = CurrentConsistency;
 
 	// Listen for other packets. This has to also come after sending so the player that sent
 	// data to themselves gets it immediately (important for singleplayer, otherwise there
@@ -1892,10 +1910,21 @@ ADD_STAT(network)
 		out.AppendFormat("\n%s", players[client].userinfo.GetName(12));
 		if (client == Net_Arbitrator)
 			out.AppendFormat("\t(Host)");
-		if (state.Flags & CF_RETRANSMIT)
+
+		if ((state.Flags & CF_RETRANSMIT) == CF_RETRANSMIT)
 			out.AppendFormat("\t(RT)");
-		if (state.Flags & CF_MISSING)
+		else if (state.Flags & CF_RETRANSMIT_SEQ)
+			out.AppendFormat("\t(RT SEQ)");
+		else if (state.Flags & CF_RETRANSMIT_CON)
+			out.AppendFormat("\t(RT CON)");
+
+		if ((state.Flags & CF_MISSING) == CF_MISSING)
 			out.AppendFormat("\t(MISS)");
+		else if (state.Flags & CF_MISSING_SEQ)
+			out.AppendFormat("\t(MISS SEQ)");
+		else if (state.Flags & CF_MISSING_CON)
+			out.AppendFormat("\t(MISS CON)");
+
 		out.AppendFormat("\n");
 
 		if (NetMode != NET_PacketServer)
