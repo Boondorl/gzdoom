@@ -1981,6 +1981,11 @@ static bool ShouldStabilizeTick()
 			&& gameaction != ga_worlddone && gameaction != ga_completed && gameaction != ga_screenshot && gameaction != ga_fullconsole;
 }
 
+static bool IsLoadBarrier()
+{
+	return gameaction == ga_worlddone || gameaction == ga_loadgame || gameaction == ga_loadgamehidecon;
+}
+
 //
 // TryRunTics
 //
@@ -2067,7 +2072,7 @@ void TryRunTics()
 	P_UnPredictPlayer();
 	while (runTics--)
 	{
-		const bool loadBarrier = gameaction == ga_worlddone;
+		const bool loadBarrier = IsLoadBarrier();
 		const bool stabilize = ShouldStabilizeTick();
 		if (stabilize)
 			TicStabilityBegin();
