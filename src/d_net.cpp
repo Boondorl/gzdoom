@@ -330,6 +330,9 @@ void Net_ClearBuffers()
 		state.CurrentNetConsistency = state.LastVerifiedConsistency = state.ConsistencyAck = state.ResendConsistencyFrom = -1;
 		state.CurrentSequence = state.SequenceAck = state.ResendSequenceFrom = -1;
 		state.Flags = 0;
+
+		for (int j = 0; j < BACKUPTICS; ++j)
+			state.Tics[j].Data.SetData(nullptr, 0);
 	}
 
 	doomcom.command = doomcom.datalength = 0;
