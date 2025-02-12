@@ -1830,7 +1830,7 @@ void D_QuitNetGame()
 			for (auto client : NetworkClients)
 			{
 				if (client != Net_Arbitrator)
-					HSendPacket(nextHost, 2);
+					HSendPacket(client, 2);
 			}
 
 			I_WaitVBL(1);
