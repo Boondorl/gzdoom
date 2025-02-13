@@ -130,7 +130,7 @@ static size_t	LocalNetBufferSize = 0;
 static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 
 static uint8_t	CurrentLobbyID = 0u;	// Ignore commands not from this lobby (useful when transitioning levels).
-static int		LastGameUpdate = 0; // Track the last time the game actually ran the world.
+static int		LastGameUpdate = 0;		// Track the last time the game actually ran the world.
 
 static int  LevelStartDebug = 0;
 static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
@@ -660,7 +660,7 @@ static void CheckLevelStart(int client, int delayTics)
 	}
 }
 
-static struct FLatencyAck
+struct FLatencyAck
 {
 	int Client;
 	uint8_t Seq;
@@ -703,7 +703,7 @@ static void GetPackets()
 
 		if (NetBuffer[0] & NCMD_LATENCY)
 		{
-			int i = 0;
+			size_t i = 0u;
 			for (; i < latencyAcks.Size(); ++i)
 			{
 				if (latencyAcks[i].Client == clientNum)
@@ -805,7 +805,7 @@ static void GetPackets()
 				consistencies.Insert(ofs, (NetBuffer[curByte++] << 8) | NetBuffer[curByte++]);
 			}
 
-			for (int i = 0; i < consistencies.Size(); ++i)
+			for (size_t i = 0u; i < consistencies.Size(); ++i)
 			{
 				const int cTic = baseConsistency + i;
 				if (cTic <= pState.CurrentNetConsistency)
@@ -838,7 +838,7 @@ static void GetPackets()
 			if (!validID)
 				continue;
 
-			for (int i = 0; i < data.Size(); ++i)
+			for (size_t i = 0u; i < data.Size(); ++i)
 			{
 				const int seq = baseSequence + i;
 				// Duplicate command, ignore it.
@@ -1609,7 +1609,7 @@ bool ExchangeNetGameInfo(void *userdata)
 		bool stillWaiting = false;
 
 		// Update this dynamically.
-		int allPlayers = 0;
+		uint32_t allPlayers = 0u;
 		for (int i = 0; i < doomcom.numplayers; ++i)
 			allPlayers |= 1 << i;
 
