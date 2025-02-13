@@ -108,7 +108,7 @@ bool netgame, multiplayer;
 int consoleplayer; // i.e. myconnectindex in Build. 
 doomcom_t doomcom;
 
-constexpr int MaxPlayers = 8; // TODO: This needs to be put in some kind of unified header later
+constexpr int MaxPlayers = 16; // TODO: This needs to be put in some kind of unified header later
 
 FClientStack NetworkClients;
 
