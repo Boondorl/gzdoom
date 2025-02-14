@@ -1229,9 +1229,7 @@ void G_Ticker ()
 		usercmd_t *cmd = &players[client].cmd;
 		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic % BACKUPTICS].Command;
 
-		if (!(gametic % doomcom.ticdup))
-			RunPlayerCommands(client, curTic);
-
+		RunPlayerCommands(client, curTic);
 		if (demorecording)
 			G_WriteDemoTiccmd(nextCmd, client, curTic);
 

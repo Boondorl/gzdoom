@@ -225,7 +225,7 @@ public:
 
 	void ResetStream()
 	{
-		CurrentClientTic = (ClientTic / doomcom.ticdup);
+		CurrentClientTic = ClientTic / doomcom.ticdup;
 		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream;
 		CurrentSize = 0;
 	}
@@ -356,7 +356,7 @@ void Net_ClearBuffers()
 	LevelStartDelay = LevelStartDebug = 0;
 	LevelStartStatus = LST_READY;
 
-	FullLatencyCycle = MAXSENDTICS * 5;
+	FullLatencyCycle = MAXSENDTICS * 3;
 	LastLatencyUpdate = 0;
 
 	playeringame[0] = true;
@@ -367,8 +367,21 @@ void Net_ResetCommands(bool midTic)
 {
 	++CurrentLobbyID;
 	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
-	ClientTic = gametic + midTic;
-	const int tic = (gametic - !midTic) / doomcom.ticdup;
+
+	int tic = gametic / doomcom.ticdup;
+	if (midTic)
+	{
+		// If we're mid ticdup cycle, make sure we immediately enter the next one after
+		// the current tic we're in finishes.
+		ClientTic = (tic + 1) * doomcom.ticdup;
+		gametic = (tic * doomcom.ticdup) + (doomcom.ticdup - 1);
+	}
+	else
+	{
+		ClientTic = gametic = tic * doomcom.ticdup;
+		--tic;
+	}
+	
 	for (auto client : NetworkClients)
 	{
 		auto& state = ClientStates[client];
@@ -1064,7 +1077,7 @@ static bool Net_UpdateStatus()
 	// Wait for the game to stabilize a bit after launch before skipping commands.
 	bool updated = false;
 	int lowestDiff = INT_MAX;
-	if (gametic > TICRATE * 2 * doomcom.ticdup)
+	if (gametic > TICRATE * 2)
 	{
 		if (NetMode != NET_PacketServer)
 		{
@@ -1112,11 +1125,11 @@ static bool Net_UpdateStatus()
 	{
 		if (lowestDiff > 0)
 		{
-			if (SkipCommandTimer++ > (TICRATE / 2) * doomcom.ticdup)
+			if (SkipCommandTimer++ > TICRATE / 2)
 			{
 				SkipCommandTimer = 0;
 				if (SkipCommandAmount <= 0)
-					SkipCommandAmount = lowestDiff;
+					SkipCommandAmount = lowestDiff * doomcom.ticdup;
 			}
 		}
 		else
@@ -1178,14 +1191,15 @@ void NetUpdate(int tics)
 		{
 			// If we're the host, idly wait until all packets have arrived. There's no point in predicting since we
 			// know for a fact the game won't be started until everyone is accounted for. (Packet server only)
-			int lowestSeq = gametic / doomcom.ticdup;
+			const int curTic = gametic / doomcom.ticdup;
+			int lowestSeq = curTic;
 			for (auto client : NetworkClients)
 			{
 				if (client != Net_Arbitrator && ClientStates[client].CurrentSequence < lowestSeq)
 					lowestSeq = ClientStates[client].CurrentSequence;
 			}
 
-			if (lowestSeq >= gametic / doomcom.ticdup)
+			if (lowestSeq >= curTic)
 				LevelStartStatus = LST_READY;
 		}
 	}
@@ -1301,7 +1315,7 @@ void NetUpdate(int tics)
 		// In packet server mode special handling is used to ensure the host only
 		// sends out available tics when ready instead of constantly shotgunning
 		// them out as they're made locally.
-		startSequence = (gametic / doomcom.ticdup);
+		startSequence = gametic / doomcom.ticdup;
 		int lowestSeq = endSequence - 1;
 		for (auto client : NetworkClients)
 		{
