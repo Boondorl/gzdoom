@@ -114,9 +114,10 @@ enum ENetMode : uint8_t
 //   If > 0, four bytes for the base sequence being worked from.
 //  One byte for the number of world tics ran.
 //   If > 0, four bytes for the base consistency being worked from.
+//  If in packet server mode and from the host, one byte for how far ahead of the host we are.
 //  For each player:
 //   One byte for the player number.
-//   Two bytes for the latency to the host (sent from host; packet server mode only).
+//	 If in packet server mode and from the host, two bytes for the latency to the host.
 //   For each consistency:
 //    One byte for the delta from the base consistency.
 //    Two bytes for each consistency.

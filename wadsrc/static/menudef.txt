@@ -2384,7 +2384,6 @@ OptionMenu NetworkOptions protected
 	StaticText " "
 	StaticText "$NETMNU_HOSTOPTIONS", 1
 	Option "$NETMNU_EXTRATICS",				"net_extratic", "OnOff"
-	Option "$NETMNU_TICBALANCE",			"net_ticbalance", "OnOff"
 
 }
 
