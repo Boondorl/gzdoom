@@ -79,20 +79,11 @@ EXTERN_CVAR (Bool, cl_capfps)
 EXTERN_CVAR (Bool, vid_vsync)
 EXTERN_CVAR (Int, vid_maxfps)
 
-//#define SIMULATEERRORS		(RAND_MAX/3)
-#define SIMULATEERRORS			0
-
 extern uint8_t		*demo_p;		// [RH] Special "ticcmds" get recorded in demos
 extern FString	savedescription;
 extern FString	savegamefile;
 
 extern bool AppActive;
-
-enum ENetMode : uint8_t
-{
-	NET_PeerToPeer,
-	NET_PacketServer
-};
 
 struct FNetGameInfo
 {
@@ -112,7 +103,7 @@ enum ELevelStartStatus
 // gametic is the tic about to (or currently being) run.
 // ClientTic is the tick the client is currently on and building a command for.
 //
-// A world tick cannot be ran until CurrentSequence > gametic for all clients.
+// A world tick cannot be ran until CurrentSequence >= gametic for all clients.
 
 #define NetBuffer (doomcom.data)
 ENetMode			NetMode = NET_PeerToPeer;
@@ -2026,7 +2017,7 @@ void TryRunTics()
 	bool doWait = (cl_capfps || pauseext || (r_NoInterpolate && !M_IsAnimated()));
 	if (vid_dontdowait && (vid_maxfps > 0 || vid_vsync))
 		doWait = false;
-	if (!AppActive && vid_lowerinbackground)
+	if (!netgame && !AppActive && vid_lowerinbackground)
 		doWait = true;
 
 	// Get the full number of tics the client can run.
@@ -2447,7 +2438,7 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 			int angle = 0;
 			int16_t tid = 0;
 			uint8_t special = 0;
-			int args[5] = {};
+			int args[5];
 
 			s = ReadStringConst(stream);
 			if (cmd >= DEM_SUMMON2 && cmd <= DEM_SUMMONFOE2)
@@ -2455,31 +2446,34 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 				angle = ReadInt16(stream);
 				tid = ReadInt16(stream);
 				special = ReadInt8(stream);
-				for (i = 0; i < 5; ++i)
-					args[i] = ReadInt32(stream);
+				for (i = 0; i < 5; i++) args[i] = ReadInt32(stream);
 			}
 
-			PClassActor* typeinfo = PClass::FindActor(s);
-			if (typeinfo != nullptr)
+			AActor* source = players[player].mo;
+			if (source != NULL)
 			{
-				AActor *source = players[player].mo;
-				if (source != nullptr)
+				PClassActor* typeinfo = PClass::FindActor(s);
+				if (typeinfo != NULL)
 				{
-					const AActor* def = GetDefaultByType(typeinfo);
-					if (def->flags & MF_MISSILE)
+					if (GetDefaultByType(typeinfo)->flags & MF_MISSILE)
 					{
-						P_SpawnPlayerMissile(source, 0.0, 0.0, 0.0, typeinfo, source->Angles.Yaw);
+						P_SpawnPlayerMissile(source, 0, 0, 0, typeinfo, source->Angles.Yaw);
 					}
 					else
 					{
-						DVector3 spawnpos = source->Vec3Angle(def->radius * 2.0 + source->radius, source->Angles.Yaw, 8.0);
-						AActor *spawned = Spawn(primaryLevel, typeinfo, spawnpos, ALLOW_REPLACE);
-						if (spawned != nullptr)
+						const AActor* def = GetDefaultByType(typeinfo);
+						DVector3 spawnpos = source->Vec3Angle(def->radius * 2 + source->radius, source->Angles.Yaw, 8.);
+
+						AActor* spawned = Spawn(primaryLevel, typeinfo, spawnpos, ALLOW_REPLACE);
+						if (spawned != NULL)
 						{
 							spawned->SpawnFlags |= MTF_CONSOLETHING;
 							if (cmd == DEM_SUMMONFRIEND || cmd == DEM_SUMMONFRIEND2 || cmd == DEM_SUMMONMBF)
 							{
-								spawned->ClearCounters();
+								if (spawned->CountsAsKill())
+								{
+									primaryLevel->total_monsters--;
+								}
 								spawned->FriendPlayer = player + 1;
 								spawned->flags |= MF_FRIENDLY;
 								spawned->LastHeard = players[player].mo;
@@ -2498,11 +2492,25 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 							{
 								spawned->Angles.Yaw = source->Angles.Yaw - DAngle::fromDeg(angle);
 								spawned->special = special;
-								for(i = 0; i < 5; i++)
+								for (i = 0; i < 5; i++) {
 									spawned->args[i] = args[i];
-								if(tid)
-									spawned->SetTID(tid);
+								}
+								if (tid) spawned->SetTID(tid);
 							}
+						}
+					}
+				}
+				else
+				{ // not an actor, must be a visualthinker
+					PClass* typeinfo = PClass::FindClass(s);
+					if (typeinfo && typeinfo->IsDescendantOf("VisualThinker"))
+					{
+						DVector3 spawnpos = source->Vec3Angle(source->radius * 4, source->Angles.Yaw, 8.);
+						auto vt = DVisualThinker::NewVisualThinker(source->Level, typeinfo);
+						if (vt)
+						{
+							vt->PT.Pos = spawnpos;
+							vt->UpdateSector();
 						}
 					}
 				}
