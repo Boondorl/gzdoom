@@ -110,6 +110,7 @@ void	G_DoPlayDemo (void);
 void	G_DoCompleted (void);
 void	G_DoVictory (void);
 void	G_DoWorldDone (void);
+void	G_DoMapWarp();
 void	G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, const char *description);
 void	G_DoAutoSave ();
 void	G_DoQuickSave ();
@@ -1173,6 +1174,9 @@ void G_Ticker ()
 		case  ga_playdemo:
 			G_DoPlayDemo ();
 			break;
+		case ga_mapwarp:
+			G_DoMapWarp();
+			break;
 		case ga_completed:
 			G_DoCompleted ();
 			break;
@@ -2115,6 +2119,7 @@ void G_DoLoadGame ()
 
 	NextSkill = -1;
 	arc("nextskill", NextSkill);
+	Net_SetWaiting();
 
 	if (level.info != nullptr)
 		level.info->Snapshot.Clean();
