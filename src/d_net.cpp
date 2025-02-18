@@ -133,6 +133,7 @@ static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
 
 static int 	EnterTic = 0;
 static int	LastEnterTic = 0;
+static bool bCommandsReset = false;	// If true, commands were recently cleared. Don't generate any more tics.
 
 static int	CommandsAhead = 0;		// In packet server mode, the host will let us know if we're outpacing them.
 static int	SkipCommandTimer = 0;	// Tracker for when to check for skipping commands. ~0.5 seconds in a row of being ahead will start skipping.
@@ -356,6 +357,7 @@ void Net_ClearBuffers()
 
 void Net_ResetCommands(bool midTic)
 {
+	bCommandsReset = midTic;
 	++CurrentLobbyID;
 	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 
@@ -2002,11 +2004,6 @@ static bool ShouldStabilizeTick()
 			&& gameaction != ga_worlddone && gameaction != ga_completed && gameaction != ga_screenshot && gameaction != ga_fullconsole;
 }
 
-static bool IsLoadBarrier()
-{
-	return gameaction == ga_worlddone || gameaction == ga_loadgame || gameaction == ga_loadgamehidecon;
-}
-
 //
 // TryRunTics
 //
@@ -2099,7 +2096,6 @@ void TryRunTics()
 	P_UnPredictPlayer();
 	while (runTics--)
 	{
-		const bool loadBarrier = IsLoadBarrier();
 		const bool stabilize = ShouldStabilizeTick();
 		if (stabilize)
 			TicStabilityBegin();
@@ -2116,8 +2112,11 @@ void TryRunTics()
 		if (stabilize)
 			TicStabilityEnd();
 
-		if (loadBarrier)
+		if (bCommandsReset)
+		{
+			bCommandsReset = false;
 			break;
+		}
 	}
 	P_PredictPlayer(&players[consoleplayer]);
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.

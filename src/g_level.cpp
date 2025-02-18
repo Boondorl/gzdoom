@@ -1363,7 +1363,6 @@ void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool
 	LocalViewAngle = 0;
 	LocalViewPitch = 0;
 	paused = 0;
-	Net_SetWaiting();
 
 	if (demoplayback || oldgs == GS_STARTUP || oldgs == GS_TITLELEVEL)
 		C_HideConsole();
@@ -1563,6 +1562,20 @@ DEFINE_ACTION_FUNCTION(FLevelLocals, WorldDone)
 
 //==========================================================================
 //
+// Started the game loaded into a map from the console. Run at least one tic
+// so it can properly render out in net games.
+//
+//==========================================================================
+
+void G_DoMapWarp()
+{
+	gameaction = ga_nothing;
+	Net_ResetCommands(true);
+	Net_SetWaiting();
+}
+
+//==========================================================================
+//
 //
 //==========================================================================
 
@@ -1580,6 +1593,7 @@ void G_DoWorldDone (void)
 	G_DoLoadLevel (nextlevel, startpos, true, false);
 	gameaction = ga_nothing;
 	viewactive = true; 
+	Net_SetWaiting();
 }
 
 //==========================================================================

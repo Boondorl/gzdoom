@@ -1202,7 +1202,7 @@ void D_DoomLoop ()
 	int lasttic = 0;
 
 	// Clamp the timer to TICRATE until the playloop has been entered.
-	r_NoInterpolate = !netgame;
+	r_NoInterpolate = true;
 	Page.SetInvalid();
 	Subtitle = nullptr;
 	Advisory.SetInvalid();
@@ -3535,6 +3535,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 							AddCommandString(StoredWarp.GetChars());
 							StoredWarp = "";
 						}
+						gameaction = ga_mapwarp;
 					}
 					else
 					{
