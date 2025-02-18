@@ -819,7 +819,7 @@ static void GetPackets()
 
 				if (cTic > pState.CurrentNetConsistency + 1 || !consistencies[i])
 				{
-					pState.Flags |= CF_MISSING_CON;
+					clientState.Flags |= CF_MISSING_CON;
 					break;
 				}
 
@@ -855,7 +855,7 @@ static void GetPackets()
 				// the client send over the properly ordered commands. 
 				if (seq > pState.CurrentSequence + 1 || data[i] == nullptr)
 				{
-					pState.Flags |= CF_MISSING_SEQ;
+					clientState.Flags |= CF_MISSING_SEQ;
 					break;
 				}
 
