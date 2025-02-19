@@ -151,8 +151,18 @@ extern	bool	 advancedemo;
 CVAR(Bool, vid_dontdowait, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, vid_lowerinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 
-CVAR(Bool, net_ticbalance, false, CVAR_SERVERINFO | CVAR_NOSAVE)
+CVAR(Bool, net_ticbalance, false, CVAR_SERVERINFO | CVAR_NOSAVE) // Currently deprecated, but may be brought back later.
 CVAR(Bool, net_extratic, false, CVAR_SERVERINFO | CVAR_NOSAVE)
+
+CVAR(Bool, cl_noboldchat, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, cl_nochatsound, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, cl_showchat, CHAT_GLOBAL, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self < CHAT_DISABLED)
+		self = CHAT_DISABLED;
+	else if (self > CHAT_GLOBAL)
+		self = CHAT_GLOBAL;
+}
 
 // Used to write out all network events that occured leading up to the next tick.
 static struct NetEventData
@@ -2270,25 +2280,39 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 			uint8_t who = ReadInt8(stream);
 
 			s = ReadStringConst(stream);
-			if (!(who & 1) || players[player].userinfo.GetTeam() == TEAM_NONE)
+			// If chat is disabled, there's nothing else to do here since the stream has been advanced.
+			if (cl_showchat == CHAT_DISABLED)
+				break;
+
+			constexpr int MSG_TEAM = 1;
+			constexpr int MSG_BOLD = 2;
+			if (!(who & MSG_TEAM))
 			{
+				if (cl_showchat < CHAT_GLOBAL)
+					break;
+
 				// Said to everyone
-				if (who & 2)
+				if ((who & MSG_BOLD) && !cl_noboldchat)
 					Printf(PRINT_CHAT, TEXTCOLOR_BOLD "* %s" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, s);
 				else
 					Printf(PRINT_CHAT, "%s" TEXTCOLOR_CHAT ": %s" TEXTCOLOR_CHAT "\n", name, s);
 
-				S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
+				if (!cl_nochatsound)
+					S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
 			}
-			else if (players[player].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
+			else if (!deathmatch || players[player].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
 			{
+				if (cl_showchat < CHAT_TEAM_ONLY)
+					break;
+
 				// Said only to members of the player's team
-				if (who & 2)
+				if ((who & MSG_BOLD) && !cl_noboldchat)
 					Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* (%s" TEXTCOLOR_BOLD ")%s" TEXTCOLOR_BOLD "\n", name, s);
 				else
 					Printf(PRINT_TEAMCHAT, "(%s" TEXTCOLOR_TEAMCHAT "): %s" TEXTCOLOR_TEAMCHAT "\n", name, s);
 
-				S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
+				if (!cl_nochatsound)
+					S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
 			}
 		}
 		break;

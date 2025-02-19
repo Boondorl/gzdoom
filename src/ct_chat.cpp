@@ -55,6 +55,7 @@ enum
 EXTERN_CVAR (Bool, sb_cooperative_enable)
 EXTERN_CVAR (Bool, sb_deathmatch_enable)
 EXTERN_CVAR (Bool, sb_teamdeathmatch_enable)
+EXTERN_CVAR (Int, cl_showchat)
 
 int active_con_scaletext();
 
@@ -504,13 +505,33 @@ static bool DoSubstitution (FString &out, const char *in)
 
 CCMD (messagemode)
 {
-	if (menuactive == MENU_Off)
+	if (menuactive != MENU_Off)
+		return;
+
+	if (multiplayer && deathmatch)
 	{
-		buttonMap.ResetButtonStates();
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+			return;
+		}
+
 		chatmodeon = 1;
-		C_HideConsole ();
-		CT_ClearChatMessage ();
 	}
+	else
+	{
+		if (cl_showchat < CHAT_TEAM_ONLY)
+		{
+			Printf("Team chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 2;
+	}
+
+	buttonMap.ResetButtonStates();
+	C_HideConsole ();
+	CT_ClearChatMessage ();
 }
 
 CCMD (say)
@@ -518,22 +539,61 @@ CCMD (say)
 	if (argv.argc() == 1)
 	{
 		Printf ("Usage: say <message>\n");
+		return;
+	}
+
+	// If not in a DM lobby, route it to team chat instead (helps improve chat
+	// filtering).
+	if (multiplayer && deathmatch)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+		}
+		else
+		{
+			ShoveChatStr(argv[1], 0);
+		}
+	}
+	else if (cl_showchat < CHAT_TEAM_ONLY)
+	{
+		Printf("Team chat is currently disabled\n");
 	}
 	else
 	{
-		ShoveChatStr (argv[1], 0);
+		ShoveChatStr(argv[1], 1);
 	}
 }
 
 CCMD (messagemode2)
 {
-	if (menuactive == MENU_Off)
+	if (menuactive != MENU_Off)
+		return;
+
+	if (multiplayer && deathmatch && !teamplay)
 	{
-		buttonMap.ResetButtonStates();
-		chatmodeon = 2;
-		C_HideConsole ();
-		CT_ClearChatMessage ();
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 1;
 	}
+	else
+	{
+		if (cl_showchat < CHAT_TEAM_ONLY)
+		{
+			Printf("Team chat is currently disabled\n");
+			return;
+		}
+
+		chatmodeon = 2;
+	}
+
+	buttonMap.ResetButtonStates();
+	C_HideConsole();
+	CT_ClearChatMessage();
 }
 
 CCMD (say_team)
@@ -541,6 +601,25 @@ CCMD (say_team)
 	if (argv.argc() == 1)
 	{
 		Printf ("Usage: say_team <message>\n");
+		return;
+	}
+
+	// If in a DM lobby, route it to global chat instead (helps
+	// improve chat filtering).
+	if (multiplayer && deathmatch && !teamplay)
+	{
+		if (cl_showchat < CHAT_GLOBAL)
+		{
+			Printf("Global chat is currently disabled\n");
+		}
+		else
+		{
+			ShoveChatStr(argv[1], 0);
+		}
+	}
+	else if (cl_showchat < CHAT_TEAM_ONLY)
+	{
+		Printf("Team chat is currently disabled\n");
 	}
 	else
 	{
