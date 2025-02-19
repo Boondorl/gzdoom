@@ -122,6 +122,7 @@ static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 
 static uint8_t	CurrentLobbyID = 0u;	// Ignore commands not from this lobby (useful when transitioning levels).
 static int		LastGameUpdate = 0;		// Track the last time the game actually ran the world.
+static int		MutedClients = 0;		// Ignore messages from these clients.
 
 static int  LevelStartDebug = 0;
 static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
@@ -344,6 +345,7 @@ void Net_ClearBuffers()
 	LocalNetBufferSize = 0;
 	Net_Arbitrator = 0;
 
+	MutedClients = 0;
 	CurrentLobbyID = 0u;
 	NetworkClients.Clear();
 	NetMode = NET_PeerToPeer;
@@ -553,6 +555,7 @@ static void ClientConnecting(int client)
 static void DisconnectClient(int clientNum)
 {
 	NetworkClients -= clientNum;
+	MutedClients &= ~(1 << clientNum);
 	I_ClearNode(clientNum);
 	// Capture the pawn leaving in the next world tick.
 	players[clientNum].playerstate = PST_GONE;
@@ -2281,7 +2284,7 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 
 			s = ReadStringConst(stream);
 			// If chat is disabled, there's nothing else to do here since the stream has been advanced.
-			if (cl_showchat == CHAT_DISABLED)
+			if (cl_showchat == CHAT_DISABLED || (MutedClients & (1 << player)))
 				break;
 
 			constexpr int MSG_TEAM = 1;
@@ -3114,6 +3117,95 @@ CCMD(kick)
 
 	Net_WriteInt8(DEM_KICK);
 	Net_WriteInt8(pNum);
+}
+
+CCMD(mute)
+{
+	if (argv.argc() == 1)
+	{
+		Printf("Usage: mute <player number> - Don't receive messages from this player\n");
+		return;
+	}
+
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	const int pNum = atoi(argv[1]);
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+		return;
+
+	if (!NetworkClients.InGame(pNum))
+	{
+		Printf("Player is not currently in the game\n");
+		return;
+	}
+
+	MutedClients |= 1 << pNum;
+}
+
+CCMD(muteall)
+{
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	for (auto client : NetworkClients)
+	{
+		if (client != consoleplayer)
+			MutedClients |= 1 << client;
+	}
+}
+
+CCMD(listmuted)
+{
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	for (auto client : NetworkClients)
+	{
+		if (MutedClients & (1 << client))
+			Printf("%s - %d\n", players[client].userinfo.GetName(), client);
+	}
+}
+
+CCMD(unmute)
+{
+	if (argv.argc() == 1)
+	{
+		Printf("Usage: unmute <player number> - Allow messages from this player again\n");
+		return;
+	}
+
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	const int pNum = atoi(argv[1]);
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+		return;
+
+	MutedClients &= ~(1 << pNum);
+}
+
+CCMD(unmuteall)
+{
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	MutedClients = 0;
 }
 
 //==========================================================================
