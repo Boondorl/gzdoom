@@ -2824,6 +2824,22 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 	case DEM_CHANGESKILL:
 		NextSkill = ReadInt32(stream);
 		break;
+
+	case DEM_KICK:
+		{
+			const int pNum = ReadInt8(stream);
+			if (pNum == consoleplayer)
+			{
+				I_Error("You have been kicked from the game");
+			}
+			else
+			{
+				Printf("%s has been kicked from the game\n", players[pNum].userinfo.GetName());
+				if (NetworkClients.InGame(pNum))
+					DisconnectClient(pNum);
+			}
+		}
+		break;
 		
 	default:
 		I_Error("Unknown net command: %d", cmd);
@@ -2928,6 +2944,7 @@ void Net_SkipCommand(int cmd, uint8_t **stream)
 		case DEM_DROPPLAYER:
 		case DEM_ADDCONTROLLER:
 		case DEM_DELCONTROLLER:
+		case DEM_KICK:
 			skip = 1;
 			break;
 
@@ -3030,12 +3047,73 @@ int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 // [RH] List "ping" times
 CCMD(pings)
 {
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	if (NetworkClients.Size() <= 1)
+		return;
+
 	// In Packet Server mode, this displays the latency each individual client has to the host
 	for (auto client : NetworkClients)
 	{
 		if ((NetMode == NET_PeerToPeer && client != consoleplayer) || (NetMode == NET_PacketServer && client != Net_Arbitrator))
 			Printf("%ums %s\n", ClientStates[client].AverageLatency, players[client].userinfo.GetName());
 	}
+}
+
+CCMD(listplayers)
+{
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	for (auto client : NetworkClients)
+	{
+		if (client == consoleplayer)
+			Printf("* ");
+		Printf("%s - %d\n", players[client].userinfo.GetName(), client);
+	}
+}
+
+CCMD(kick)
+{
+	if (argv.argc() == 1)
+	{
+		Printf("Usage: kick <player number>\n");
+		return;
+	}
+
+	if (!netgame)
+	{
+		Printf("Not currently in a net game\n");
+		return;
+	}
+
+	// Dont give settings controllers access to this. That should be reserved as a separate power
+	// the host can grant.
+	if (consoleplayer != Net_Arbitrator)
+	{
+		Printf("Only the host is allowed to kick other players\n");
+		return;
+	}
+
+	const int pNum = atoi(argv[1]);
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+		return;
+
+	if (!NetworkClients.InGame(pNum))
+	{
+		Printf("Player is not currently in the game\n");
+		return;
+	}
+
+	Net_WriteInt8(DEM_KICK);
+	Net_WriteInt8(pNum);
 }
 
 //==========================================================================
