@@ -2378,6 +2378,9 @@ OptionMenu NetworkOptions protected
 {
 	Title "$NETMNU_TITLE"
 	StaticText "$NETMNU_LOCALOPTIONS", 1
+	Option "$NETMNU_CHATTYPE",				"cl_showchat", "ChatTypes"
+	Option "$NETMNU_BOLDCHAT",				"cl_noboldchat", "OnOff"
+	Option "$NETMNU_CHATSND",				"cl_nochatsound", "OnOff"
 	Option "$NETMNU_LINESPECIALPREDICTION",	"cl_predict_specials", "OnOff"
 	Slider "$NETMNU_PREDICTIONLERPSCALE",	"cl_rubberband_scale", 0.0, 1.0, 0.05, 2
 	Slider "$NETMNU_LERPTHRESHOLD",			"cl_rubberband_threshold", 0.0, 256.0, 8.0
@@ -2385,6 +2388,13 @@ OptionMenu NetworkOptions protected
 	StaticText "$NETMNU_HOSTOPTIONS", 1
 	Option "$NETMNU_EXTRATICS",				"net_extratic", "OnOff"
 
+}
+
+OptionValue "ChatTypes"
+{
+	0, "$OPTVAL_DISABLECHAT"
+	1, "$OPTVAL_TEAMONLYCHAT"
+	2, "$OPTVAL_GLOBALCHAT"
 }
 
 OptionValue "LookupOrder"

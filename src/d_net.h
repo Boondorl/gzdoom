@@ -103,6 +103,13 @@ enum ENetMode : uint8_t
 	NET_PacketServer
 };
 
+enum EChatType
+{
+	CHAT_DISABLED,
+	CHAT_TEAM_ONLY,
+	CHAT_GLOBAL,
+};
+
 // New packet structure:
 //
 //  One byte for the net command flags.
