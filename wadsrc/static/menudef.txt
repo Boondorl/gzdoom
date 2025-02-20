@@ -2387,7 +2387,7 @@ OptionMenu NetworkOptions protected
 	StaticText " "
 	StaticText "$NETMNU_HOSTOPTIONS", 1
 	Option "$NETMNU_EXTRATICS",				"net_extratic", "OnOff"
-	NumberField "$NETMNU_SLOMO",			"net_chatslowmode", 0, 300, 5
+	NumberField "$NETMNU_CHATSLOMO",		"net_chatslowmode", 0, 300, 5
 
 }
 
