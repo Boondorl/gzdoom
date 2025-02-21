@@ -270,7 +270,7 @@ void CT_Drawer (void)
 			if (!!rv) return;
 		}
 
-		FStringf prompt("%s ", GStrings.GetString("TXT_SAY"));
+		FStringf prompt("%s ", chatmodeon == 2 && deathmatch && teamplay ? GStrings.GetString("TXT_SAYTEAM") : GStrings.GetString("TXT_SAY"));
 		int x, scalex, y, promptwidth;
 
 		y = (viewactive || gamestate != GS_LEVEL) ? -displayfont->GetHeight()-2 : -displayfont->GetHeight() - 22;
