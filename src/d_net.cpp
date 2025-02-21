@@ -2295,6 +2295,8 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 					break;
 
 				// Said to everyone
+				if (deathmatch && teamplay)
+					Printf(PRINT_CHAT, "(All) ");
 				if ((who & MSG_BOLD) && !cl_noboldchat)
 					Printf(PRINT_CHAT, TEXTCOLOR_BOLD "* %s" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, s);
 				else
@@ -2309,10 +2311,12 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 					break;
 
 				// Said only to members of the player's team
+				if (deathmatch && teamplay)
+					Printf(PRINT_TEAMCHAT, "(Team) ");
 				if ((who & MSG_BOLD) && !cl_noboldchat)
-					Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* (%s" TEXTCOLOR_BOLD ")%s" TEXTCOLOR_BOLD "\n", name, s);
+					Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* %s" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, s);
 				else
-					Printf(PRINT_TEAMCHAT, "(%s" TEXTCOLOR_TEAMCHAT "): %s" TEXTCOLOR_TEAMCHAT "\n", name, s);
+					Printf(PRINT_TEAMCHAT, "%s" TEXTCOLOR_TEAMCHAT ": %s" TEXTCOLOR_TEAMCHAT "\n", name, s);
 
 				if (!cl_nochatsound)
 					S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
