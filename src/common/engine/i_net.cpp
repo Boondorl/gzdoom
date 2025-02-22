@@ -75,6 +75,7 @@
 #include "cmdlib.h"
 #include "printf.h"
 #include "i_interface.h"
+#include "c_cvars.h"
 
 
 #include "i_net.h"
@@ -104,11 +105,21 @@ typedef int SOCKET;
 typedef int socklen_t;
 #endif
 
+constexpr int MaxPlayers = 16; // TODO: This needs to be put in some kind of unified header later
+constexpr size_t MaxPasswordSize = 256u;
+
 bool netgame, multiplayer;
 int consoleplayer; // i.e. myconnectindex in Build. 
 doomcom_t doomcom;
 
-constexpr int MaxPlayers = 16; // TODO: This needs to be put in some kind of unified header later
+CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
+{
+	if (strlen(self) + 1 > MaxPasswordSize)
+	{
+		self = "";
+		Printf(TEXTCOLOR_RED "Password cannot be greater than 255 characters\n");
+	}
+}
 
 FClientStack NetworkClients;
 
@@ -137,11 +148,19 @@ enum
 	PRE_ALLHEREACK,			// Sent from guest to host to acknowledge PRE_ALLHEREACK receipt
 	PRE_GO,					// Sent from host to guest to continue game startup
 	PRE_IN_PROGRESS,		// Sent from host to guest if the game has already started
+	PRE_WRONG_PASSWORD,		// Sent from host to guest if their provided password was wrong
 };
 
 // Set PreGamePacket.fake to this so that the game rejects any pregame packets
 // after it starts. This translates to NCMD_SETUP|NCMD_MULTI.
 #define PRE_FAKE 0x30
+
+struct PreGameConnectPacket
+{
+	uint8_t Fake;
+	uint8_t Message;
+	char Password[MaxPasswordSize];
+};
 
 struct PreGamePacket
 {
@@ -525,7 +544,7 @@ void SendConAck (int num_connected, int num_needed)
 
 bool Host_CheckForConnects (void *userdata)
 {
-	PreGamePacket packet;
+	PreGameConnectPacket packet;
 	int* connectedPlayers = (int*)userdata;
 	sockaddr_in *from;
 	int node;
@@ -556,6 +575,13 @@ bool Host_CheckForConnects (void *userdata)
 			{
 				if (node == -1)
 				{
+					if (strlen(net_password) > 0 && strcmp(net_password, packet.Password))
+					{
+						packet.Message = PRE_WRONG_PASSWORD;
+						PreSend(&packet, 2, from);
+						break;
+					}
+
 					node = *connectedPlayers;
 					++*connectedPlayers;
 					sendaddress[node] = *from;
@@ -770,11 +796,13 @@ bool Guest_ContactHost (void *userdata)
 {
 	sockaddr_in *from;
 	PreGamePacket packet;
+	PreGameConnectPacket sendPacket;
 
 	// Let the host know we are here.
-	packet.Fake = PRE_FAKE;
-	packet.Message = PRE_CONNECT;
-	PreSend (&packet, 2, &sendaddress[0]);
+	sendPacket.Fake = PRE_FAKE;
+	sendPacket.Message = PRE_CONNECT;
+	memcpy(sendPacket.Password, net_password, strlen(net_password) + 1);
+	PreSend (&sendPacket, sizeof(sendPacket), &sendaddress[0]);
 
 	// Listen for a reply.
 	while ( (from = PreGet (&packet, sizeof(packet), true)) )
@@ -799,6 +827,10 @@ bool Guest_ContactHost (void *userdata)
 			else if (packet.Message == PRE_IN_PROGRESS)
 			{
 				I_NetError("The game was already started.");
+			}
+			else if (packet.Message == PRE_WRONG_PASSWORD)
+			{
+				I_NetError("Invalid password.");
 			}
 		}
 	}
@@ -989,6 +1021,8 @@ int I_InitNetwork (void)
 		DOOMPORT = atoi (v);
 		Printf ("using alternate port %i\n", DOOMPORT);
 	}
+
+	net_password = Args->CheckValue("-password");
 
 	// parse network game options,
 	//		player 1: -host <numplayers>
