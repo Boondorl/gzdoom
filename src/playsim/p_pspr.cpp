@@ -92,6 +92,9 @@ enum EWRF_Options
 //		2=states with a function 1 tick, others 0 ticks.
 CVAR(Int, sv_fastweapons, 0, CVAR_SERVERINFO);
 
+// If playing online and a real tick hasn't run, don't try and interpolation the weapon bobbing.
+bool bCapWeaponBobbing = false;
+
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
 static const FGenericButtons ButtonChecks[] =
@@ -635,6 +638,9 @@ void P_BringUpWeapon (player_t *player)
 
 void P_BobWeapon (player_t *player, float *x, float *y, double ticfrac)
 {
+	if (bCapWeaponBobbing)
+		ticfrac = 1.0;
+
 	IFVIRTUALPTRNAME(player->mo, NAME_PlayerPawn, BobWeapon)
 	{
 		VMValue param[] = { player->mo, ticfrac };
@@ -663,6 +669,9 @@ void P_BobWeapon (player_t *player, float *x, float *y, double ticfrac)
 
 void P_BobWeapon3D (player_t *player, FVector3 *translation, FVector3 *rotation, double ticfrac)
 {
+	if (bCapWeaponBobbing)
+		ticfrac = 1.0;
+
 	IFVIRTUALPTRNAME(player->mo, NAME_PlayerPawn, BobWeapon3D)
 	{
 		VMValue param[] = { player->mo, ticfrac };
