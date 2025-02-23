@@ -3109,9 +3109,18 @@ CCMD(kick)
 		return;
 	}
 
-	const int pNum = atoi(argv[1]);
-	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	int pNum = -1;
+	if (!C_IsValidInt(argv[1], pNum))
+	{
+		Printf("A player number must be provided. Use listplayers for more information\n");
 		return;
+	}
+
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	{
+		Printf("Invalid player number provided\n");
+		return;
+	}
 
 	if (!NetworkClients.InGame(pNum))
 	{
@@ -3137,9 +3146,18 @@ CCMD(mute)
 		return;
 	}
 
-	const int pNum = atoi(argv[1]);
-	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	int pNum = -1;
+	if (!C_IsValidInt(argv[1], pNum))
+	{
+		Printf("A player number must be provided. Use listplayers for more information\n");
 		return;
+	}
+
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	{
+		Printf("Invalid player number provided\n");
+		return;
+	}
 
 	if (!NetworkClients.InGame(pNum))
 	{
@@ -3173,11 +3191,18 @@ CCMD(listmuted)
 		return;
 	}
 
+	bool found = false;
 	for (auto client : NetworkClients)
 	{
 		if (MutedClients & (1 << client))
+		{
+			found = true;
 			Printf("%s - %d\n", players[client].userinfo.GetName(), client);
+		}
 	}
+
+	if (!found)
+		Printf("No one currently muted\n");
 }
 
 CCMD(unmute)
@@ -3194,9 +3219,18 @@ CCMD(unmute)
 		return;
 	}
 
-	const int pNum = atoi(argv[1]);
-	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	int pNum = -1;
+	if (!C_IsValidInt(argv[1], pNum))
+	{
+		Printf("A player number must be provided. Use listplayers for more information\n");
 		return;
+	}
+
+	if (pNum == consoleplayer || pNum < 0 || pNum >= MAXPLAYERS)
+	{
+		Printf("Invalid player number provided\n");
+		return;
+	}
 
 	MutedClients &= ~(1 << pNum);
 }
