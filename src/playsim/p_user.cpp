@@ -95,6 +95,8 @@
 #include "s_music.h"
 #include "d_main.h"
 
+extern int paused;
+
 static FRandom pr_skullpop ("SkullPop");
 
 // [SP] Allows respawn in single player
@@ -1558,6 +1560,9 @@ void P_PredictPlayer (player_t *player)
 
 		player->oldbuttons = player->cmd.buttons;
 		player->cmd = LocalCmds[i % LOCALCMDTICS];
+		if (paused)
+			continue;
+
 		player->mo->ClearInterpolation();
 		player->mo->ClearFOVInterpolation();
 		P_PlayerThink(player);
@@ -1589,6 +1594,10 @@ void P_PredictPlayer (player_t *player)
 			player->mo->SetXYZ(snapPos);
 			player->viewz = snapPos.Z + zOfs;
 		}
+	}
+	else if (paused)
+	{
+		r_NoInterpolate = true;
 	}
 
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
