@@ -84,7 +84,6 @@ extern FString	savedescription;
 extern FString	savegamefile;
 
 extern bool AppActive;
-extern bool bCapWeaponBobbing;
 
 void P_ClearLevelInterpolation();
 
@@ -2089,14 +2088,9 @@ void TryRunTics()
 
 		// If we're in between a tic, try and balance things out.
 		if (totalTics <= 0)
-		{
 			TicStabilityWait();
-		}
 		else
-		{
-			bCapWeaponBobbing = true;
 			P_ClearLevelInterpolation();
-		}
 
 		// If we actually advanced a command, update the player's position (even if a
 		// tic passes this isn't guaranteed to happen since it's capped to 35 in advance).
@@ -2110,7 +2104,6 @@ void TryRunTics()
 		return;
 	}
 
-	bCapWeaponBobbing = false;
 	for (auto client : NetworkClients)
 		players[client].waiting = false;
 
