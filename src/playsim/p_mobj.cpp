@@ -6101,7 +6101,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 		p->cheats = CF_CHASECAM;
 
 	// setup gun psprite
-	if (!(flags & SPF_TEMPPLAYER))
+	if (!(flags & SPF_TEMPPLAYER) || oldactor == nullptr)
 	{ // This can also start a script so don't do it for the dummy player.
 		P_SetupPsprites (p, !!(flags & SPF_WEAPONFULLYUP));
 	}
@@ -6156,7 +6156,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	}
 
 	// [BC] Do script stuff
-	if (!(flags & SPF_TEMPPLAYER))
+	if (!(flags & SPF_TEMPPLAYER) || oldactor == nullptr)
 	{
 		if (state == PST_ENTER || (state == PST_LIVE && !savegamerestore))
 		{
