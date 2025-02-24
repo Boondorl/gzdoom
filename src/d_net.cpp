@@ -1663,14 +1663,19 @@ bool ExchangeNetGameInfo(void *userdata)
 		NetBuffer[0] = NCMD_SETUP;
 		NetBuffer[1] = consoleplayer;
 		NetBuffer[9] = data->GotSetup[consoleplayer];
+		stream = &NetBuffer[10];
 		// If the host already knows we're here, just send over a heartbeat.
 		if (!(data->DetectedPlayers[Net_Arbitrator] & (1 << consoleplayer)))
 		{
-			stream = &NetBuffer[10];
 			auto str = D_GetUserInfoStrings(consoleplayer, true);
 			const size_t userSize = str.Len() + 1;
 			memcpy(stream, str.GetChars(), userSize);
 			stream += userSize;
+		}
+		else
+		{
+			*stream = 0;
+			++stream;
 		}
 	}
 	else
