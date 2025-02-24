@@ -1668,8 +1668,9 @@ bool ExchangeNetGameInfo(void *userdata)
 		{
 			stream = &NetBuffer[10];
 			auto str = D_GetUserInfoStrings(consoleplayer, true);
-			memcpy(stream, str.GetChars(), str.Len() + 1);
-			stream += str.Len();
+			const size_t userSize = str.Len() + 1;
+			memcpy(stream, str.GetChars(), userSize);
+			stream += userSize;
 		}
 	}
 	else
@@ -1694,8 +1695,9 @@ bool ExchangeNetGameInfo(void *userdata)
 					NetBuffer[1] = cl;
 					stream = &NetBuffer[9];
 					auto str = D_GetUserInfoStrings(cl, true);
-					memcpy(stream, str.GetChars(), str.Len() + 1);
-					stream += str.Len();
+					const size_t userSize = str.Len() + 1;
+					memcpy(stream, str.GetChars(), userSize);
+					stream += userSize;
 					HSendPacket(client, int(stream - NetBuffer));
 				}
 			}
