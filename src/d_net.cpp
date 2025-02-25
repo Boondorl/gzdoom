@@ -333,6 +333,7 @@ void Net_ClearBuffers()
 		memset(state.RecvTime, 0, sizeof(state.RecvTime));
 		state.bNewLatency = true;
 
+		state.ResendID = 0u;
 		state.CurrentNetConsistency = state.LastVerifiedConsistency = state.ConsistencyAck = state.ResendConsistencyFrom = -1;
 		state.CurrentSequence = state.SequenceAck = state.ResendSequenceFrom = -1;
 		state.Flags = 0;
@@ -394,7 +395,8 @@ void Net_ResetCommands(bool midTic)
 	{
 		auto& state = ClientStates[client];
 		state.Flags &= CF_QUIT;
-		state.CurrentSequence = state.SequenceAck = tic;
+		state.CurrentSequence = min<int>(state.CurrentSequence, tic);
+		state.SequenceAck = min<int>(state.SequenceAck, tic);
 		if (state.ResendSequenceFrom >= tic)
 			state.ResendSequenceFrom = -1;
 		
@@ -427,7 +429,7 @@ static int GetNetBufferSize()
 
 	if (NetBuffer[0] & NCMD_LEVELREADY)
 	{
-		int bytes = 1;
+		int bytes = 2;
 		if (NetMode == NET_PacketServer && doomcom.remoteplayer == Net_Arbitrator)
 			bytes += 2;
 
@@ -617,13 +619,14 @@ static void CheckLevelStart(int client, int delayTics)
 		{
 			// Someone might've missed the previous packet, so resend it just in case.
 			NetBuffer[0] = NCMD_LEVELREADY;
+			NetBuffer[1] = CurrentLobbyID;
 			if (NetMode == NET_PacketServer)
 			{
-				NetBuffer[1] = 0;
 				NetBuffer[2] = 0;
+				NetBuffer[3] = 0;
 			}
 
-			HSendPacket(client, NetMode == NET_PacketServer ? 3 : 1);
+			HSendPacket(client, NetMode == NET_PacketServer ? 4 : 2);
 		}
 
 		return;
@@ -649,6 +652,7 @@ static void CheckLevelStart(int client, int delayTics)
 	if ((LevelStartAck & mask) == mask && IsMapLoaded())
 	{
 		NetBuffer[0] = NCMD_LEVELREADY;
+		NetBuffer[1] = CurrentLobbyID;
 		uint16_t highestAvg = 0u;
 		if (NetMode == NET_PacketServer)
 		{
@@ -673,11 +677,11 @@ static void CheckLevelStart(int client, int delayTics)
 				if (client != Net_Arbitrator)
 					delay = int(floor((highestAvg - ClientStates[client].AverageLatency) * MS2Sec * TICRATE));
 
-				NetBuffer[1] = (delay << 8);
-				NetBuffer[2] = delay;
+				NetBuffer[2] = (delay << 8);
+				NetBuffer[3] = delay;
 			}
 
-			HSendPacket(client, NetMode == NET_PacketServer ? 3 : 1);
+			HSendPacket(client, NetMode == NET_PacketServer ? 4 : 2);
 		}
 	}
 }
@@ -751,16 +755,23 @@ static void GetPackets()
 
 		if (NetBuffer[0] & NCMD_LEVELREADY)
 		{
-			int delay = 0;
-			if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
-				delay = (NetBuffer[1] << 8) | NetBuffer[2];
+			if (NetBuffer[1] == CurrentLobbyID)
+			{
+				int delay = 0;
+				if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
+					delay = (NetBuffer[2] << 8) | NetBuffer[3];
 
-			CheckLevelStart(clientNum, delay);
+				CheckLevelStart(clientNum, delay);
+			}
+
 			continue;
 		}
 
 		if (NetBuffer[0] & NCMD_RETRANSMIT)
+		{
+			clientState.ResendID = NetBuffer[1];
 			clientState.Flags |= CF_RETRANSMIT;
+		}
 
 		const bool validID = NetBuffer[1] == CurrentLobbyID;
 		if (validID)
@@ -1192,7 +1203,8 @@ void NetUpdate(int tics)
 				if (consoleplayer != Net_Arbitrator && IsMapLoaded())
 				{
 					NetBuffer[0] = NCMD_LEVELREADY;
-					HSendPacket(Net_Arbitrator, 1);
+					NetBuffer[1] = CurrentLobbyID;
+					HSendPacket(Net_Arbitrator, 2);
 				}
 			}
 		}
@@ -1359,7 +1371,7 @@ void NetUpdate(int tics)
 		NetBuffer[0] = (curState.Flags & CF_MISSING) ? NCMD_RETRANSMIT : 0;
 		curState.Flags &= ~CF_MISSING;
 
-		NetBuffer[1] = CurrentLobbyID;
+		NetBuffer[1] = (curState.Flags & CF_RETRANSMIT_SEQ) ? curState.ResendID : CurrentLobbyID;
 		// Last sequence we got from this client.
 		NetBuffer[2] = (curState.CurrentSequence >> 24);
 		NetBuffer[3] = (curState.CurrentSequence >> 16);
