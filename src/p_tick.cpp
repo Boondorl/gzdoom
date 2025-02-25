@@ -103,7 +103,8 @@ void P_ClearLevelInterpolation()
 	}
 
 	R_ClearInterpolationPath();
-	StatusBar->ClearInterpolation();
+	if (StatusBar != nullptr)
+		StatusBar->ClearInterpolation();
 }
 
 //
