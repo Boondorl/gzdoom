@@ -275,12 +275,8 @@ void FThinkerCollection::RunThinkers(FLevelLocals *Level)
 //
 //==========================================================================
 
-void FThinkerCollection::RunClientsideThinkers(FLevelLocals* Level, int curTic)
+void FThinkerCollection::RunClientsideThinkers(FLevelLocals* Level)
 {
-	if (curTic <= _maxTic)
-		return;
-
-	_maxTic = curTic;
 	int i, count;
 
 	bool dolights;

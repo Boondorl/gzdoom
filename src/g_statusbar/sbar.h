@@ -443,6 +443,7 @@ public:
 	bool ShowLog;
 	int artiflashTick = 0;
 	double itemflashFade = 0.75;
+	int CurrentLocalTic = -1;
 
 	player_t *CPlayer;
 

@@ -43,6 +43,33 @@
 extern gamestate_t wipegamestate;
 extern uint8_t globalfreeze, globalchangefreeze;
 
+void P_RunClientsideLogic(int tic)
+{
+	for (auto Level : AllLevels())
+	{
+		if (tic <= Level->CurrentLocalTic)
+			continue;
+
+		Level->CurrentLocalTic = tic;
+
+		auto it = Level->GetClientsideThinkerIterator<AActor>();
+		AActor* ac;
+		while ((ac = it.Next()))
+		{
+			ac->ClearInterpolation();
+			ac->ClearFOVInterpolation();
+		}
+
+		Level->ClientsideThinkers.RunClientsideThinkers(Level);
+	}
+
+	if (tic > StatusBar->CurrentLocalTic)
+	{
+		StatusBar->CurrentLocalTic = tic;
+		StatusBar->CallTick();		// Status bar should tick AFTER the thinkers to properly reflect the level's state at this time.
+	}
+}
+
 //==========================================================================
 //
 // P_CheckTickerPaused
@@ -206,13 +233,6 @@ void P_Ticker (void)
 			ac->ClearFOVInterpolation();
 		}
 
-		it = Level->GetClientsideThinkerIterator<AActor>();
-		while ((ac = it.Next()))
-		{
-			ac->ClearInterpolation();
-			ac->ClearFOVInterpolation();
-		}
-
 		P_ThinkParticles(Level);	// [RH] make the particles think
 
 		for (i = 0; i < MAXPLAYERS; i++)
@@ -223,7 +243,6 @@ void P_Ticker (void)
 		Level->localEventManager->WorldTick();
 		Level->Tick();			// [RH] let the level tick
 		Level->Thinkers.RunThinkers(Level);
-		Level->ClientsideThinkers.RunClientsideThinkers(Level, gametic);
 
 		//if added by MC: Freeze mode.
 		if (!Level->isFrozen())
@@ -240,5 +259,6 @@ void P_Ticker (void)
 		if (players[consoleplayer].mo->Vel.Length() > primaryLevel->max_velocity) { primaryLevel->max_velocity = players[consoleplayer].mo->Vel.Length(); }
 		primaryLevel->avg_velocity += (players[consoleplayer].mo->Vel.Length() - primaryLevel->avg_velocity) / primaryLevel->maptime;
 	}
-	StatusBar->CallTick();		// Status bar should tick AFTER the thinkers to properly reflect the level's state at this time.
+	
+	P_RunClientsideLogic(gametic);
 }

@@ -97,6 +97,8 @@
 
 extern int paused;
 
+void P_RunClientsideLogic(int tic);
+
 static FRandom pr_skullpop ("SkullPop");
 
 // [SP] Allows respawn in single player
@@ -1546,7 +1548,7 @@ void P_PredictPlayer (player_t *player)
 		P_PlayerThink(player);
 		player->mo->CallTick();
 
-		player->mo->Level->ClientsideThinkers.RunClientsideThinkers(player->mo->Level, i);
+		P_RunClientsideLogic(i);
 	}
 
 	if (rubberband)
