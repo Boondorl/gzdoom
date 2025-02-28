@@ -3485,7 +3485,7 @@ void AActor::AddToHash ()
 	else
 	{
 		int hash = TIDHASH (tid);
-		auto &slot = Level->TIDHash[hash];
+		auto &slot = (ObjectFlags & OF_ClientSide) ? Level->ClientSideTIDHash[hash] : Level->TIDHash[hash];
 
 		inext = slot;
 		iprev = &slot;
@@ -3543,9 +3543,9 @@ void AActor::SetTID (int newTID)
 //
 //==========================================================================
 
-bool FLevelLocals::IsTIDUsed(int tid)
+bool FLevelLocals::IsTIDUsed(int tid, bool clientside)
 {
-	AActor *probe = TIDHash[tid & 127];
+	AActor *probe = clientside ? ClientSideTIDHash[tid & 127] : TIDHash[tid & 127];
 	while (probe != NULL)
 	{
 		if (probe->tid == tid)
@@ -3568,7 +3568,7 @@ bool FLevelLocals::IsTIDUsed(int tid)
 //
 //==========================================================================
 
-int FLevelLocals::FindUniqueTID(int start_tid, int limit)
+int FLevelLocals::FindUniqueTID(int start_tid, int limit, bool clientside)
 {
 	int tid;
 
@@ -3584,7 +3584,7 @@ int FLevelLocals::FindUniqueTID(int start_tid, int limit)
 		}
 		for (tid = start_tid; tid <= limit; ++tid)
 		{
-			if (tid != 0 && !IsTIDUsed(tid))
+			if (tid != 0 && !IsTIDUsed(tid, clientside))
 			{
 				return tid;
 			}
@@ -3606,7 +3606,7 @@ int FLevelLocals::FindUniqueTID(int start_tid, int limit)
 	{
 		// Use a positive starting TID.
 		tid = pr_uniquetid.GenRand32() & INT_MAX;
-		tid = FindUniqueTID(tid == 0 ? 1 : tid, 5);
+		tid = FindUniqueTID(tid == 0 ? 1 : tid, 5, clientside);
 		if (tid != 0)
 		{
 			return tid;
@@ -3622,7 +3622,7 @@ CCMD(utid)
 	for (auto Level : AllLevels())
 	{
 		Printf("%s, %d\n", Level->MapName.GetChars(), Level->FindUniqueTID(argv.argc() > 1 ? atoi(argv[1]) : 0,
-			(argv.argc() > 2 && atoi(argv[2]) >= 0) ? atoi(argv[2]) : 0));
+			(argv.argc() > 2 && atoi(argv[2]) >= 0) ? atoi(argv[2]) : 0, false));
 	}
 }
 

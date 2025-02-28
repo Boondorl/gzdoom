@@ -378,6 +378,19 @@ DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, CreateActorIterator, CreateActI)
 	ACTION_RETURN_OBJECT(CreateActI(self, tid, type));
 }
 
+static DActorIterator* CreateClientSideActI(FLevelLocals* Level, int tid, PClassActor* type)
+{
+	return Create<DActorIterator>(Level->ClientSideTIDHash, type, tid);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(FLevelLocals, CreateClientSideActorIterator, CreateClientSideActI)
+{
+	PARAM_SELF_STRUCT_PROLOGUE(FLevelLocals);
+	PARAM_INT(tid);
+	PARAM_CLASS(type, AActor);
+	ACTION_RETURN_OBJECT(CreateClientSideActI(self, tid, type));
+}
+
 static AActor *NextActI(DActorIterator *self)
 {
 	return self->Next();

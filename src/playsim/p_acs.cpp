@@ -5874,11 +5874,11 @@ int DLevelScript::CallFunction(int argCount, int funcIndex, int32_t *args, int &
 			break;
 
 		case ACSF_UniqueTID:
-			return Level->FindUniqueTID(argCount > 0 ? args[0] : 0, (argCount > 1 && args[1] >= 0) ? args[1] : 0);
+			return Level->FindUniqueTID(argCount > 0 ? args[0] : 0, (argCount > 1 && args[1] >= 0) ? args[1] : 0, false);
 
 		case ACSF_IsTIDUsed:
 			MIN_ARG_COUNT(1);
-			return Level->IsTIDUsed(args[0]);
+			return Level->IsTIDUsed(args[0], false);
 
 		case ACSF_Sqrt:
 			MIN_ARG_COUNT(1);

@@ -138,8 +138,8 @@ struct FLevelLocals
 	void ClearAllSubsectorLinks();
 	void TranslateLineDef (line_t *ld, maplinedef_t *mld, int lineindexforid = -1);
 	int TranslateSectorSpecial(int special);
-	bool IsTIDUsed(int tid);
-	int FindUniqueTID(int start_tid, int limit);
+	bool IsTIDUsed(int tid, bool clientside);
+	int FindUniqueTID(int start_tid, int limit, bool clientside);
 	int GetConversation(int conv_id);
 	int GetConversation(FName classname);
 	void SetConversation(int convid, PClassActor *Class, int dlgindex);
@@ -324,6 +324,18 @@ public:
 	{
 		return NActorIterator(TIDHash, type, tid);
 	}
+	FActorIterator GetClientSideActorIterator(int tid)
+	{
+		return FActorIterator(ClientSideTIDHash, tid);
+	}
+	FActorIterator GetClientSideActorIterator(int tid, AActor* start)
+	{
+		return FActorIterator(ClientSideTIDHash, tid, start);
+	}
+	NActorIterator GetClientSideActorIterator(FName type, int tid)
+	{
+		return NActorIterator(ClientSideTIDHash, type, tid);
+	}
 	AActor *SingleActorFromTID(int tid, AActor *defactor)
 	{
 		return tid == 0 ? defactor : GetActorIterator(tid).Next();
@@ -421,6 +433,7 @@ public:
 	void ClearTIDHashes ()
 	{
 		memset(TIDHash, 0, sizeof(TIDHash));
+		memset(ClientSideTIDHash, 0, sizeof(ClientSideTIDHash));
 	}
 
 
@@ -539,6 +552,7 @@ public:
 
 	FBehaviorContainer Behaviors;
 	AActor *TIDHash[128];
+	AActor* ClientSideTIDHash[128];
 
 	TArray<FStrifeDialogueNode *> StrifeDialogues;
 	FDialogueIDMap DialogueRoots;
