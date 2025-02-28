@@ -655,7 +655,7 @@ struct CallReturn
 
 static bool IsClientSideScript(const ScriptPtr& script)
 {
-	return (script.Flags & (SCRIPTF_Net | SCRIPTF_ClientSide)) == SCRIPTF_ClientSide;
+	return (script.Flags & SCRIPTF_ClientSide);
 }
 
 class DLevelScript : public DObject
@@ -10595,8 +10595,15 @@ int P_StartScript (FLevelLocals *Level, AActor *who, line_t *where, int script, 
 					return false;
 				}
 			}
-			DLevelScript *runningScript = P_GetScriptGoing (Level, who, where, script,
-				scriptdata, module, args, argcount, flags, IsClientSideScript(*scriptdata));
+
+			DLevelScript* runningScript = nullptr;
+			const bool clientside = IsClientSideScript(*scriptdata);
+			if (!(flags & ACS_NET) || !clientside || (who && Level->isConsolePlayer(who->player->mo)))
+			{
+				runningScript = P_GetScriptGoing(Level, who, where, script,
+					scriptdata, module, args, argcount, flags, clientside);
+			}
+
 			if (runningScript != NULL)
 			{
 				if (flags & ACS_WANTRESULT)

@@ -73,6 +73,8 @@
 #include "i_interface.h"
 #include "savegamemanager.h"
 
+void P_RunClientsideLogic();
+
 EXTERN_CVAR (Int, disableautosave)
 EXTERN_CVAR (Int, autosavecount)
 EXTERN_CVAR (Bool, cl_capfps)
