@@ -456,7 +456,7 @@ public:
 	{
 		DThinker* thinker = static_cast<DThinker*>(cls->CreateNew());
 		assert(thinker->IsKindOf(RUNTIME_CLASS(DThinker)));
-		thinker->ObjectFlags |= OF_JustSpawned | OF_Clientside;
+		thinker->ObjectFlags |= OF_JustSpawned | OF_ClientSide;
 		ClientsideThinkers.Link(thinker, statnum);
 		thinker->Level = this;
 		return thinker;
@@ -739,6 +739,7 @@ public:
 	TArray<TObjPtr<AActor *>> CorpseQueue;
 	TObjPtr<DFraggleThinker *> FraggleScriptThinker = MakeObjPtr<DFraggleThinker*>(nullptr);
 	TObjPtr<DACSThinker*> ACSThinker = MakeObjPtr<DACSThinker*>(nullptr);
+	TObjPtr<DACSThinker*> ClientSideACSThinker = MakeObjPtr<DACSThinker*>(nullptr);
 
 	TObjPtr<DSpotState *> SpotState = MakeObjPtr<DSpotState*>(nullptr);
 

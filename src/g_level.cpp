@@ -2287,6 +2287,7 @@ void FLevelLocals::Mark()
 	GC::Mark(SpotState);
 	GC::Mark(FraggleScriptThinker);
 	GC::Mark(ACSThinker);
+	GC::Mark(ClientSideACSThinker);
 	GC::Mark(automap);
 	GC::Mark(interpolator.Head);
 	GC::Mark(SequenceListHead);

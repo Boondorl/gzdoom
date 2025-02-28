@@ -59,7 +59,7 @@ void P_RunClientsideLogic()
 	{
 		auto it = level->GetClientsideThinkerIterator<AActor>();
 		AActor* ac = nullptr;
-		while ((ac = it.Next()))
+		while ((ac = it.Next()) != nullptr)
 		{
 			ac->ClearInterpolation();
 			ac->ClearFOVInterpolation();

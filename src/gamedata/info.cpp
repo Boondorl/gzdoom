@@ -490,7 +490,7 @@ void PClassActor::InitializeDefaults()
 				memset(Defaults + ParentClass->Size, 0, Size - ParentClass->Size);
 			}
 
-			optr->ObjectFlags = ((DObject*)ParentClass->Defaults)->ObjectFlags & (OF_Transient | OF_Clientside);
+			optr->ObjectFlags = ((DObject*)ParentClass->Defaults)->ObjectFlags & (OF_Transient | OF_ClientSide);
 		}
 		else
 		{

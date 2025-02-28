@@ -332,6 +332,7 @@ void FLevelLocals::ClearLevelData(bool fullgc)
 	if (SpotState) SpotState->Destroy();
 	SpotState = nullptr;
 	ACSThinker = nullptr;
+	ClientSideACSThinker = nullptr;
 	FraggleScriptThinker = nullptr;
 	CorpseQueue.Clear();
 	canvasTextureInfo.EmptyList();
