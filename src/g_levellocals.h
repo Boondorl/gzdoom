@@ -536,7 +536,6 @@ public:
 	TArray<FPlayerStart> deathmatchstarts;
 	FPlayerStart		playerstarts[MAXPLAYERS];
 	TArray<FPlayerStart> AllPlayerStarts;
-	int CurrentLocalTic = -1;	// Track clientside ticking
 
 	FBehaviorContainer Behaviors;
 	AActor *TIDHash[128];

@@ -43,31 +43,33 @@
 extern gamestate_t wipegamestate;
 extern uint8_t globalfreeze, globalchangefreeze;
 
-void P_RunClientsideLogic(int tic)
+//==========================================================================
+//
+// P_RunClientsideLogic
+//
+// Handles all logic that should be ran every tick including while
+// predicting. Only put non-playsim behaviors in here to avoid desyncs
+// when playing online.
+//
+//==========================================================================
+
+void P_RunClientsideLogic()
 {
-	for (auto Level : AllLevels())
+	for (auto level : AllLevels())
 	{
-		if (tic <= Level->CurrentLocalTic)
-			continue;
-
-		Level->CurrentLocalTic = tic;
-
-		auto it = Level->GetClientsideThinkerIterator<AActor>();
-		AActor* ac;
+		auto it = level->GetClientsideThinkerIterator<AActor>();
+		AActor* ac = nullptr;
 		while ((ac = it.Next()))
 		{
 			ac->ClearInterpolation();
 			ac->ClearFOVInterpolation();
 		}
 
-		Level->ClientsideThinkers.RunClientsideThinkers(Level);
+		level->ClientsideThinkers.RunClientsideThinkers(level);
 	}
 
-	if (tic > StatusBar->CurrentLocalTic)
-	{
-		StatusBar->CurrentLocalTic = tic;
+	if (StatusBar != nullptr)
 		StatusBar->CallTick();		// Status bar should tick AFTER the thinkers to properly reflect the level's state at this time.
-	}
 }
 
 //==========================================================================
@@ -259,6 +261,4 @@ void P_Ticker (void)
 		if (players[consoleplayer].mo->Vel.Length() > primaryLevel->max_velocity) { primaryLevel->max_velocity = players[consoleplayer].mo->Vel.Length(); }
 		primaryLevel->avg_velocity += (players[consoleplayer].mo->Vel.Length() - primaryLevel->avg_velocity) / primaryLevel->maptime;
 	}
-	
-	P_RunClientsideLogic(gametic);
 }
