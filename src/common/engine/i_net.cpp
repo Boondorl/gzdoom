@@ -149,6 +149,7 @@ enum
 	PRE_GO,					// Sent from host to guest to continue game startup
 	PRE_IN_PROGRESS,		// Sent from host to guest if the game has already started
 	PRE_WRONG_PASSWORD,		// Sent from host to guest if their provided password was wrong
+	PRE_DUPLICATE,			// An already connected guest that's out of the network tried to join again
 };
 
 // Set PreGamePacket.fake to this so that the game rejects any pregame packets
@@ -234,17 +235,20 @@ static bool I_ShouldStartNetGame()
 	return StartWindow->ShouldStartNet();
 }
 
-int FindNode (const sockaddr_in *address)
+static int FindNode (const sockaddr_in *address, bool* const isDuplicateIP = nullptr)
 {
 	int i = 0;
 
 	// find remote node number
 	for (; i < doomcom.numplayers; ++i)
 	{
-		if (address->sin_addr.s_addr == sendaddress[i].sin_addr.s_addr
-			&& address->sin_port == sendaddress[i].sin_port)
+		if (address->sin_addr.s_addr == sendaddress[i].sin_addr.s_addr)
 		{
-			break;
+			if (isDuplicateIP != nullptr)
+				*isDuplicateIP = true;
+
+			if (address->sin_port == sendaddress[i].sin_port)
+				break;
 		}
 	}
 
@@ -563,10 +567,12 @@ bool Host_CheckForConnects (void *userdata)
 		{
 			continue;
 		}
+
+		bool isDuplicate = false;
 		switch (packet.Message)
 		{
 		case PRE_CONNECT:
-			node = FindNode (from);
+			node = FindNode (from, &isDuplicate);
 			if (doomcom.numplayers == *connectedPlayers)
 			{
 				if (node == -1)
@@ -583,6 +589,13 @@ bool Host_CheckForConnects (void *userdata)
 			{
 				if (node == -1)
 				{
+					if (isDuplicate)
+					{
+						packet.Message = PRE_DUPLICATE;
+						PreSend(&packet, 2, from);
+						break;
+					}
+
 					if (strlen(net_password) > 0 && strcmp(net_password, packet.Password))
 					{
 						packet.Message = PRE_WRONG_PASSWORD;
@@ -857,6 +870,10 @@ bool Guest_ContactHost (void *userdata)
 			else if (packet.Message == PRE_WRONG_PASSWORD)
 			{
 				I_NetError("Invalid password.");
+			}
+			else if (packet.Message == PRE_DUPLICATE)
+			{
+				I_NetError("Already connected to host.");
 			}
 		}
 	}
