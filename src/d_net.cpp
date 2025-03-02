@@ -661,10 +661,16 @@ static void CheckLevelStart(int client, int delayTics)
 			if (FullLatencyCycle > 0)
 				return;
 
+			// Beyond this point a player is likely lagging out anyway.
+			const uint16_t LatencyCap = 350u;
 			for (auto client : NetworkClients)
 			{
-				if (client != Net_Arbitrator && ClientStates[client].AverageLatency > highestAvg)
-					highestAvg = ClientStates[client].AverageLatency;
+				if (client == Net_Arbitrator)
+					continue;
+
+				const uint16_t latency = min<uint16_t>(ClientStates[client].AverageLatency, LatencyCap);
+				if (latency > highestAvg)
+					highestAvg = latency;
 			}
 		}
 
