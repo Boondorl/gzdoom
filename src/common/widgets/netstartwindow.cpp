@@ -54,13 +54,6 @@ bool NetStartWindow::RunMessageLoop(bool (*newtimer_callback)(void*), void* newu
 	if (Instance->CallbackException)
 		std::rethrow_exception(Instance->CallbackException);
 
-	// Even though the comment in FBasicStartupScreen::NetLoop says we should return false, the old code actually throws an exception!
-	// This effectively also means the function always returns true...
-	if (!Instance->exitreason)
-	{
-		throw CExitEvent(0);
-	}
-
 	return Instance->exitreason;
 }
 

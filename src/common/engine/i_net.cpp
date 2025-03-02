@@ -605,6 +605,7 @@ bool Host_CheckForConnects (void *userdata)
 			node = FindNode (from);
 			if (node >= 0)
 			{
+				I_ClearNode(node);
 				I_NetMessage ("Got disconnect from node %d.", node);
 				--*connectedPlayers;
 				while (node < *connectedPlayers)
@@ -636,7 +637,8 @@ bool Host_CheckForConnects (void *userdata)
 			node = FindNode (from);
 			if (node >= 0)
 			{
-				--connectedPlayers;
+				I_ClearNode(node);
+				--*connectedPlayers;
 				while (node < *connectedPlayers)
 				{
 					sendaddress[node] = sendaddress[node+1];
@@ -766,6 +768,7 @@ bool HostGame (int i)
 	if (!I_NetLoop (Host_CheckForConnects, (void *)&connectedPlayers))
 	{
 		SendAbort(connectedPlayers);
+		throw CExitEvent(0);
 		return false;
 	}
 
@@ -790,6 +793,7 @@ bool HostGame (int i)
 	if (!I_NetLoop (Host_SendAllHere, (void *)&gotack))
 	{
 		SendAbort(doomcom.numplayers);
+		throw CExitEvent(0);
 		return false;
 	}
 
@@ -948,14 +952,16 @@ bool JoinGame (int i)
 
 	if (!I_NetLoop (Guest_ContactHost, nullptr))
 	{
-		SendAbort(1);
+		SendAbort(2);
+		throw CExitEvent(0);
 		return false;
 	}
 
 	// Wait for everyone else to connect
 	if (!I_NetLoop (Guest_WaitForOthers, nullptr))
 	{
-		SendAbort(1);
+		SendAbort(2);
+		throw CExitEvent(0);
 		return false;
 	}
 
