@@ -662,7 +662,7 @@ static void CheckLevelStart(int client, int delayTics)
 				return;
 
 			// Beyond this point a player is likely lagging out anyway.
-			const uint16_t LatencyCap = 350u;
+			constexpr uint16_t LatencyCap = 350u;
 			for (auto client : NetworkClients)
 			{
 				if (client == Net_Arbitrator)
