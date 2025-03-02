@@ -651,6 +651,9 @@ static void CheckLevelStart(int client, int delayTics)
 	LevelStartAck |= 1 << client;
 	if ((LevelStartAck & mask) == mask && IsMapLoaded())
 	{
+		// Beyond this point a player is likely lagging out anyway.
+		constexpr uint16_t LatencyCap = 350u;
+
 		NetBuffer[0] = NCMD_LEVELREADY;
 		NetBuffer[1] = CurrentLobbyID;
 		uint16_t highestAvg = 0u;
@@ -661,8 +664,6 @@ static void CheckLevelStart(int client, int delayTics)
 			if (FullLatencyCycle > 0)
 				return;
 
-			// Beyond this point a player is likely lagging out anyway.
-			constexpr uint16_t LatencyCap = 350u;
 			for (auto client : NetworkClients)
 			{
 				if (client == Net_Arbitrator)
@@ -681,7 +682,7 @@ static void CheckLevelStart(int client, int delayTics)
 			{
 				int delay = 0;
 				if (client != Net_Arbitrator)
-					delay = int(floor((highestAvg - ClientStates[client].AverageLatency) * MS2Sec * TICRATE));
+					delay = int(floor((highestAvg - min<uint16_t>(ClientStates[client].AverageLatency, LatencyCap)) * MS2Sec * TICRATE));
 
 				NetBuffer[2] = (delay << 8);
 				NetBuffer[3] = delay;
