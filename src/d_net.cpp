@@ -1332,7 +1332,6 @@ void NetUpdate(int tics)
 	int quitNums[MAXPLAYERS];
 	if (NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator)
 	{
-		// TODO: This is sending a lot of duplicate packets for some reason...
 		// In packet server mode special handling is used to ensure the host only
 		// sends out available tics when ready instead of constantly shotgunning
 		// them out as they're made locally.

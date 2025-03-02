@@ -1246,11 +1246,16 @@ void DBaseStatusBar::DrawConsistancy() const
 		if (players[client].inconsistant)
 		{
 			desync = true;
-			// Fell out of sync with the host in packet server mode.
-			if (client == consoleplayer && NetMode == NET_PacketServer)
+			// Fell out of sync with the host in packet server mode. Which specific user it is doesn't really matter.
+			if (NetMode == NET_PacketServer && consoleplayer != Net_Arbitrator)
+			{
 				text.AppendFormat(" %s (%d)", players[Net_Arbitrator].userinfo.GetName(10u), Net_Arbitrator + 1);
+				break;
+			}
 			else
+			{
 				text.AppendFormat(" %s (%d)", players[client].userinfo.GetName(10u), client + 1);
+			}
 		}
 	}
 
