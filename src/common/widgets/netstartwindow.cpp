@@ -70,6 +70,14 @@ void NetStartWindow::NetClose()
 		Instance->OnClose();
 }
 
+bool NetStartWindow::ShouldStartNetGame()
+{
+	if (Instance != nullptr)
+		return Instance->shouldstart;
+
+	return false;
+}
+
 NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
 {
 	SetWindowBackground(Colorf::fromRgba8(51, 51, 51));
@@ -81,13 +89,16 @@ NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
 	MessageLabel = new TextLabel(this);
 	ProgressLabel = new TextLabel(this);
 	AbortButton = new PushButton(this);
+	ForceStartButton = new PushButton(this);
 
 	MessageLabel->SetTextAlignment(TextLabelAlignment::Center);
 	ProgressLabel->SetTextAlignment(TextLabelAlignment::Center);
 
 	AbortButton->OnClick = [=]() { OnClose(); };
+	ForceStartButton->OnClick = [=]() { ForceStart(); };
 
-	AbortButton->SetText("Abort Network Game");
+	AbortButton->SetText("Abort");
+	ForceStartButton->SetText("Start Game");
 
 	CallbackTimer = new Timer(this);
 	CallbackTimer->FuncExpired = [=]() { OnCallbackTimerExpired(); };
@@ -117,6 +128,11 @@ void NetStartWindow::OnClose()
 	DisplayWindow::ExitLoop();
 }
 
+void NetStartWindow::ForceStart()
+{
+	shouldstart = true;
+}
+
 void NetStartWindow::OnGeometryChanged()
 {
 	double w = GetWidth();
@@ -132,7 +148,8 @@ void NetStartWindow::OnGeometryChanged()
 	y += labelheight;
 
 	y = GetHeight() - 15.0 - AbortButton->GetPreferredHeight();
-	AbortButton->SetFrameGeometry((w - 200.0) * 0.5, y, 200.0, AbortButton->GetPreferredHeight());
+	AbortButton->SetFrameGeometry((w + 10.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
+	ForceStartButton->SetFrameGeometry((w - 210.0) * 0.5, y, 100.0, ForceStartButton->GetPreferredHeight());
 }
 
 void NetStartWindow::OnCallbackTimerExpired()

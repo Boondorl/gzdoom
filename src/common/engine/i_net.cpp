@@ -226,6 +226,14 @@ void I_ClearNode(int node)
 	memset(&sendaddress[node], 0, sizeof(sendaddress[node]));
 }
 
+static bool I_ShouldStartNetGame()
+{
+	if (doomcom.consoleplayer != 0)
+		return false;
+
+	return StartWindow->ShouldStartNet();
+}
+
 int FindNode (const sockaddr_in *address)
 {
 	int i = 0;
@@ -611,7 +619,7 @@ bool Host_CheckForConnects (void *userdata)
 			break;
 		}
 	}
-	if (*connectedPlayers < doomcom.numplayers)
+	if (*connectedPlayers < doomcom.numplayers && !I_ShouldStartNetGame())
 	{
 		// Send message to everyone as a keepalive
 		SendConAck(*connectedPlayers, doomcom.numplayers);
@@ -640,6 +648,11 @@ bool Host_CheckForConnects (void *userdata)
 			break;
 		}
 	}
+
+	// TODO: This will need a much better solution later.
+	if (I_ShouldStartNetGame())
+		doomcom.numplayers = *connectedPlayers;
+
 	return *connectedPlayers >= doomcom.numplayers;
 }
 
@@ -754,6 +767,19 @@ bool HostGame (int i)
 	{
 		SendAbort(connectedPlayers);
 		return false;
+	}
+
+	// If the player force started with only themselves in the lobby, start the game
+	// immediately.
+	if (doomcom.numplayers <= 1)
+	{
+		NetworkClients += 0;
+		netgame = false;
+		multiplayer = true;
+		doomcom.id = DOOMCOM_ID;
+		doomcom.numplayers = 1;
+		I_NetDone();
+		return true;
 	}
 
 	// Now inform everyone of all machines involved in the game
