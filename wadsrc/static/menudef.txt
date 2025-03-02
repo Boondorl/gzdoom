@@ -654,6 +654,8 @@ OptionMenu "OtherControlsMenu" protected
 	StaticText ""
 	Control    "$CNTRLMNU_CHASECAM"        , "chase"
 	Control    "$CNTRLMNU_COOPSPY"         , "spynext"
+	Control    "$CNTRLMNU_COOPSPYPREV"     , "spyprev"
+	Control    "$CNTRLMNU_COOPSPYCANCEL"   , "spycancel"
 
 	StaticText ""
 	Control    "$CNTRLMNU_SCREENSHOT"      , "screenshot"
