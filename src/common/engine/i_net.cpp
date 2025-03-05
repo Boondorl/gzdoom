@@ -173,6 +173,13 @@ CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
 	}
 }
 
+void Net_SetupUserInfo();
+const char* Net_GetClientName(int client, unsigned int charLimit);
+int Net_SetUserInfo(int client, uint8_t*& stream);
+int Net_ReadUserInfo(int client, uint8_t*& stream);
+int Net_ReadGameInfo(uint8_t*& stream);
+int Net_SetGameInfo(uint8_t*& stream);
+
 static SOCKET CreateUDPSocket()
 {
 	SOCKET s = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -327,9 +334,56 @@ static bool ClientsOnSameNetwork()
 	return true;
 }
 
+static void I_NetMessage(const char* text, ...)
+{
+	// todo: use better abstraction once everything is migrated to in-game start screens.
+#if defined _WIN32 || defined __APPLE__
+	va_list ap;
+	va_start(ap, text);
+	VPrintf(PRINT_HIGH, text, ap);
+	Printf("\n");
+	va_end(ap);
+#else
+	FString str;
+	va_list argptr;
+
+	va_start(argptr, text);
+	str.VFormat(text, argptr);
+	va_end(argptr);
+	fprintf(stderr, "\r%-40s\n", str.GetChars());
+#endif
+}
+
+static void I_NetError(const char* error)
+{
+	StartWindow->NetClose();
+	I_FatalError("%s", error);
+}
+
+// todo: later these must be dispatched by the main menu, not the start screen.
+static void I_NetInit(const char* msg, int num)
+{
+	StartWindow->NetInit(msg, num);
+}
+
+static bool I_NetLoop(bool (*timer_callback)(void*), void* userdata)
+{
+	return StartWindow->NetLoop(timer_callback, userdata);
+}
+
+static void I_NetProgress(int val)
+{
+	StartWindow->NetProgress(val);
+}
+
 static bool I_ShouldStartNetGame()
 {
 	return StartWindow->ShouldStartNet();
+}
+
+void I_NetDone()
+{
+	StartWindow->NetDone();
 }
 
 void I_ClearClient(size_t client)
@@ -448,6 +502,19 @@ static void GetPacket(sockaddr_in* const from = nullptr)
 		*from = fromAddress;
 }
 
+void I_NetCmd(ENetCommand cmd)
+{
+	if (cmd == CMD_SEND)
+	{
+		if (RemoteClient >= 0)
+			SendPacket(Connected[RemoteClient].Address);
+	}
+	else if (cmd == CMD_GET)
+	{
+		GetPacket();
+	}
+}
+
 static void SetClientAck(uint64_t ack[4], size_t client, bool add)
 {
 	const uint64_t bit = (uint64_t)1u << (client % 64u);
@@ -533,12 +600,6 @@ void HandleIncomingConnection()
 		SendPacket(Connected[RemoteClient].Address);
 	}
 }
-
-void Net_SetupUserInfo();
-int Net_SetUserInfo(int client, uint8_t*& stream);
-int Net_ReadUserInfo(int client, uint8_t*& stream);
-int Net_ReadGameInfo(uint8_t*& stream);
-int Net_SetGameInfo(uint8_t*& stream);
 
 static bool Host_CheckForConnections(void* connected)
 {
@@ -1021,63 +1082,6 @@ bool I_InitNetwork()
 	return true;
 }
 
-
-void I_NetCmd(ENetCommand cmd)
-{
-	if (cmd == CMD_SEND)
-	{
-		if (RemoteClient >= 0)
-			SendPacket(Connected[RemoteClient].Address);
-	}
-	else if (cmd == CMD_GET)
-	{
-		GetPacket();
-	}
-}
-
-void I_NetMessage(const char* text, ...)
-{
-	// todo: use better abstraction once everything is migrated to in-game start screens.
-#if defined _WIN32 || defined __APPLE__
-	va_list ap;
-	va_start(ap, text);
-	VPrintf(PRINT_HIGH, text, ap);
-	Printf("\n");
-	va_end(ap);
-#else
-	FString str;
-	va_list argptr;
-
-	va_start(argptr, text);
-	str.VFormat(text, argptr);
-	va_end(argptr);
-	fprintf(stderr, "\r%-40s\n", str.GetChars());
-#endif
-}
-
-void I_NetError(const char* error)
-{
-	StartWindow->NetClose();
-	I_FatalError("%s", error);
-}
-
-// todo: later these must be dispatched by the main menu, not the start screen.
-void I_NetProgress(int val)
-{
-	StartWindow->NetProgress(val);
-}
-void I_NetInit(const char* msg, int num)
-{
-	StartWindow->NetInit(msg, num);
-}
-bool I_NetLoop(bool (*timer_callback)(void*), void* userdata)
-{
-	return StartWindow->NetLoop(timer_callback, userdata);
-}
-void I_NetDone()
-{
-	StartWindow->NetDone();
-}
 #ifdef __WIN32__
 const char* neterror()
 {

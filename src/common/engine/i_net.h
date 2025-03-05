@@ -71,11 +71,6 @@ extern uint32_t GameID;
 bool I_InitNetwork();
 void I_ClearClient(size_t client);
 void I_NetCmd(ENetCommand cmd);
-void I_NetMessage(const char*, ...);
-void I_NetError(const char* error);
-void I_NetProgress(int val);
-void I_NetInit(const char* msg, int num);
-bool I_NetLoop(bool (*timer_callback)(void*), void* userdata);
 void I_NetDone();
 void HandleIncomingConnection();
 

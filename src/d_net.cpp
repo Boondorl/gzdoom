@@ -1535,6 +1535,11 @@ void Net_SetupUserInfo()
 	D_SetupUserInfo();
 }
 
+const char* Net_GetClientName(int client, unsigned int charLimit = 0u)
+{
+	return players[client].userinfo.GetName(charLimit);
+}
+
 int Net_SetUserInfo(int client, uint8_t*& stream)
 {
 	auto str = D_GetUserInfoStrings(client, true);
@@ -1566,11 +1571,6 @@ int Net_ReadGameInfo(uint8_t*& stream)
 	rngseed = ReadInt32(&stream);
 	C_ReadCVars(&stream);
 	return int(stream - start);
-}
-
-const char* Net_GetClientName(int client, unsigned int charLimit = 0u)
-{
-	return players[client].userinfo.GetName(charLimit);
 }
 
 // Connects players to each other if needed.
