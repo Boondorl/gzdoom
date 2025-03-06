@@ -755,7 +755,9 @@ static bool Host_CheckForConnections(void* connected)
 		{
 			NetBuffer[1] = PRE_CONNECT_ACK;
 			NetBuffer[2] = client;
-			NetBufferLength = 3u;
+			NetBuffer[3] = *connectedPlayers;
+			NetBuffer[4] = MaxClients;
+			NetBufferLength = 5u;
 			SendPacket(con.Address);
 		}
 		else if (con.Status == CSTAT_WAITING)
@@ -784,23 +786,26 @@ static bool Host_CheckForConnections(void* connected)
 			NetBuffer[1] = PRE_USER_INFO;
 			for (size_t i = 0u; i < MaxClients; ++i)
 			{
-				if (i == client)
+				if (i == client || Connected[i].Status == CSTAT_NONE)
 					continue;
 
-				if (Connected[i].Status >= CSTAT_WAITING && !ClientGotAck(con.InfoAck, i))
+				if (!ClientGotAck(con.InfoAck, i))
 				{
-					NetBuffer[2] = i;
-					NetBufferLength = 3u;
-					// Client will already have the host connection information.
-					if (i > 0)
+					if (Connected[i].Status >= CSTAT_WAITING)
 					{
-						memcpy(&NetBuffer[NetBufferLength], &Connected[i].Address, addrSize);
-						NetBufferLength += addrSize;
-					}
+						NetBuffer[2] = i;
+						NetBufferLength = 3u;
+						// Client will already have the host connection information.
+						if (i > 0)
+						{
+							memcpy(&NetBuffer[NetBufferLength], &Connected[i].Address, addrSize);
+							NetBufferLength += addrSize;
+						}
 
-					uint8_t* stream = &NetBuffer[NetBufferLength];
-					NetBufferLength += Net_SetUserInfo(i, stream);
-					SendPacket(con.Address);
+						uint8_t* stream = &NetBuffer[NetBufferLength];
+						NetBufferLength += Net_SetUserInfo(i, stream);
+						SendPacket(con.Address);
+					}
 					clientReady = false;
 				}
 			}
@@ -936,7 +941,8 @@ static bool Guest_ContactHost(void* unused)
 
 		if (NetBuffer[1] == PRE_HEARTBEAT)
 		{
-			I_NetUpdatePlayers(NetBuffer[2], NetBuffer[3]);
+			MaxClients = NetBuffer[3];
+			I_NetUpdatePlayers(NetBuffer[2], MaxClients);
 		}
 		else if (NetBuffer[1] == PRE_DISCONNECT)
 		{
@@ -980,8 +986,10 @@ static bool Guest_ContactHost(void* unused)
 				Connected[consoleplayer].Status = CSTAT_CONNECTING;
 				Net_SetupUserInfo();
 
+				MaxClients = NetBuffer[4];
 				I_NetMessage("Sending game information");
 				I_NetClientConnected(consoleplayer, 16u);
+				I_NetUpdatePlayers(NetBuffer[3], MaxClients);
 			}
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)

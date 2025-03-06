@@ -1596,7 +1596,7 @@ bool D_CheckNetGame()
 		else
 			Printf("Host selected " TEXTCOLOR_BLUE "%s" TEXTCOLOR_NORMAL " networking mode\n", NetMode == NET_PeerToPeer ? "peer to peer" : "packet server");
 
-		Printf("player %d of %d\n", consoleplayer + 1, MaxClients);
+		Printf("Player %d of %d\n", consoleplayer + 1, MaxClients);
 	}
 	
 	return true;
