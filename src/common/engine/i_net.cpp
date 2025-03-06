@@ -512,27 +512,34 @@ static void GetPacket(sockaddr_in* const from = nullptr)
 			msgSize = 0;
 		}
 	}
-	else if (client >= 0 && msgSize > 0)
+	else if (msgSize > 0)
 	{
-		NetBuffer[0] = (TransmitBuffer[0] & ~NCMD_COMPRESSED);
-		if (TransmitBuffer[0] & NCMD_COMPRESSED)
+		if (client == -1 && !(TransmitBuffer[0] & NCMD_SETUP))
 		{
-			uLongf size = MAX_MSGLEN - 1;
-			int err = uncompress(NetBuffer + 1, &size, TransmitBuffer + 1, msgSize - 1);
-			if (err != Z_OK)
-			{
-				Printf("Net decompression failed (zlib error %s)\n", M_ZLibError(err).GetChars());
-				client = -1;
-				msgSize = 0;
-			}
-			else
-			{
-				msgSize = size + 1;
-			}
+			msgSize = 0;
 		}
 		else
 		{
-			memcpy(NetBuffer + 1, TransmitBuffer + 1, msgSize - 1);
+			NetBuffer[0] = (TransmitBuffer[0] & ~NCMD_COMPRESSED);
+			if (TransmitBuffer[0] & NCMD_COMPRESSED)
+			{
+				uLongf size = MAX_MSGLEN - 1;
+				int err = uncompress(NetBuffer + 1, &size, TransmitBuffer + 1, msgSize - 1);
+				if (err != Z_OK)
+				{
+					Printf("Net decompression failed (zlib error %s)\n", M_ZLibError(err).GetChars());
+					client = -1;
+					msgSize = 0;
+				}
+				else
+				{
+					msgSize = size + 1;
+				}
+			}
+			else
+			{
+				memcpy(NetBuffer + 1, TransmitBuffer + 1, msgSize - 1);
+			}
 		}
 	}
 	else
@@ -868,13 +875,13 @@ static bool HostGame(int arg, bool forcedNetMode)
 	// Now go
 	I_NetMessage("Starting game");
 	I_NetLog("Go");
+	I_NetDone();
 
 	// If the player force started with only themselves in the lobby, start the game
 	// immediately.
 	if (connectedPlayers == 1u)
 	{
 		CloseNetwork();
-		I_NetDone();
 		MaxClients = TicDup = 1u;
 		return true;
 	}
@@ -1081,6 +1088,7 @@ static bool JoinGame(int arg)
 
 	// Host is always client 0.
 	BuildAddress(Connected[0].Address, Args->GetArg(arg));
+	Connected[0].Status = CSTAT_CONNECTING;
 
 	I_NetInit("Contacting host...");
 
@@ -1097,6 +1105,7 @@ static bool JoinGame(int arg)
 	}
 
 	I_NetLog("Total players: %u", MaxClients);
+	I_NetDone();
 
 	return true;
 }
