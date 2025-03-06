@@ -4,6 +4,7 @@
 #include <stdexcept>
 
 class TextLabel;
+class ListView;
 class PushButton;
 class Timer;
 
@@ -37,6 +38,7 @@ private:
 
 	TextLabel* MessageLabel = nullptr;
 	TextLabel* ProgressLabel = nullptr;
+	ListView* LobbyWindow = nullptr;
 	PushButton* AbortButton = nullptr;
 	PushButton* ForceStartButton = nullptr;
 

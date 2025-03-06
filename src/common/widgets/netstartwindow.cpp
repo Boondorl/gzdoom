@@ -5,6 +5,7 @@
 #include "gstrings.h"
 #include <zwidget/core/timer.h>
 #include <zwidget/widgets/textlabel/textlabel.h>
+#include <zwidget/widgets/listview/listview.h>
 #include <zwidget/widgets/pushbutton/pushbutton.h>
 
 NetStartWindow* NetStartWindow::Instance = nullptr;
@@ -12,8 +13,8 @@ NetStartWindow* NetStartWindow::Instance = nullptr;
 void NetStartWindow::NetInit(const char* message)
 {
 	Size screenSize = GetScreenSize();
-	double windowWidth = 300.0;
-	double windowHeight = 150.0;
+	double windowWidth = 450.0;
+	double windowHeight = 600.0;
 
 	if (!Instance)
 	{
@@ -33,7 +34,22 @@ void NetStartWindow::NetMessage(const char* message)
 
 void NetStartWindow::NetConnect(int client, const char* name, unsigned flags, int status)
 {
+	if (!Instance)
+		return;
+
+	std::string line = "";
+	line.append(std::to_string(client));
+	line.append(" ");
+	line.append(name);
 	
+	if (status == 1)
+		line.append("   CON");
+	else if (status == 2)
+		line.append("   WAIT");
+	else if (status == 3)
+		line.append("   READY");
+
+	Instance->LobbyWindow->AddItem(line);
 }
 
 void NetStartWindow::NetUpdate(int client, int status)
@@ -105,6 +121,7 @@ NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
 
 	MessageLabel = new TextLabel(this);
 	ProgressLabel = new TextLabel(this);
+	LobbyWindow = new ListView(this);
 	AbortButton = new PushButton(this);
 	ForceStartButton = new PushButton(this);
 
@@ -161,7 +178,10 @@ void NetStartWindow::OnGeometryChanged()
 
 	labelheight = ProgressLabel->GetPreferredHeight();
 	ProgressLabel->SetFrameGeometry(Rect::xywh(5.0, y, w - 10.0, labelheight));
-	y += labelheight;
+	y += labelheight + 5.0;
+
+	labelheight = (GetHeight() - 30.0 - AbortButton->GetPreferredHeight()) - y;
+	LobbyWindow->SetFrameGeometry(Rect::xywh(5.0, y, w - 10.0, labelheight));
 
 	y = GetHeight() - 15.0 - AbortButton->GetPreferredHeight();
 	AbortButton->SetFrameGeometry((w + 10.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
