@@ -493,14 +493,22 @@ static void GetPacket(sockaddr_in* const from = nullptr)
 		int err = WSAGetLastError();
 		if (err == WSAECONNRESET)
 		{
-			// The remote node aborted unexpectedly, so pretend it sent an exit packet. If in packet server
-			// mode and it was the host, just consider the game too bricked to continue since the host has
-			// to determine the new host properly.
-			if (NetMode == NET_PacketServer && client == Net_Arbitrator)
-				I_NetError("Host unexpectedly disconnected");
+			if (consoleplayer == -1)
+			{
+				client = -1;
+				msgSize = 0;
+			}
+			else
+			{
+				// The remote node aborted unexpectedly, so pretend it sent an exit packet. If in packet server
+				// mode and it was the host, just consider the game too bricked to continue since the host has
+				// to determine the new host properly.
+				if (NetMode == NET_PacketServer && client == Net_Arbitrator)
+					I_NetError("Host unexpectedly disconnected");
 
-			NetBuffer[0] = NCMD_EXIT;
-			msgSize = 1;
+				NetBuffer[0] = NCMD_EXIT;
+				msgSize = 1;
+			}
 		}
 		else if (err != WSAEWOULDBLOCK)
 		{
@@ -874,7 +882,6 @@ static bool HostGame(int arg, bool forcedNetMode)
 
 	// Now go
 	I_NetMessage("Starting game");
-	I_NetLog("Go");
 	I_NetDone();
 
 	// If the player force started with only themselves in the lobby, start the game
@@ -893,6 +900,8 @@ static bool HostGame(int arg, bool forcedNetMode)
 		else if (!ClientsOnSameNetwork())
 			NetMode = NET_PacketServer;
 	}
+
+	I_NetLog("Go");
 
 	NetBuffer[0] = NCMD_SETUP;
 	NetBuffer[1] = PRE_GO;
@@ -971,7 +980,7 @@ static bool Guest_ContactHost(void* unused)
 				Connected[consoleplayer].Status = CSTAT_CONNECTING;
 				Net_SetupUserInfo();
 
-				I_NetMessage("Waiting for game to start");
+				I_NetMessage("Sending game information");
 				I_NetClientConnected(consoleplayer, 16u);
 			}
 		}
@@ -983,6 +992,7 @@ static bool Guest_ContactHost(void* unused)
 			{
 				Connected[consoleplayer].Status = CSTAT_WAITING;
 				I_NetClientUpdated(consoleplayer);
+				I_NetMessage("Waiting for game to start");
 			}
 
 			NetBuffer[0] = NCMD_SETUP;
