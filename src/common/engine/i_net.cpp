@@ -132,7 +132,6 @@ enum EConnectionStatus
 {
 	CSTAT_NONE,			// Guest isn't connected
 	CSTAT_CONNECTING,	// Guest is trying to connect
-	CSTAT_GETTING_INFO,	// Guest is sending over their own info
 	CSTAT_WAITING,		// Guest is waiting for game info
 	CSTAT_READY,		// Guest is ready to start the game
 };
