@@ -10,17 +10,21 @@ class Timer;
 class NetStartWindow : public Widget
 {
 public:
-	static void ShowNetStartPane(const char* message, int maxpos);
-	static void HideNetStartPane();
-	static void SetNetStartProgress(int pos);
-	static bool RunMessageLoop(bool (*timer_callback)(void*), void* userdata);
+	static void NetInit(const char* message);
+	static void NetMessage(const char* message);
+	static void NetConnect(int client, const char* name, unsigned flags, int status);
+	static void NetUpdate(int client, int status);
+	static void NetDisconnect(int client);
+	static void NetProgress(int cur, int limit);
+	static void NetDone();
 	static void NetClose();
-	static bool ShouldStartNetGame();
+	static bool ShouldStartNet();
+	static bool NetLoop(bool (*timer_callback)(void*), void* userdata);
 
 private:
 	NetStartWindow();
 
-	void SetMessage(const std::string& message, int maxpos);
+	void SetMessage(const std::string& message);
 	void SetProgress(int pos);
 
 protected:

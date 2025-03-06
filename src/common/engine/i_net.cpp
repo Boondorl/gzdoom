@@ -137,6 +137,15 @@ enum EConnectionStatus
 	CSTAT_READY,		// Guest is ready to start the game
 };
 
+// These need to be synced with the window backends so information about each
+// client can be properly displayed.
+enum EConnectionFlags : unsigned int
+{
+	CFL_NONE			= 0,
+	CFL_CONSOLEPLAYER	= 1,
+	CFL_HOST			= 1 << 1,
+};
+
 struct FConnection
 {
 	EConnectionStatus Status = CSTAT_NONE;
@@ -334,7 +343,9 @@ static bool ClientsOnSameNetwork()
 	return true;
 }
 
-static void I_NetMessage(const char* text, ...)
+// Print a network-related message to the console. This doesn't print to the window so should
+// not be used for that and is mainly for logging.
+static void I_NetLog(const char* text, ...)
 {
 	// todo: use better abstraction once everything is migrated to in-game start screens.
 #if defined _WIN32 || defined __APPLE__
@@ -354,26 +365,59 @@ static void I_NetMessage(const char* text, ...)
 #endif
 }
 
+// Gracefully closes the net window so that any error messaging can be properly displayed.
 static void I_NetError(const char* error)
 {
 	StartWindow->NetClose();
 	I_FatalError("%s", error);
 }
 
+static void I_NetInit(const char* msg)
+{
+	StartWindow->NetInit(msg);
+}
+
 // todo: later these must be dispatched by the main menu, not the start screen.
-static void I_NetInit(const char* msg, int num)
+// Updates the general status of the lobby.
+static void I_NetMessage(const char* msg)
 {
-	StartWindow->NetInit(msg, num);
+	StartWindow->NetMessage(msg);
 }
 
-static bool I_NetLoop(bool (*timer_callback)(void*), void* userdata)
+// Listen for incoming connections while the lobby is active. The main thread needs to be locked up
+// here to prevent the engine from continuing to start the game until everyone is ready.
+static bool I_NetLoop(bool (*loopCallback)(void*), void* data)
 {
-	return StartWindow->NetLoop(timer_callback, userdata);
+	return StartWindow->NetLoop(loopCallback, data);
 }
 
-static void I_NetProgress(int val)
+// A new client has just entered the game, so add them to the player list.
+static void I_NetClientConnected(size_t client, unsigned int charLimit = 0u)
 {
-	StartWindow->NetProgress(val);
+	const char* name = Net_GetClientName(client, charLimit);
+	unsigned int flags = CFL_NONE;
+	if (client == 0)
+		flags |= CFL_HOST;
+	if (client == consoleplayer)
+		flags |= CFL_CONSOLEPLAYER;
+
+	StartWindow->NetConnect(client, name, flags, Connected[client].Status);
+}
+
+// A client changed ready state.
+static void I_NetClientUpdated(size_t client)
+{
+	StartWindow->NetUpdate(client, Connected[client].Status);
+}
+
+static void I_NetClientDisconnected(size_t client)
+{
+	StartWindow->NetDisconnect(client);
+}
+
+static void I_NetUpdatePlayers(size_t current, size_t limit)
+{
+	StartWindow->NetProgress(current, limit);
 }
 
 static bool I_ShouldStartNetGame()
@@ -549,23 +593,27 @@ static void AddClientConnection(const sockaddr_in& from, size_t client)
 	Connected[client].Status = CSTAT_CONNECTING;
 	Connected[client].Address = from;
 	NetworkClients += client;
-	I_NetMessage("Client %u joined the lobby", client);
+	I_NetLog("Client %u joined the lobby", client);
 
 	// Make sure any ready clients are marked as needing the new client's info.
 	for (size_t i = 1u; i < MaxClients; ++i)
 	{
 		if (Connected[i].Status == CSTAT_READY)
+		{
 			Connected[i].Status = CSTAT_WAITING;
+			I_NetClientUpdated(i);
+		}
 	}
-
-	// I_Netthingf
 }
 
 static void RemoveClientConnection(size_t client)
 {
+	if (Connected[client].Status >= CSTAT_WAITING)
+		I_NetClientDisconnected(client);
+
 	I_ClearClient(client);
 	NetworkClients -= client;
-	I_NetMessage("Client %u left the lobby", client);
+	I_NetLog("Client %u left the lobby", client);
 
 	// Let everyone else know the user left as well.
 	NetBuffer[0] = NCMD_SETUP;
@@ -582,8 +630,6 @@ static void RemoveClientConnection(size_t client)
 		for (int i = 0; i < 4; ++i)
 			SendPacket(Connected[i].Address);
 	}
-
-	// I_Netthingf
 }
 
 void HandleIncomingConnection()
@@ -616,6 +662,7 @@ static bool Host_CheckForConnections(void* connected)
 			{
 				RemoveClientConnection(RemoteClient);
 				--*connectedPlayers;
+				I_NetUpdatePlayers(*connectedPlayers, MaxClients);
 			}
 
 			continue;
@@ -656,6 +703,7 @@ static bool Host_CheckForConnections(void* connected)
 
 				AddClientConnection(from, free);
 				++*connectedPlayers;
+				I_NetUpdatePlayers(*connectedPlayers, MaxClients);
 			}
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO)
@@ -665,6 +713,7 @@ static bool Host_CheckForConnections(void* connected)
 				uint8_t* stream = &NetBuffer[2];
 				Net_ReadUserInfo(RemoteClient, stream);
 				Connected[RemoteClient].Status = CSTAT_WAITING;
+				I_NetClientConnected(RemoteClient, 16u);
 			}
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)
@@ -696,11 +745,13 @@ static bool Host_CheckForConnections(void* connected)
 		}
 		else if (con.Status == CSTAT_WAITING)
 		{
+			bool clientReady = true;
 			if (!ClientGotAck(con.InfoAck, client))
 			{
 				NetBuffer[1] = PRE_USER_INFO_ACK;
 				NetBufferLength = 2u;
 				SendPacket(con.Address);
+				clientReady = false;
 			}
 
 			if (!con.bHasGameInfo)
@@ -712,6 +763,7 @@ static bool Host_CheckForConnections(void* connected)
 				uint8_t* stream = &NetBuffer[NetBufferLength];
 				NetBufferLength += Net_SetGameInfo(stream);
 				SendPacket(con.Address);
+				clientReady = false;
 			}
 
 			NetBuffer[1] = PRE_USER_INFO;
@@ -734,7 +786,14 @@ static bool Host_CheckForConnections(void* connected)
 					uint8_t* stream = &NetBuffer[NetBufferLength];
 					NetBufferLength += Net_SetUserInfo(i, stream);
 					SendPacket(con.Address);
+					clientReady = false;
 				}
+			}
+
+			if (clientReady)
+			{
+				con.Status = CSTAT_READY;
+				I_NetClientUpdated(client);
 			}
 		}
 		else if (con.Status == CSTAT_READY)
@@ -794,7 +853,9 @@ static bool HostGame(int arg, bool forcedNetMode)
 	}
 
 	StartNetwork(false);
-	I_NetInit("Hosting game", MaxClients);
+	I_NetInit("Waiting for other players...");
+	I_NetUpdatePlayers(1u, MaxClients);
+	I_NetClientConnected(0u, 16u);
 
 	// Wait for the lobby to be full.
 	size_t connectedPlayers = 1u;
@@ -805,7 +866,8 @@ static bool HostGame(int arg, bool forcedNetMode)
 	}
 
 	// Now go
-	I_NetMessage("Go");
+	I_NetMessage("Starting game");
+	I_NetLog("Go");
 
 	// If the player force started with only themselves in the lobby, start the game
 	// immediately.
@@ -835,7 +897,7 @@ static bool HostGame(int arg, bool forcedNetMode)
 			SendPacket(Connected[client].Address);
 	}
 
-	I_NetMessage("Total players: %u", connectedPlayers);
+	I_NetLog("Total players: %u", connectedPlayers);
 
 	return true;
 }
@@ -858,7 +920,7 @@ static bool Guest_ContactHost(void* unused)
 
 		if (NetBuffer[1] == PRE_HEARTBEAT)
 		{
-			// Update thing
+			I_NetUpdatePlayers(NetBuffer[2], NetBuffer[3]);
 		}
 		else if (NetBuffer[1] == PRE_DISCONNECT)
 		{
@@ -868,7 +930,7 @@ static bool Guest_ContactHost(void* unused)
 			I_ClearClient(NetBuffer[2]);
 			NetworkClients -= NetBuffer[2];
 			SetClientAck(Connected[consoleplayer].InfoAck, NetBuffer[2], false);
-			// Update thing
+			I_NetClientDisconnected(NetBuffer[2]);
 		}
 		else if (NetBuffer[1] == PRE_FULL)
 		{
@@ -901,6 +963,9 @@ static bool Guest_ContactHost(void* unused)
 				NetworkClients += consoleplayer;
 				Connected[consoleplayer].Status = CSTAT_CONNECTING;
 				Net_SetupUserInfo();
+
+				I_NetMessage("Waiting for game to start");
+				I_NetClientConnected(consoleplayer, 16u);
 			}
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)
@@ -908,7 +973,10 @@ static bool Guest_ContactHost(void* unused)
 			// The host will only ever send us this to confirm they've gotten our data.
 			SetClientAck(Connected[consoleplayer].InfoAck, consoleplayer, true);
 			if (Connected[consoleplayer].Status == CSTAT_CONNECTING)
+			{
 				Connected[consoleplayer].Status = CSTAT_WAITING;
+				I_NetClientUpdated(consoleplayer);
+			}
 
 			NetBuffer[0] = NCMD_SETUP;
 			NetBuffer[1] = PRE_USER_INFO_ACK;
@@ -947,6 +1015,8 @@ static bool Guest_ContactHost(void* unused)
 				uint8_t* stream = &NetBuffer[byte];
 				Net_ReadUserInfo(c, stream);
 				SetClientAck(Connected[consoleplayer].InfoAck, c, true);
+
+				I_NetClientConnected(c, 16u);
 			}
 
 			NetBuffer[0] = NCMD_SETUP;
@@ -958,7 +1028,8 @@ static bool Guest_ContactHost(void* unused)
 		else if (NetBuffer[1] == PRE_GO)
 		{
 			NetMode = static_cast<ENetMode>(NetBuffer[2]);
-			I_NetMessage("Received GO");
+			I_NetMessage("Starting game");
+			I_NetLog("Received GO");
 			return true;
 		}
 	}
@@ -1011,7 +1082,7 @@ static bool JoinGame(int arg)
 	// Host is always client 0.
 	BuildAddress(Connected[0].Address, Args->GetArg(arg));
 
-	I_NetInit("Contacting host", 0);
+	I_NetInit("Contacting host...");
 
 	if (!I_NetLoop(Guest_ContactHost, nullptr))
 	{
@@ -1025,7 +1096,7 @@ static bool JoinGame(int arg)
 			Connected[i].Status = CSTAT_READY;
 	}
 
-	I_NetMessage("Total players: %u", MaxClients);
+	I_NetLog("Total players: %u", MaxClients);
 
 	return true;
 }

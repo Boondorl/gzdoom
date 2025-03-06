@@ -118,34 +118,54 @@ void MainWindow::ShowErrorPane(const char* text)
 	restartrequest = ErrorWindow::ExecModal(text, alltext);
 }
 
-void MainWindow::ShowNetStartPane(const char* message, int maxpos)
+void MainWindow::NetInit(const char* message)
 {
-	NetStartWindow::ShowNetStartPane(message, maxpos);
+	NetStartWindow::NetInit(message);
 }
 
-void MainWindow::HideNetStartPane()
+void MainWindow::NetMessage(const char* message)
 {
-	NetStartWindow::HideNetStartPane();
+	NetStartWindow::NetMessage(message);
 }
 
-void MainWindow::CloseNetStartPane()
+void MainWindow::NetConnect(int client, const char* name, unsigned flags, int status)
+{
+	NetStartWindow::NetConnect(client, name, flags, status);
+}
+
+void MainWindow::NetUpdate(int client, int status)
+{
+	NetStartWindow::NetUpdate(client, status);
+}
+
+void MainWindow::NetDisconnect(int client)
+{
+	NetStartWindow::NetDisconnect(client);
+}
+
+void MainWindow::NetProgress(int cur, int limit)
+{
+	NetStartWindow::NetProgress(cur, limit);
+}
+
+void MainWindow::NetDone()
+{
+	NetStartWindow::NetDone();
+}
+
+void MainWindow::NetClose()
 {
 	NetStartWindow::NetClose();
 }
 
-bool MainWindow::ShouldStartNetGame()
+bool MainWindow::ShouldStartNet()
 {
-	return NetStartWindow::ShouldStartNetGame();
+	return NetStartWindow::ShouldStartNet();
 }
 
-void MainWindow::SetNetStartProgress(int pos)
+bool MainWindow::NetLoop(bool (*loopCallback)(void*), void* data)
 {
-	NetStartWindow::SetNetStartProgress(pos);
-}
-
-bool MainWindow::RunMessageLoop(bool (*timer_callback)(void*), void* userdata)
-{
-	return NetStartWindow::RunMessageLoop(timer_callback, userdata);
+	return NetStartWindow::NetLoop(loopCallback, data);
 }
 
 bool MainWindow::CheckForRestart()

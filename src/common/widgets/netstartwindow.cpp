@@ -9,7 +9,7 @@
 
 NetStartWindow* NetStartWindow::Instance = nullptr;
 
-void NetStartWindow::ShowNetStartPane(const char* message, int maxpos)
+void NetStartWindow::NetInit(const char* message)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 300.0;
@@ -22,28 +22,66 @@ void NetStartWindow::ShowNetStartPane(const char* message, int maxpos)
 		Instance->Show();
 	}
 
-	Instance->SetMessage(message, maxpos);
+	Instance->SetMessage(message);
 }
 
-void NetStartWindow::HideNetStartPane()
+void NetStartWindow::NetMessage(const char* message)
+{
+	if (Instance)
+		Instance->SetMessage(message);
+}
+
+void NetStartWindow::NetConnect(int client, const char* name, unsigned flags, int status)
+{
+	
+}
+
+void NetStartWindow::NetUpdate(int client, int status)
+{
+
+}
+
+void NetStartWindow::NetDisconnect(int client)
+{
+
+}
+
+void NetStartWindow::NetProgress(int cur, int limit)
+{
+	if (Instance)
+	{
+		Instance->maxpos = limit;
+		Instance->SetProgress(cur);
+	}
+}
+
+void NetStartWindow::NetDone()
 {
 	delete Instance;
 	Instance = nullptr;
 }
 
-void NetStartWindow::SetNetStartProgress(int pos)
+void NetStartWindow::NetClose()
 {
-	if (Instance)
-		Instance->SetProgress(pos);
+	if (Instance != nullptr)
+		Instance->OnClose();
 }
 
-bool NetStartWindow::RunMessageLoop(bool (*newtimer_callback)(void*), void* newuserdata)
+bool NetStartWindow::ShouldStartNet()
+{
+	if (Instance != nullptr)
+		return Instance->shouldstart;
+
+	return false;
+}
+
+bool NetStartWindow::NetLoop(bool (*loopCallback)(void*), void* data)
 {
 	if (!Instance)
 		return false;
 
-	Instance->timer_callback = newtimer_callback;
-	Instance->userdata = newuserdata;
+	Instance->timer_callback = loopCallback;
+	Instance->userdata = data;
 	Instance->CallbackException = {};
 
 	DisplayWindow::RunLoop();
@@ -55,20 +93,6 @@ bool NetStartWindow::RunMessageLoop(bool (*newtimer_callback)(void*), void* newu
 		std::rethrow_exception(Instance->CallbackException);
 
 	return Instance->exitreason;
-}
-
-void NetStartWindow::NetClose()
-{
-	if (Instance != nullptr)
-		Instance->OnClose();
-}
-
-bool NetStartWindow::ShouldStartNetGame()
-{
-	if (Instance != nullptr)
-		return Instance->shouldstart;
-
-	return false;
 }
 
 NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
@@ -98,10 +122,9 @@ NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
 	CallbackTimer->Start(500);
 }
 
-void NetStartWindow::SetMessage(const std::string& message, int newmaxpos)
+void NetStartWindow::SetMessage(const std::string& message)
 {
 	MessageLabel->SetText(message);
-	maxpos = newmaxpos;
 }
 
 void NetStartWindow::SetProgress(int newpos)
