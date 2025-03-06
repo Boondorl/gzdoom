@@ -987,8 +987,8 @@ static bool Guest_ContactHost(void* unused)
 
 				MaxClients = NetBuffer[4];
 				I_NetMessage("Sending game information");
-				I_NetClientConnected(consoleplayer, 16u);
 				I_NetUpdatePlayers(NetBuffer[3], MaxClients);
+				I_NetClientConnected(consoleplayer, 16u);
 			}
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)
@@ -1029,10 +1029,10 @@ static bool Guest_ContactHost(void* unused)
 			if (!ClientGotAck(Connected[consoleplayer].InfoAck, c))
 			{
 				NetworkClients += c;
-				Connected[c].Status = CSTAT_WAITING;
 				size_t byte = 3u;
 				if (c > 0)
 				{
+					Connected[c].Status = CSTAT_WAITING;
 					memcpy(&Connected[c].Address, &NetBuffer[byte], addrSize);
 					byte += addrSize;
 				}
@@ -1117,7 +1117,7 @@ static bool JoinGame(int arg)
 
 	for (size_t i = 1u; i < MaxClients; ++i)
 	{
-		if (Connected[i].Status == CSTAT_WAITING)
+		if (Connected[i].Status != CSTAT_NONE)
 			Connected[i].Status = CSTAT_READY;
 	}
 
