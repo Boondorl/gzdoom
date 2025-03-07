@@ -2,8 +2,9 @@
 #define __I_NET_H__
 
 #include <stdint.h>
+#include "tarray.h"
 
-constexpr uint8_t MaxPlayers = 64u;
+inline constexpr size_t MAXPLAYERS = 64u;
 
 enum ENetConstants
 {

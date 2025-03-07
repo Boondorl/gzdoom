@@ -169,7 +169,7 @@ uint8_t NetBuffer[MAX_MSGLEN] = {};
 
 static u_short		GamePort = (IPPORT_USERRESERVED + 29);
 static SOCKET		MySocket = INVALID_SOCKET;
-static FConnection	Connected[MaxPlayers] = {};
+static FConnection	Connected[MAXPLAYERS] = {};
 static uint8_t		TransmitBuffer[MaxTransmitSize] = {};
 
 CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
@@ -854,8 +854,8 @@ static bool HostGame(int arg, bool forcedNetMode)
 		MaxClients = 2u;
 	}
 
-	if (MaxClients > MaxPlayers)
-		I_FatalError("Cannot host a game with %u players. The limit is currently %u", MaxClients, MaxPlayers);
+	if (MaxClients > MAXPLAYERS)
+		I_FatalError("Cannot host a game with %u players. The limit is currently %u", MaxClients, MAXPLAYERS);
 
 	consoleplayer = 0;
 	NetworkClients += 0;

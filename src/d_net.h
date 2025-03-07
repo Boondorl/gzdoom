@@ -159,7 +159,7 @@ void Net_ClearBuffers();
 
 extern usercmd_t			LocalCmds[LOCALCMDTICS];
 extern int					ClientTic;
-extern FClientNetState		ClientStates[MaxPlayers];
+extern FClientNetState		ClientStates[MAXPLAYERS];
 
 class player_t;
 class DObject;

@@ -105,7 +105,7 @@ int 				ClientTic = 0;
 usercmd_t			LocalCmds[LOCALCMDTICS] = {};
 int					LastSentConsistency = 0;		// Last consistency we sent out. If < CurrentConsistency, send them out.
 int					CurrentConsistency = 0;			// Last consistency we generated.
-FClientNetState		ClientStates[MaxPlayers] = {};
+FClientNetState		ClientStates[MAXPLAYERS] = {};
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
 // playback as it means in the world running code itself all player commands are built the exact same way
