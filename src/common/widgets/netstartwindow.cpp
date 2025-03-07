@@ -10,7 +10,7 @@
 
 NetStartWindow* NetStartWindow::Instance = nullptr;
 
-void NetStartWindow::NetInit(const char* message)
+void NetStartWindow::NetInit(const char* message, bool host)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 450.0;
@@ -18,14 +18,12 @@ void NetStartWindow::NetInit(const char* message)
 
 	if (!Instance)
 	{
-		Instance = new NetStartWindow();
+		Instance = new NetStartWindow(host);
 		Instance->SetFrameGeometry((screenSize.width - windowWidth) * 0.5, (screenSize.height - windowHeight) * 0.5, windowWidth, windowHeight);
 		Instance->Show();
 	}
 
 	Instance->SetMessage(message);
-	// Client number, flags, name, status.
-	Instance->LobbyWindow->SetColumnWidths({ 30.0, 30.0, 200.0, 50.0 });
 }
 
 void NetStartWindow::NetMessage(const char* message)
@@ -135,7 +133,7 @@ bool NetStartWindow::NetLoop(bool (*loopCallback)(void*), void* data)
 	return Instance->exitreason;
 }
 
-NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
+NetStartWindow::NetStartWindow(bool host) : Widget(nullptr, WidgetType::Window)
 {
 	SetWindowBackground(Colorf::fromRgba8(51, 51, 51));
 	SetWindowBorderColor(Colorf::fromRgba8(51, 51, 51));
@@ -147,16 +145,22 @@ NetStartWindow::NetStartWindow() : Widget(nullptr, WidgetType::Window)
 	ProgressLabel = new TextLabel(this);
 	LobbyWindow = new ListView(this);
 	AbortButton = new PushButton(this);
-	ForceStartButton = new PushButton(this);
 
 	MessageLabel->SetTextAlignment(TextLabelAlignment::Center);
 	ProgressLabel->SetTextAlignment(TextLabelAlignment::Center);
 
 	AbortButton->OnClick = [=]() { OnClose(); };
-	ForceStartButton->OnClick = [=]() { ForceStart(); };
-
 	AbortButton->SetText("Abort");
-	ForceStartButton->SetText("Start Game");
+
+	if (host)
+	{
+		ForceStartButton = new PushButton(this);
+		ForceStartButton->OnClick = [=]() { ForceStart(); };
+		ForceStartButton->SetText("Start Game");
+	}
+
+	// Client number, flags, name, status.
+	LobbyWindow->SetColumnWidths({ 30.0, 30.0, 200.0, 50.0 });
 
 	CallbackTimer = new Timer(this);
 	CallbackTimer->FuncExpired = [=]() { OnCallbackTimerExpired(); };
@@ -208,8 +212,15 @@ void NetStartWindow::OnGeometryChanged()
 	LobbyWindow->SetFrameGeometry(Rect::xywh(5.0, y, w - 10.0, labelheight));
 
 	y = GetHeight() - 15.0 - AbortButton->GetPreferredHeight();
-	AbortButton->SetFrameGeometry((w + 10.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
-	ForceStartButton->SetFrameGeometry((w - 210.0) * 0.5, y, 100.0, ForceStartButton->GetPreferredHeight());
+	if (ForceStartButton != nullptr)
+	{
+		AbortButton->SetFrameGeometry((w + 10.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
+		ForceStartButton->SetFrameGeometry((w - 210.0) * 0.5, y, 100.0, ForceStartButton->GetPreferredHeight());
+	}
+	else
+	{
+		AbortButton->SetFrameGeometry((w - 100.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
+	}
 }
 
 void NetStartWindow::OnCallbackTimerExpired()

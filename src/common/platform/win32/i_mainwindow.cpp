@@ -118,9 +118,9 @@ void MainWindow::ShowErrorPane(const char* text)
 	restartrequest = ErrorWindow::ExecModal(text, alltext);
 }
 
-void MainWindow::NetInit(const char* message)
+void MainWindow::NetInit(const char* message, bool host)
 {
-	NetStartWindow::NetInit(message);
+	NetStartWindow::NetInit(message, host);
 }
 
 void MainWindow::NetMessage(const char* message)

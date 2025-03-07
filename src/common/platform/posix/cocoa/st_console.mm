@@ -417,7 +417,7 @@ void FConsoleWindow::Progress(const int current, const int maximum)
 }
 
 
-void FConsoleWindow::NetInit(const char* const message)
+void FConsoleWindow::NetInit(const char* const message, const bool host)
 {
 	if (nil == m_netView)
 	{

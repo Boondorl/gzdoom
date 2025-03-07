@@ -371,9 +371,9 @@ static void I_NetError(const char* error)
 	I_FatalError("%s", error);
 }
 
-static void I_NetInit(const char* msg)
+static void I_NetInit(const char* msg, bool host)
 {
-	StartWindow->NetInit(msg);
+	StartWindow->NetInit(msg, host);
 }
 
 // todo: later these must be dispatched by the main menu, not the start screen.
@@ -871,7 +871,7 @@ static bool HostGame(int arg, bool forcedNetMode)
 	}
 
 	StartNetwork(false);
-	I_NetInit("Waiting for other players...");
+	I_NetInit("Waiting for other players...", true);
 	I_NetUpdatePlayers(1u, MaxClients);
 	I_NetClientConnected(0u, 16u);
 
@@ -1111,7 +1111,7 @@ static bool JoinGame(int arg)
 	BuildAddress(Connected[0].Address, Args->GetArg(arg));
 	Connected[0].Status = CSTAT_CONNECTING;
 
-	I_NetInit("Contacting host...");
+	I_NetInit("Contacting host...", false);
 	I_NetUpdatePlayers(0u, MaxClients);
 	I_NetClientUpdated(0);
 

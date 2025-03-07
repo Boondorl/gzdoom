@@ -11,7 +11,7 @@ class Timer;
 class NetStartWindow : public Widget
 {
 public:
-	static void NetInit(const char* message);
+	static void NetInit(const char* message, bool host);
 	static void NetMessage(const char* message);
 	static void NetConnect(int client, const char* name, unsigned flags, int status);
 	static void NetUpdate(int client, int status);
@@ -23,7 +23,7 @@ public:
 	static bool NetLoop(bool (*timer_callback)(void*), void* userdata);
 
 private:
-	NetStartWindow();
+	NetStartWindow(bool host);
 
 	void SetMessage(const std::string& message);
 	void SetProgress(int pos);

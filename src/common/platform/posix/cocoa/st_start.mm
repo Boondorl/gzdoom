@@ -95,9 +95,9 @@ void FBasicStartupScreen::Progress()
 }
 
 
-void FBasicStartupScreen::NetInit(const char* const message)
+void FBasicStartupScreen::NetInit(const char* const message, const bool host)
 {
-	FConsoleWindow::GetInstance().NetInit(message);
+	FConsoleWindow::GetInstance().NetInit(message, host);
 }
 
 void FBasicStartupScreen::NetMessage(const char* const message)

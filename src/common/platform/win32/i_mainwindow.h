@@ -25,7 +25,7 @@ public:
 	void PrintStr(const char* cp);
 	void GetLog(std::function<bool(const void* data, uint32_t size, uint32_t& written)> writeFile);
 
-	void NetInit(const char* message);
+	void NetInit(const char* message, bool host);
 	void NetMessage(const char* message);
 	void NetConnect(int client, const char* name, unsigned flags, int status);
 	void NetUpdate(int client, int status);

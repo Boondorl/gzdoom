@@ -54,7 +54,7 @@ public:
 	virtual void AppendStatusLine(const char* status) {}
 	virtual void LoadingStatus(const char* message, int colors) {}
 
-	virtual void NetInit(const char* message) {}
+	virtual void NetInit(const char* message, bool host) {}
 	virtual void NetMessage(const char* message) {}
 	virtual void NetConnect(int client, const char* name, unsigned flags, int status) {}
 	virtual void NetUpdate(int client, int status) {}
@@ -77,7 +77,7 @@ public:
 
 	void Progress() override;
 
-	void NetInit(const char* message) override;
+	void NetInit(const char* message, bool host) override;
 	void NetMessage(const char* message) override;
 	void NetConnect(int client, const char* name, unsigned flags, int status) override;
 	void NetUpdate(int client, int status) override;

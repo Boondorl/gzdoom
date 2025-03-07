@@ -55,7 +55,7 @@ class FTTYStartupScreen : public FStartupScreen
 
 		void Progress() override;
 
-		void NetInit(const char* message) override;
+		void NetInit(const char* message, bool host) override;
 		void NetMessage(const char* message) override;
 		void NetConnect(int client, const char* name, unsigned flags, int status) override;
 		void NetUpdate(int client, int status) override;
@@ -153,7 +153,7 @@ void FTTYStartupScreen::Progress()
 //
 //===========================================================================
 
-void FTTYStartupScreen::NetInit(const char* message)
+void FTTYStartupScreen::NetInit(const char* message, bool host)
 {
 	if (!DidNetInit)
 	{

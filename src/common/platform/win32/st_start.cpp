@@ -137,9 +137,9 @@ void FBasicStartupScreen::Progress()
 //
 //==========================================================================
 
-void FBasicStartupScreen::NetInit(const char *message)
+void FBasicStartupScreen::NetInit(const char *message, bool host)
 {
-	mainwindow.NetInit(message);
+	mainwindow.NetInit(message, host);
 	NetCurPos = 0;
 }
 
