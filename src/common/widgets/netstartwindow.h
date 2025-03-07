@@ -20,6 +20,8 @@ public:
 	static void NetDone();
 	static void NetClose();
 	static bool ShouldStartNet();
+	static void GetNetKickClients(std::vector<int>& clients);
+	static void GetNetBanClients(std::vector<int>& clients);
 	static bool NetLoop(bool (*timer_callback)(void*), void* userdata);
 
 private:
@@ -32,6 +34,8 @@ protected:
 	void OnClose() override;
 	void OnGeometryChanged() override;
 	virtual void ForceStart();
+	virtual void OnKick();
+	virtual void OnBan();
 
 private:
 	void OnCallbackTimerExpired();
@@ -41,6 +45,8 @@ private:
 	ListView* LobbyWindow = nullptr;
 	PushButton* AbortButton = nullptr;
 	PushButton* ForceStartButton = nullptr;
+	PushButton* KickButton = nullptr;
+	PushButton* BanButton = nullptr;
 
 	Timer* CallbackTimer = nullptr;
 
@@ -51,6 +57,9 @@ private:
 
 	bool exitreason = false;
 	bool shouldstart = false;
+	bool hosting = false;
+	std::vector<int> kickclients;
+	std::vector<int> banclients;
 
 	std::exception_ptr CallbackException;
 

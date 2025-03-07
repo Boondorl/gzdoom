@@ -35,6 +35,7 @@
 ** Actual implementation is system-specific.
 */
 #include <stdint.h>
+#include <vector>
 
 class FStartupScreen
 {
@@ -63,6 +64,8 @@ public:
 	virtual void NetDone() {}
 	virtual void NetClose() {}
 	virtual bool ShouldStartNet() { return false; }
+	virtual void GetNetKickClients(std::vector<int>& clients) { clients.clear(); }
+	virtual void GetNetBanClients(std::vector<int>& clients) { clients.clear(); }
 	virtual bool NetLoop(bool (*loopCallback)(void *), void *data) { return false; }
 
 protected:
@@ -86,6 +89,8 @@ public:
 	void NetDone() override;
 	void NetClose() override;
 	bool ShouldStartNet() override;
+	void GetNetKickClients(std::vector<int>& clients) override;
+	void GetNetBanClients(std::vector<int>& clients) override;
 	bool NetLoop(bool (*loopCallback)(void*), void* data) override;
 
 protected:

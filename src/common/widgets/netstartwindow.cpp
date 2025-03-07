@@ -113,6 +113,24 @@ bool NetStartWindow::ShouldStartNet()
 	return false;
 }
 
+void NetStartWindow::GetNetKickClients(std::vector<int>& clients)
+{
+	clients.clear();
+	if (!Instance)
+		return;
+
+	clients.swap(Instance->kickclients);
+}
+
+void NetStartWindow::GetNetBanClients(std::vector<int>& clients)
+{
+	clients.clear();
+	if (!Instance)
+		return;
+
+	clients.swap(Instance->banclients);
+}
+
 bool NetStartWindow::NetLoop(bool (*loopCallback)(void*), void* data)
 {
 	if (!Instance)
@@ -154,9 +172,19 @@ NetStartWindow::NetStartWindow(bool host) : Widget(nullptr, WidgetType::Window)
 
 	if (host)
 	{
+		hosting = true;
+
 		ForceStartButton = new PushButton(this);
 		ForceStartButton->OnClick = [=]() { ForceStart(); };
 		ForceStartButton->SetText("Start Game");
+
+		KickButton = new PushButton(this);
+		KickButton->OnClick = [=]() { OnKick(); };
+		KickButton->SetText("Kick");
+
+		BanButton = new PushButton(this);
+		BanButton->OnClick = [=]() { OnBan(); };
+		BanButton->SetText("Ban");
 	}
 
 	// Client number, flags, name, status.
@@ -194,6 +222,36 @@ void NetStartWindow::ForceStart()
 	shouldstart = true;
 }
 
+void NetStartWindow::OnKick()
+{
+	int item = LobbyWindow->GetSelectedItem();
+
+	size_t i = 0u;
+	for (; i < kickclients.size(); ++i)
+	{
+		if (kickclients[i] == item)
+			break;
+	}
+
+	if (i >= kickclients.size())
+		kickclients.push_back(item);
+}
+
+void NetStartWindow::OnBan()
+{
+	int item = LobbyWindow->GetSelectedItem();
+
+	size_t i = 0u;
+	for (; i < banclients.size(); ++i)
+	{
+		if (banclients[i] == item)
+			break;
+	}
+
+	if (i >= banclients.size())
+		banclients.push_back(item);
+}
+
 void NetStartWindow::OnGeometryChanged()
 {
 	double w = GetWidth();
@@ -212,10 +270,12 @@ void NetStartWindow::OnGeometryChanged()
 	LobbyWindow->SetFrameGeometry(Rect::xywh(5.0, y, w - 10.0, labelheight));
 
 	y = GetHeight() - 15.0 - AbortButton->GetPreferredHeight();
-	if (ForceStartButton != nullptr)
+	if (hosting)
 	{
-		AbortButton->SetFrameGeometry((w + 10.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
-		ForceStartButton->SetFrameGeometry((w - 210.0) * 0.5, y, 100.0, ForceStartButton->GetPreferredHeight());
+		AbortButton->SetFrameGeometry((w + 215.0) * 0.5, y, 100.0, AbortButton->GetPreferredHeight());
+		BanButton->SetFrameGeometry((w + 5.0) * 0.5, y, 100.0, BanButton->GetPreferredHeight());
+		KickButton->SetFrameGeometry((w - 205.0) * 0.5, y, 100.0, KickButton->GetPreferredHeight());
+		ForceStartButton->SetFrameGeometry((w - 415.0) * 0.5, y, 100.0, ForceStartButton->GetPreferredHeight());
 	}
 	else
 	{

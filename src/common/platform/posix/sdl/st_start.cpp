@@ -64,6 +64,8 @@ class FTTYStartupScreen : public FStartupScreen
 		void NetDone() override;
 		void NetClose() override;
 		bool ShouldStartNet() override;
+		void GetNetKickClients(std::vector<int>& clients) override;
+		void GetNetBanClients(std::vector<int>& clients) override;
 		bool NetLoop(bool (*loopCallback)(void*), void* data) override;
 
 	protected:
@@ -256,6 +258,16 @@ void FTTYStartupScreen::NetClose()
 bool FTTYStartupScreen::ShouldStartNet()
 {
 	return false;
+}
+
+void FTTYStartupScreen::GetNetKickClients(std::vector<int>& clients)
+{
+	clients.clear();
+}
+
+void FTTYStartupScreen::GetNetBanClients(std::vector<int>& clients)
+{
+	clients.clear();
 }
 
 //===========================================================================

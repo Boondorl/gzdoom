@@ -163,6 +163,16 @@ bool MainWindow::ShouldStartNet()
 	return NetStartWindow::ShouldStartNet();
 }
 
+void MainWindow::GetNetKickClients(std::vector<int>& clients)
+{
+	NetStartWindow::GetNetKickClients(clients);
+}
+
+void MainWindow::GetNetBanClients(std::vector<int>& clients)
+{
+	NetStartWindow::GetNetBanClients(clients);
+}
+
 bool MainWindow::NetLoop(bool (*loopCallback)(void*), void* data)
 {
 	return NetStartWindow::NetLoop(loopCallback, data);

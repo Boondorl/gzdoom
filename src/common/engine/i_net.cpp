@@ -126,6 +126,8 @@ enum ENetConnectType : uint8_t
 	PRE_WRONG_PASSWORD,		// Sent from host to guest if their provided password was wrong
 	PRE_WRONG_ENGINE,		// Sent from host to guest if their engine version doesn't match the host's
 	PRE_INVALID_FILES,		// Sent from host to guest if their files do not match the host's
+	PRE_KICKED,				// Sent from hsot to guest if the host kicked them from the game
+	PRE_BANNED,				// Sent from host to guest if the host banned them from the game
 };
 
 enum EConnectionStatus
@@ -171,6 +173,7 @@ static u_short		GamePort = (IPPORT_USERRESERVED + 29);
 static SOCKET		MySocket = INVALID_SOCKET;
 static FConnection	Connected[MAXPLAYERS] = {};
 static uint8_t		TransmitBuffer[MaxTransmitSize] = {};
+static TArray<sockaddr_in> BannedConnections = {};
 
 CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
 {
@@ -424,6 +427,26 @@ static bool I_ShouldStartNetGame()
 	return StartWindow->ShouldStartNet();
 }
 
+static void I_GetKickClients(TArray<int>& clients)
+{
+	clients.Clear();
+
+	std::vector<int> c;
+	StartWindow->GetNetKickClients(c);
+	for (auto cl : c)
+		clients.Push(cl);
+}
+
+static void I_GetBanClients(TArray<int>& clients)
+{
+	clients.Clear();
+
+	std::vector<int> c;
+	StartWindow->GetNetBanClients(c);
+	for (auto cl : c)
+		clients.Push(cl);
+}
+
 void I_NetDone()
 {
 	StartWindow->NetDone();
@@ -666,6 +689,38 @@ static bool Host_CheckForConnections(void* connected)
 	const bool hasPassword = strlen(net_password) > 0;
 	size_t* connectedPlayers = (size_t*)connected;
 
+	TArray<int> toBoot = {};
+	I_GetKickClients(toBoot);
+	for (auto client : toBoot)
+	{
+		if (client <= 0 || Connected[client].Status == CSTAT_NONE)
+			continue;
+
+		sockaddr_in booted = Connected[client].Address;
+
+		RemoveClientConnection(client);
+		--*connectedPlayers;
+		I_NetUpdatePlayers(*connectedPlayers, MaxClients);
+
+		RejectConnection(booted, PRE_KICKED);
+	}
+
+	I_GetBanClients(toBoot);
+	for (auto client : toBoot)
+	{
+		if (client <= 0 || Connected[client].Status == CSTAT_NONE)
+			continue;
+
+		sockaddr_in booted = Connected[client].Address;
+		BannedConnections.Push(booted);
+
+		RemoveClientConnection(client);
+		--*connectedPlayers;
+		I_NetUpdatePlayers(*connectedPlayers, MaxClients);
+
+		RejectConnection(booted, PRE_BANNED);
+	}
+
 	sockaddr_in from;
 	while (GetConnection(from))
 	{
@@ -689,7 +744,18 @@ static bool Host_CheckForConnections(void* connected)
 			if (RemoteClient >= 0)
 				continue;
 
-			if (NetBuffer[2] % 256 != VER_MAJOR || NetBuffer[3] % 256 != VER_MINOR || NetBuffer[4] % 256 != VER_REVISION)
+			size_t banned = 0u;
+			for (; banned < BannedConnections.Size(); ++banned)
+			{
+				if (BannedConnections[banned].sin_addr.s_addr == from.sin_addr.s_addr)
+					break;
+			}
+
+			if (banned < BannedConnections.Size())
+			{
+				RejectConnection(from, PRE_BANNED);
+			}
+			else if (NetBuffer[2] % 256 != VER_MAJOR || NetBuffer[3] % 256 != VER_MINOR || NetBuffer[4] % 256 != VER_REVISION)
 			{
 				RejectConnection(from, PRE_WRONG_ENGINE);
 			}
@@ -944,9 +1010,6 @@ static bool Guest_ContactHost(void* unused)
 		}
 		else if (NetBuffer[1] == PRE_DISCONNECT)
 		{
-			if (NetBuffer[1] == consoleplayer)
-				I_NetError("You have been kicked from the lobby");
-
 			I_ClearClient(NetBuffer[2]);
 			NetworkClients -= NetBuffer[2];
 			SetClientAck(consoleplayer, NetBuffer[2], false);
@@ -971,6 +1034,14 @@ static bool Guest_ContactHost(void* unused)
 		else if (NetBuffer[1] == PRE_INVALID_FILES)
 		{
 			I_NetError("Files do not match the host's files");
+		}
+		else if (NetBuffer[1] == PRE_KICKED)
+		{
+			I_NetError("You have been kicked from the game");
+		}
+		else if (NetBuffer[1] == PRE_BANNED)
+		{
+			I_NetError("You have been banned from the game");
 		}
 		else if (NetBuffer[1] == PRE_CONNECT_ACK)
 		{

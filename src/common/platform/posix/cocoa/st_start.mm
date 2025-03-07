@@ -140,6 +140,16 @@ bool FBasicStartupScreen::ShouldStartNet()
 	return FConsoleWindow::GetInstance().ShouldStartNet();
 }
 
+void FBasicStartupScreen::GetNetKickClients(std::vector<int>& clients)
+{
+	FConsoleWindow()::GetInstance().GetNetKickClients(clients);
+}
+
+void FBasicStartupScreen::GetNetBanClients(std::vector<int>& clients)
+{
+	FConsoleWindow()::GetInstance().GetNetBanClients(clients);
+}
+
 bool FBasicStartupScreen::NetLoop(bool (*loopCallback)(void*), void* const data)
 {
 	while (true)
