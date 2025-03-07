@@ -142,12 +142,12 @@ bool FBasicStartupScreen::ShouldStartNet()
 
 int FBasicStartupScreen::GetNetKickClient()
 {
-	return FConsoleWindow()::GetInstance().GetNetKickClient();
+	return FConsoleWindow::GetInstance().GetNetKickClient();
 }
 
 int FBasicStartupScreen::GetNetBanClient()
 {
-	return FConsoleWindow()::GetInstance().GetNetBanClient();
+	return FConsoleWindow::GetInstance().GetNetBanClient();
 }
 
 bool FBasicStartupScreen::NetLoop(bool (*loopCallback)(void*), void* const data)
