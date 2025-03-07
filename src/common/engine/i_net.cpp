@@ -174,6 +174,7 @@ static SOCKET		MySocket = INVALID_SOCKET;
 static FConnection	Connected[MAXPLAYERS] = {};
 static uint8_t		TransmitBuffer[MaxTransmitSize] = {};
 static TArray<sockaddr_in> BannedConnections = {};
+static bool bGameStarted = false;
 
 CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
 {
@@ -546,6 +547,14 @@ static void GetPacket(sockaddr_in* const from = nullptr)
 	{
 		if (client == -1 && !(TransmitBuffer[0] & NCMD_SETUP))
 		{
+			msgSize = 0;
+		}
+		else if (client == -1 && bGameStarted)
+		{
+			NetBuffer[0] = NCMD_SETUP;
+			NetBuffer[1] = PRE_IN_PROGRESS;
+			NetBufferLength = 2u;
+			SendPacket(fromAddress);
 			msgSize = 0;
 		}
 		else
@@ -1253,6 +1262,7 @@ bool I_InitNetwork()
 		Net_SetupUserInfo();
 	}
 
+	bGameStarted = true;
 	return true;
 }
 
