@@ -149,7 +149,7 @@ struct FConnection
 {
 	EConnectionStatus Status = CSTAT_NONE;
 	sockaddr_in Address = {};
-	uint64_t InfoAck[4] = {};
+	uint64_t InfoAck = 0u;
 	bool bHasGameInfo = false;
 };
 
@@ -573,18 +573,18 @@ void I_NetCmd(ENetCommand cmd)
 	}
 }
 
-static void SetClientAck(uint64_t ack[4], size_t client, bool add)
+static void SetClientAck(size_t client, size_t from, bool add)
 {
-	const uint64_t bit = (uint64_t)1u << (client % 64u);
+	const uint64_t bit = (uint64_t)1u << from;
 	if (add)
-		ack[client / 64u] |= bit;
+		Connected[client].InfoAck |= bit;
 	else
-		ack[client / 64u] &= ~bit;
+		Connected[client].InfoAck &= ~bit;
 }
 
-static bool ClientGotAck(uint64_t ack[4], size_t client)
+static bool ClientGotAck(size_t client, size_t from)
 {
-	return (ack[client / 64u] & ((uint64_t)1u << (client % 64u)));
+	return (Connected[client].InfoAck & ((uint64_t)1u << from));
 }
 
 static bool GetConnection(sockaddr_in& from)
@@ -639,7 +639,7 @@ static void RemoveClientConnection(size_t client)
 		if (Connected[i].Status == CSTAT_NONE)
 			continue;
 
-		SetClientAck(Connected[i].InfoAck, client, false);
+		SetClientAck(i, client, false);
 		for (int i = 0; i < 4; ++i)
 			SendPacket(Connected[i].Address);
 	}
@@ -731,7 +731,7 @@ static bool Host_CheckForConnections(void* connected)
 		}
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)
 		{
-			SetClientAck(Connected[RemoteClient].InfoAck, NetBuffer[2], true);
+			SetClientAck(RemoteClient, NetBuffer[2], true);
 		}
 		else if (NetBuffer[1] == PRE_GAME_INFO_ACK)
 		{
@@ -761,7 +761,7 @@ static bool Host_CheckForConnections(void* connected)
 		else if (con.Status == CSTAT_WAITING)
 		{
 			bool clientReady = true;
-			if (!ClientGotAck(con.InfoAck, client))
+			if (!ClientGotAck(client, client))
 			{
 				NetBuffer[1] = PRE_USER_INFO_ACK;
 				NetBufferLength = 2u;
@@ -787,7 +787,7 @@ static bool Host_CheckForConnections(void* connected)
 				if (i == client || Connected[i].Status == CSTAT_NONE)
 					continue;
 
-				if (!ClientGotAck(con.InfoAck, i))
+				if (!ClientGotAck(client, i))
 				{
 					if (Connected[i].Status >= CSTAT_WAITING)
 					{
@@ -949,7 +949,7 @@ static bool Guest_ContactHost(void* unused)
 
 			I_ClearClient(NetBuffer[2]);
 			NetworkClients -= NetBuffer[2];
-			SetClientAck(Connected[consoleplayer].InfoAck, NetBuffer[2], false);
+			SetClientAck(consoleplayer, NetBuffer[2], false);
 			I_NetClientDisconnected(NetBuffer[2]);
 		}
 		else if (NetBuffer[1] == PRE_FULL)
@@ -994,7 +994,7 @@ static bool Guest_ContactHost(void* unused)
 		else if (NetBuffer[1] == PRE_USER_INFO_ACK)
 		{
 			// The host will only ever send us this to confirm they've gotten our data.
-			SetClientAck(Connected[consoleplayer].InfoAck, consoleplayer, true);
+			SetClientAck(consoleplayer, consoleplayer, true);
 			if (Connected[consoleplayer].Status == CSTAT_CONNECTING)
 			{
 				Connected[consoleplayer].Status = CSTAT_WAITING;
@@ -1026,7 +1026,7 @@ static bool Guest_ContactHost(void* unused)
 		else if (NetBuffer[1] == PRE_USER_INFO)
 		{
 			const size_t c = NetBuffer[2];
-			if (!ClientGotAck(Connected[consoleplayer].InfoAck, c))
+			if (!ClientGotAck(consoleplayer, c))
 			{
 				NetworkClients += c;
 				size_t byte = 3u;
@@ -1042,7 +1042,7 @@ static bool Guest_ContactHost(void* unused)
 				}
 				uint8_t* stream = &NetBuffer[byte];
 				Net_ReadUserInfo(c, stream);
-				SetClientAck(Connected[consoleplayer].InfoAck, c, true);
+				SetClientAck(consoleplayer, c, true);
 
 				I_NetClientConnected(c, 16u);
 			}

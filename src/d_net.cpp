@@ -87,12 +87,6 @@ extern bool AppActive;
 
 void P_ClearLevelInterpolation();
 
-struct FNetGameInfo
-{
-	uint32_t DetectedPlayers[MAXPLAYERS];
-	uint8_t GotSetup[MAXPLAYERS];
-};
-
 enum ELevelStartStatus
 {
 	LST_READY,
@@ -122,12 +116,12 @@ static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 
 static uint8_t	CurrentLobbyID = 0u;	// Ignore commands not from this lobby (useful when transitioning levels).
 static int		LastGameUpdate = 0;		// Track the last time the game actually ran the world.
-static int		MutedClients = 0;		// Ignore messages from these clients.
+static uint64_t	MutedClients = 0u;		// Ignore messages from these clients.
 
 static int  LevelStartDebug = 0;
 static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
 static ELevelStartStatus LevelStartStatus = LST_READY; // Listen for when to actually start making tics.
-static int	LevelStartAck = 0; // Used by the host to determine if everyone has loaded in.
+static uint64_t	LevelStartAck = 0u; // Used by the host to determine if everyone has loaded in.
 
 static int FullLatencyCycle = MAXSENDTICS * 3;	// Give ~3 seconds to gather latency info about clients on boot up.
 static int LastLatencyUpdate = 0;				// Update average latency every ~1 second.
@@ -144,7 +138,6 @@ void D_ProcessEvents(void);
 void G_BuildTiccmd(usercmd_t *cmd);
 void D_DoAdvanceDemo(void);
 
-static void SendSetup(const FNetGameInfo& info, int len);
 static void RunScript(uint8_t **stream, AActor *pawn, int snum, int argn, int always);
 
 extern	bool	 advancedemo;
@@ -347,7 +340,7 @@ void Net_ClearBuffers()
 	LocalNetBufferSize = 0u;
 	Net_Arbitrator = 0;
 
-	MutedClients = 0;
+	MutedClients = 0u;
 	CurrentLobbyID = 0u;
 	NetworkClients.Clear();
 	NetMode = NET_PeerToPeer;
@@ -358,7 +351,7 @@ void Net_ClearBuffers()
 	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 	NetEvents.ResetStream();
 
-	LevelStartAck = 0;
+	LevelStartAck = 0u;
 	LevelStartDelay = LevelStartDebug = 0;
 	LevelStartStatus = LST_READY;
 
@@ -546,7 +539,7 @@ static void ClientConnecting(int client)
 static void DisconnectClient(int clientNum)
 {
 	NetworkClients -= clientNum;
-	MutedClients &= ~(1 << clientNum);
+	MutedClients &= ~((uint64_t)1u << clientNum);
 	I_ClearClient(clientNum);
 	// Capture the pawn leaving in the next world tick.
 	players[clientNum].playerstate = PST_GONE;
@@ -620,21 +613,21 @@ static void CheckLevelStart(int client, int delayTics)
 
 	if (client == Net_Arbitrator)
 	{
-		LevelStartAck = 0;
+		LevelStartAck = 0u;
 		LevelStartStatus = NetMode == NET_PacketServer && consoleplayer == Net_Arbitrator ? LST_HOST : LST_READY;
 		LevelStartDelay = LevelStartDebug = delayTics;
 		LastGameUpdate = EnterTic;
 		return;
 	}
 
-	int mask = 0;
+	uint64_t mask = 0u;
 	for (auto pNum : NetworkClients)
 	{
 		if (pNum != Net_Arbitrator)
-			mask |= 1 << pNum;
+			mask |= (uint64_t)1u << pNum;
 	}
 
-	LevelStartAck |= 1 << client;
+	LevelStartAck |= (uint64_t)1u << client;
 	if ((LevelStartAck & mask) == mask && IsMapLoaded())
 	{
 		// Beyond this point a player is likely lagging out anyway.
@@ -2071,7 +2064,7 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 
 			s = ReadStringConst(stream);
 			// If chat is disabled, there's nothing else to do here since the stream has been advanced.
-			if (cl_showchat == CHAT_DISABLED || (MutedClients & (1 << player)))
+			if (cl_showchat == CHAT_DISABLED || (MutedClients & ((uint64_t)1u << player)))
 				break;
 
 			constexpr int MSG_TEAM = 1;
@@ -2952,7 +2945,7 @@ CCMD(mute)
 		return;
 	}
 
-	MutedClients |= 1 << pNum;
+	MutedClients |= (uint64_t)1u << pNum;
 }
 
 CCMD(muteall)
@@ -2966,7 +2959,7 @@ CCMD(muteall)
 	for (auto client : NetworkClients)
 	{
 		if (client != consoleplayer)
-			MutedClients |= 1 << client;
+			MutedClients |= (uint64_t)1u << client;
 	}
 }
 
@@ -2981,7 +2974,7 @@ CCMD(listmuted)
 	bool found = false;
 	for (auto client : NetworkClients)
 	{
-		if (MutedClients & (1 << client))
+		if (MutedClients & ((uint64_t)1u << client))
 		{
 			found = true;
 			Printf("%s - %d\n", players[client].userinfo.GetName(), client);
@@ -3019,7 +3012,7 @@ CCMD(unmute)
 		return;
 	}
 
-	MutedClients &= ~(1 << pNum);
+	MutedClients &= ~((uint64_t)1u << pNum);
 }
 
 CCMD(unmuteall)
@@ -3030,7 +3023,7 @@ CCMD(unmuteall)
 		return;
 	}
 
-	MutedClients = 0;
+	MutedClients = 0u;
 }
 
 //==========================================================================

@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-constexpr uint8_t MaxPlayers = 255u; // This can't be 256 because the last slot needs to be reserved for headless mode.
+constexpr uint8_t MaxPlayers = 64u;
 
 enum ENetConstants
 {
