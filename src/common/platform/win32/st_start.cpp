@@ -202,14 +202,14 @@ bool FBasicStartupScreen::ShouldStartNet()
 	return mainwindow.ShouldStartNet();
 }
 
-void FBasicStartupScreen::GetNetKickClients(std::vector<int>& clients)
+int FBasicStartupScreen::GetNetKickClient()
 {
-	mainwindow.GetNetKickClients(clients);
+	return mainwindow.GetNetKickClient();
 }
 
-void FBasicStartupScreen::GetNetBanClients(std::vector<int>& clients)
+int FBasicStartupScreen::GetNetBanClient()
 {
-	mainwindow.GetNetBanClients(clients);
+	return mainwindow.GetNetBanClient();
 }
 
 //==========================================================================

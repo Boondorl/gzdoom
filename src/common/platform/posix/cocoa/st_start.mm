@@ -140,14 +140,14 @@ bool FBasicStartupScreen::ShouldStartNet()
 	return FConsoleWindow::GetInstance().ShouldStartNet();
 }
 
-void FBasicStartupScreen::GetNetKickClients(std::vector<int>& clients)
+int FBasicStartupScreen::GetNetKickClient()
 {
-	FConsoleWindow()::GetInstance().GetNetKickClients(clients);
+	return FConsoleWindow()::GetInstance().GetNetKickClient();
 }
 
-void FBasicStartupScreen::GetNetBanClients(std::vector<int>& clients)
+int FBasicStartupScreen::GetNetBanClient()
 {
-	FConsoleWindow()::GetInstance().GetNetBanClients(clients);
+	return FConsoleWindow()::GetInstance().GetNetBanClient();
 }
 
 bool FBasicStartupScreen::NetLoop(bool (*loopCallback)(void*), void* const data)

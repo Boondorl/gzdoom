@@ -113,22 +113,24 @@ bool NetStartWindow::ShouldStartNet()
 	return false;
 }
 
-void NetStartWindow::GetNetKickClients(std::vector<int>& clients)
+int NetStartWindow::GetNetKickClient()
 {
-	clients.clear();
-	if (!Instance)
-		return;
+	if (!Instance || !Instance->kickclients.size())
+		return -1;
 
-	clients.swap(Instance->kickclients);
+	int next = Instance->kickclients.back();
+	Instance->kickclients.pop_back();
+	return next;
 }
 
-void NetStartWindow::GetNetBanClients(std::vector<int>& clients)
+int NetStartWindow::GetNetBanClient()
 {
-	clients.clear();
-	if (!Instance)
-		return;
+	if (!Instance || !Instance->banclients.size())
+		return -1;
 
-	clients.swap(Instance->banclients);
+	int next = Instance->banclients.back();
+	Instance->banclients.pop_back();
+	return next;
 }
 
 bool NetStartWindow::NetLoop(bool (*loopCallback)(void*), void* data)

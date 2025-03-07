@@ -73,8 +73,8 @@ public:
 	void NetDone();
 	void NetClose();
 	bool ShouldStartNet();
-	void GetNetKickClients(std::vector<int>& clients);
-	void GetNetBanClients(std::vector<int>& clients);
+	int GetNetKickClient();
+	int GetNetBanClient();
 
 private:
 	NSWindow*            m_window;

@@ -432,20 +432,18 @@ static void I_GetKickClients(TArray<int>& clients)
 {
 	clients.Clear();
 
-	std::vector<int> c;
-	StartWindow->GetNetKickClients(c);
-	for (auto cl : c)
-		clients.Push(cl);
+	int c = -1;
+	while ((c = StartWindow->GetNetKickClient()) != -1)
+		clients.Push(c);
 }
 
 static void I_GetBanClients(TArray<int>& clients)
 {
 	clients.Clear();
 
-	std::vector<int> c;
-	StartWindow->GetNetBanClients(c);
-	for (auto cl : c)
-		clients.Push(cl);
+	int c = -1;
+	while ((c = StartWindow->GetNetBanClient()) != -1)
+		clients.Push(c);
 }
 
 void I_NetDone()

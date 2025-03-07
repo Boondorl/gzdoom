@@ -20,8 +20,8 @@ public:
 	static void NetDone();
 	static void NetClose();
 	static bool ShouldStartNet();
-	static void GetNetKickClients(std::vector<int>& clients);
-	static void GetNetBanClients(std::vector<int>& clients);
+	static int GetNetKickClient();
+	static int GetNetBanClient();
 	static bool NetLoop(bool (*timer_callback)(void*), void* userdata);
 
 private:

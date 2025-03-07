@@ -542,12 +542,12 @@ bool FConsoleWindow::ShouldStartNet()
 	return false;
 }
 
-void FConsoleWindow::GetNetKickClients(std::vector<int>& clients)
+int FConsoleWindow::GetNetKickClient()
 {
-	clients.clear();
+	return -1;
 }
 
-void FConsoleWindow::GetNetBanClients(std::vector<int>& clients)
+int FConsoleWindow::GetNetBanClient()
 {
-	clients.clear();
+	return -1;
 }

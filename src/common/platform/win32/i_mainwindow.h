@@ -34,8 +34,8 @@ public:
 	void NetDone();
 	void NetClose();
 	bool ShouldStartNet();
-	void GetNetKickClients(std::vector<int>& clients);
-	void GetNetBanClients(std::vector<int>& clients);
+	int GetNetKickClient();
+	int GetNetBanClient();
 	bool NetLoop(bool (*loopCallback)(void*), void* data);
 
 	void SetWindowTitle(const char* caption);
