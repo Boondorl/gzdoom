@@ -66,6 +66,7 @@ void ListView::AddItem(const std::string& text, int index, int column)
 	{
 		items.push_back(newEntry);
 	}
+	scrollbar->SetRanges(GetHeight(), items.size() * 20.0);
 	Update();
 }
 
@@ -90,6 +91,7 @@ void ListView::RemoveItem(int index)
 		SetSelectedItem(0);
 
 	items.erase(items.begin() + index);
+	scrollbar->SetRanges(GetHeight(), items.size() * 20.0);
 	Update();
 }
 
