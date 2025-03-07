@@ -24,6 +24,8 @@ void NetStartWindow::NetInit(const char* message)
 	}
 
 	Instance->SetMessage(message);
+	// Client number, flags, name, status.
+	Instance->LobbyWindow->SetColumnWidths({ 30.0, 30.0, 200.0, 50.0 });
 }
 
 void NetStartWindow::NetMessage(const char* message)
@@ -37,38 +39,60 @@ void NetStartWindow::NetConnect(int client, const char* name, unsigned flags, in
 	if (!Instance)
 		return;
 
-	std::string line = "";
-	line.append(std::to_string(client));
-	line.append(" ");
-	line.append(name);
-	
-	if (status == 1)
-		line.append("   CON");
-	else if (status == 2)
-		line.append("   WAIT");
-	else if (status == 3)
-		line.append("   READY");
+	std::string value = "";
+	if (flags & 1)
+		value.append("*");
+	if (flags & 2)
+		value.append("H");
 
-	Instance->LobbyWindow->AddItem(line);
+	Instance->LobbyWindow->UpdateItem(value, client, 1);
+	Instance->LobbyWindow->UpdateItem(name, client, 2);
+	
+	value = "";
+	if (status == 1)
+		value = "CONNECTING";
+	else if (status == 2)
+		value = "WAITING";
+	else if (status == 3)
+		value = "READY";
+
+	Instance->LobbyWindow->UpdateItem(value, client, 3);
 }
 
 void NetStartWindow::NetUpdate(int client, int status)
 {
+	if (!Instance)
+		return;
 
+	std::string value = "";
+	if (status == 1)
+		value = "CONNECTING";
+	else if (status == 2)
+		value = "WAITING";
+	else if (status == 3)
+		value = "READY";
+
+	Instance->LobbyWindow->UpdateItem(value, client, 3);
 }
 
 void NetStartWindow::NetDisconnect(int client)
 {
-
+	if (Instance)
+	{
+		for (size_t i = 1u; i < Instance->LobbyWindow->GetColumnAmount(); ++i)
+			Instance->LobbyWindow->UpdateItem("", client, i);
+	}
 }
 
 void NetStartWindow::NetProgress(int cur, int limit)
 {
-	if (Instance)
-	{
-		Instance->maxpos = limit;
-		Instance->SetProgress(cur);
-	}
+	if (!Instance)
+		return;
+
+	Instance->maxpos = limit;
+	Instance->SetProgress(cur);
+	for (size_t start = Instance->LobbyWindow->GetItemAmount(); start < Instance->maxpos; ++start)
+		Instance->LobbyWindow->AddItem(std::to_string(start));
 }
 
 void NetStartWindow::NetDone()

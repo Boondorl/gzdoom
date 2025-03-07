@@ -608,6 +608,7 @@ static void AddClientConnection(const sockaddr_in& from, size_t client)
 	Connected[client].Address = from;
 	NetworkClients += client;
 	I_NetLog("Client %u joined the lobby", client);
+	I_NetClientUpdated(client);
 
 	// Make sure any ready clients are marked as needing the new client's info.
 	for (size_t i = 1u; i < MaxClients; ++i)
@@ -622,9 +623,7 @@ static void AddClientConnection(const sockaddr_in& from, size_t client)
 
 static void RemoveClientConnection(size_t client)
 {
-	if (Connected[client].Status >= CSTAT_WAITING)
-		I_NetClientDisconnected(client);
-
+	I_NetClientDisconnected(client);
 	I_ClearClient(client);
 	NetworkClients -= client;
 	I_NetLog("Client %u left the lobby", client);
@@ -978,7 +977,8 @@ static bool Guest_ContactHost(void* unused)
 			if (consoleplayer == -1)
 			{
 				NetworkClients += 0;
-				Connected[0].Status = CSTAT_READY;
+				Connected[0].Status = CSTAT_WAITING;
+				I_NetClientUpdated(0);
 
 				consoleplayer = NetBuffer[2];
 				NetworkClients += consoleplayer;
@@ -1035,6 +1035,10 @@ static bool Guest_ContactHost(void* unused)
 					Connected[c].Status = CSTAT_WAITING;
 					memcpy(&Connected[c].Address, &NetBuffer[byte], addrSize);
 					byte += addrSize;
+				}
+				else
+				{
+					Connected[c].Status = CSTAT_READY;
 				}
 				uint8_t* stream = &NetBuffer[byte];
 				Net_ReadUserInfo(c, stream);
@@ -1108,6 +1112,8 @@ static bool JoinGame(int arg)
 	Connected[0].Status = CSTAT_CONNECTING;
 
 	I_NetInit("Contacting host...");
+	I_NetUpdatePlayers(0u, MaxClients);
+	I_NetClientUpdated(0);
 
 	if (!I_NetLoop(Guest_ContactHost, nullptr))
 	{
