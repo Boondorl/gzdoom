@@ -3485,7 +3485,7 @@ void AActor::AddToHash ()
 	else
 	{
 		int hash = TIDHASH (tid);
-		auto &slot = (ObjectFlags & OF_ClientSide) ? Level->ClientSideTIDHash[hash] : Level->TIDHash[hash];
+		auto &slot = IsClientside() ? Level->ClientSideTIDHash[hash] : Level->TIDHash[hash];
 
 		inext = slot;
 		iprev = &slot;

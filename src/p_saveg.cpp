@@ -988,7 +988,6 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("spotstate", SpotState)
 		("fragglethinker", FraggleScriptThinker)
 		("acsthinker", ACSThinker)
-		("clientsideacsthinker", ClientSideACSThinker)
 		("scrolls", Scrolls)
 		("automap", automap)
 		("interpolator", interpolator)
@@ -1029,7 +1028,6 @@ void FLevelLocals::Serialize(FSerializer &arc, bool hubload)
 		("lastevent", localEventManager->LastEventHandler);
 	if (arc.isReading()) localEventManager->CallOnRegister();
 	Thinkers.SerializeThinkers(arc, hubload);
-	ClientsideThinkers.SerializeThinkers(arc, hubload);
 	arc("polyobjs", Polyobjects);
 	SerializeSubsectors(arc, "subsectors");
 	StatusBar->SerializeMessages(arc);

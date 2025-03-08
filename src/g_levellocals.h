@@ -469,7 +469,7 @@ public:
 	{
 		DThinker* thinker = static_cast<DThinker*>(cls->CreateNew());
 		assert(thinker->IsKindOf(RUNTIME_CLASS(DThinker)));
-		thinker->ObjectFlags |= OF_JustSpawned | OF_ClientSide;
+		thinker->ObjectFlags |= OF_JustSpawned | OF_ClientSide | OF_Transient;
 		ClientsideThinkers.Link(thinker, statnum);
 		thinker->Level = this;
 		return thinker;
