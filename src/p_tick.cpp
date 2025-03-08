@@ -38,10 +38,14 @@
 #include "events.h"
 #include "actorinlines.h"
 #include "g_game.h"
+#include "am_map.h"
 #include "i_interface.h"
 
 extern gamestate_t wipegamestate;
 extern uint8_t globalfreeze, globalchangefreeze;
+
+void C_Ticker();
+void M_Ticker();
 
 //==========================================================================
 //
@@ -55,21 +59,36 @@ extern uint8_t globalfreeze, globalchangefreeze;
 
 void P_RunClientsideLogic()
 {
-	for (auto level : AllLevels())
+	C_Ticker();
+	M_Ticker();
+
+	// [ZZ] also tick the UI part of the events
+	primaryLevel->localEventManager->UiTick();
+
+	if (gamestate == GS_LEVEL || gamestate == GS_TITLELEVEL)
 	{
-		auto it = level->GetClientsideThinkerIterator<AActor>();
-		AActor* ac = nullptr;
-		while ((ac = it.Next()) != nullptr)
+		for (auto level : AllLevels())
 		{
-			ac->ClearInterpolation();
-			ac->ClearFOVInterpolation();
+			auto it = level->GetClientsideThinkerIterator<AActor>();
+			AActor* ac = nullptr;
+			while ((ac = it.Next()) != nullptr)
+			{
+				ac->ClearInterpolation();
+				ac->ClearFOVInterpolation();
+			}
+
+			level->ClientsideThinkers.RunClientsideThinkers(level);
 		}
 
-		level->ClientsideThinkers.RunClientsideThinkers(level);
+		StatusBar->CallTick();
+
+		// TODO: Should this be called on all maps...?
+		if (gamestate == GS_LEVEL)
+			primaryLevel->automap->Ticker();
 	}
 
-	if (StatusBar != nullptr)
-		StatusBar->CallTick();		// Status bar should tick AFTER the thinkers to properly reflect the level's state at this time.
+	// [MK] Additional ticker for UI events right after all others
+	primaryLevel->localEventManager->PostUiTick();
 }
 
 //==========================================================================

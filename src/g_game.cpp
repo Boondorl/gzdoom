@@ -1136,12 +1136,6 @@ void G_Ticker ()
 			primaryLevel->DoReborn(i, false);
 	}
 
-	if (ToggleFullscreen)
-	{
-		ToggleFullscreen = false;
-		AddCommandString ("toggle vid_fullscreen");
-	}
-
 	// do things to change the game state
 	oldgamestate = gamestate;
 	while (gameaction != ga_nothing)
@@ -1263,18 +1257,12 @@ void G_Ticker ()
 		}
 	}
 
-	// [ZZ] also tick the UI part of the events
-	primaryLevel->localEventManager->UiTick();
 	C_RunDelayedCommands();
 
 	// do main actions
 	switch (gamestate)
 	{
 	case GS_LEVEL:
-		P_Ticker ();
-		primaryLevel->automap->Ticker ();
-		break;
-
 	case GS_TITLELEVEL:
 		P_Ticker ();
 		break;
@@ -1303,9 +1291,6 @@ void G_Ticker ()
 	default:
 		break;
 	}
-
-	// [MK] Additional ticker for UI events right after all others
-	primaryLevel->localEventManager->PostUiTick();
 }
 
 
