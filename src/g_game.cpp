@@ -1186,17 +1186,8 @@ void G_Ticker ()
 		case ga_worlddone:
 			G_DoWorldDone ();
 			break;
-		case ga_screenshot:
-			M_ScreenShot (shotfile.GetChars());
-			shotfile = "";
-			gameaction = ga_nothing;
-			break;
 		case ga_fullconsole:
 			G_FullConsole ();
-			gameaction = ga_nothing;
-			break;
-		case ga_togglemap:
-			AM_ToggleMap ();
 			gameaction = ga_nothing;
 			break;
 		case ga_resumeconversation:
@@ -1829,7 +1820,8 @@ void G_ScreenShot (const char *filename)
 	if (gameaction == ga_nothing)
 	{
 		shotfile = filename;
-		gameaction = ga_screenshot;
+		M_ScreenShot(shotfile.GetChars());
+		shotfile = "";
 	}
 }
 
