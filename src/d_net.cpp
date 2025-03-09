@@ -1528,6 +1528,22 @@ void Net_SetupUserInfo()
 	D_SetupUserInfo();
 }
 
+int Net_SetEngineInfo(uint8_t*& stream)
+{
+	stream[0] = VER_MAJOR % 256;
+	stream[1] = VER_MINOR % 256;
+	stream[2] = VER_REVISION % 256;
+	return 3;
+}
+
+bool Net_VerifyEngineInfo(uint8_t*& stream, int* size)
+{
+	if (size != nullptr)
+		*size = 3;
+
+	return (stream[0] % 256) == VER_MAJOR && (stream[1] % 256) == VER_MINOR && (stream[2] % 256) == VER_REVISION;
+}
+
 const char* Net_GetClientName(int client, unsigned int charLimit = 0u)
 {
 	return players[client].userinfo.GetName(charLimit);
@@ -1564,6 +1580,11 @@ int Net_ReadGameInfo(uint8_t*& stream)
 	rngseed = ReadInt32(&stream);
 	C_ReadCVars(&stream);
 	return int(stream - start);
+}
+
+void Net_ReadDataChunk(uint8_t*& stream, size_t size)
+{
+	
 }
 
 // Connects players to each other if needed.

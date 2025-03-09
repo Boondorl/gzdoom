@@ -73,6 +73,7 @@ bool I_InitNetwork();
 void I_ClearClient(size_t client);
 void I_NetCmd(ENetCommand cmd);
 void I_NetDone();
+void I_WriteToDataChunk(uint8_t*& stream, size_t size);
 void HandleIncomingConnection();
 
 #endif

@@ -76,7 +76,6 @@
 #include "printf.h"
 #include "i_interface.h"
 #include "c_cvars.h"
-#include "version.h"
 #include "i_net.h"
 
 /* [Petteri] Get more portable: */
@@ -108,6 +107,7 @@ const char* neterror(void);
 constexpr size_t MaxTransmitSize = 8000u;
 constexpr size_t MinCompressionSize = 10u;
 constexpr size_t MaxPasswordSize = 256u;
+constexpr size_t MaxChunkSize = 1024u; // Only send chunks in 1kb packets at a time
 
 enum ENetConnectType : uint8_t
 {
@@ -120,6 +120,11 @@ enum ENetConnectType : uint8_t
 	PRE_GAME_INFO,			// Sent from host to guest containing general game info
 	PRE_GAME_INFO_ACK,		// Sent from guest to host confirming game info was gotten
 	PRE_GO,					// Sent from host to guest telling them to start the game
+
+	PRE_DATA_CHUNK,			// Sent from host to guest when it's sending large chunks of data
+	PRE_DATA_CHUNK_ACK,		// Sent from guest to host when it's confirming a chunk it's gotten
+	PRE_DATA_CHUNK_MISSING,	// Sent from guest to host if they missed a data chunk packet
+	PRE_DATA_FINISHED,		// Host and guests are confirming the data has been gotten correctly
 
 	PRE_FULL,				// Sent from host to guest if the lobby is full
 	PRE_IN_PROGRESS,		// Sent from host to guest if the game has already started
@@ -145,6 +150,7 @@ enum EConnectionFlags : unsigned int
 	CFL_NONE			= 0,
 	CFL_CONSOLEPLAYER	= 1,
 	CFL_HOST			= 1 << 1,
+	CFL_GETTING_DATA	= 1 << 2,
 };
 
 struct FConnection
@@ -152,7 +158,10 @@ struct FConnection
 	EConnectionStatus Status = CSTAT_NONE;
 	sockaddr_in Address = {};
 	uint64_t InfoAck = 0u;
+	int CurrentDataChunk = 0;
+	int DataChunkAck = -1;
 	bool bHasGameInfo = false;
+	bool bHasDataChunk = false;
 };
 
 bool netgame = false;
@@ -176,6 +185,9 @@ static uint8_t		TransmitBuffer[MaxTransmitSize] = {};
 static TArray<sockaddr_in> BannedConnections = {};
 static bool bGameStarted = false;
 
+static size_t DataChunkSize = 0u;
+static uint8_t* DataChunk = nullptr;
+
 CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
 {
 	if (strlen(self) + 1 > MaxPasswordSize)
@@ -186,11 +198,14 @@ CUSTOM_CVAR(String, net_password, "", CVAR_IGNORE)
 }
 
 void Net_SetupUserInfo();
+int Net_SetEngineInfo(uint8_t*& stream);
+bool Net_VerifyEngineInfo(uint8_t*& stream, int* size = nullptr);
 const char* Net_GetClientName(int client, unsigned int charLimit);
 int Net_SetUserInfo(int client, uint8_t*& stream);
 int Net_ReadUserInfo(int client, uint8_t*& stream);
 int Net_ReadGameInfo(uint8_t*& stream);
 int Net_SetGameInfo(uint8_t*& stream);
+void Net_ReadDataChunk(uint8_t*& stream, size_t size);
 
 static SOCKET CreateUDPSocket()
 {
@@ -346,6 +361,23 @@ static bool ClientsOnSameNetwork()
 	return true;
 }
 
+static void AllocateDataChunkSize(size_t size)
+{
+	const size_t newSize = max<size_t>(DataChunkSize * 2u, size);
+	if (DataChunkSize >= newSize)
+		return;
+
+	DataChunkSize = newSize;
+	DataChunk = (uint8_t*)M_Realloc(DataChunk, newSize);
+}
+
+static void FreeDataChunk()
+{
+	DataChunkSize = 0u;
+	if (DataChunk != nullptr)
+		M_Free(DataChunk);
+}
+
 // Print a network-related message to the console. This doesn't print to the window so should
 // not be used for that and is mainly for logging.
 static void I_NetLog(const char* text, ...)
@@ -403,6 +435,8 @@ static void I_NetClientConnected(size_t client, unsigned int charLimit = 0u)
 		flags |= CFL_HOST;
 	if (client == consoleplayer)
 		flags |= CFL_CONSOLEPLAYER;
+	if (consoleplayer == 0 && DataChunkSize && !Connected[client].bHasDataChunk)
+		flags |= CFL_GETTING_DATA;
 
 	StartWindow->NetConnect(client, name, flags, Connected[client].Status);
 }
@@ -454,6 +488,12 @@ void I_NetDone()
 void I_ClearClient(size_t client)
 {
 	memset(&Connected[client], 0, sizeof(Connected[client]));
+}
+
+void I_WriteToDataChunk(uint8_t*& stream, size_t size)
+{
+	AllocateDataChunkSize(size);
+	memcpy(DataChunk, stream, size);
 }
 
 static int FindClient(const sockaddr_in& address)
@@ -758,11 +798,13 @@ static bool Host_CheckForConnections(void* connected)
 					break;
 			}
 
+			int engineSize = 0;
+			uint8_t* engineInfo = &NetBuffer[2];
 			if (banned < BannedConnections.Size())
 			{
 				RejectConnection(from, PRE_BANNED);
 			}
-			else if (NetBuffer[2] % 256 != VER_MAJOR || NetBuffer[3] % 256 != VER_MINOR || NetBuffer[4] % 256 != VER_REVISION)
+			else if (!Net_VerifyEngineInfo(engineInfo, &engineSize))
 			{
 				RejectConnection(from, PRE_WRONG_ENGINE);
 			}
@@ -774,7 +816,7 @@ static bool Host_CheckForConnections(void* connected)
 			{
 				RejectConnection(from, PRE_IN_PROGRESS);
 			}
-			else if (hasPassword && strcmp(net_password, (const char*)&NetBuffer[5]))
+			else if (hasPassword && strcmp(net_password, (const char*)&NetBuffer[2 + engineSize]))
 			{
 				RejectConnection(from, PRE_WRONG_PASSWORD);
 			}
@@ -809,6 +851,20 @@ static bool Host_CheckForConnections(void* connected)
 		else if (NetBuffer[1] == PRE_GAME_INFO_ACK)
 		{
 			Connected[RemoteClient].bHasGameInfo = true;
+		}
+		else if (NetBuffer[1] == PRE_DATA_CHUNK_ACK)
+		{
+			Connected[RemoteClient].DataChunkAck = (NetBuffer[2] << 8) | NetBuffer[3];
+			if (Connected[RemoteClient].CurrentDataChunk <= Connected[RemoteClient].DataChunkAck)
+				Connected[RemoteClient].CurrentDataChunk = Connected[RemoteClient].DataChunkAck + 1;
+		}
+		else if (NetBuffer[1] == PRE_DATA_CHUNK_MISSING)
+		{
+			Connected[RemoteClient].CurrentDataChunk = Connected[RemoteClient].DataChunkAck + 1;
+		}
+		else if (NetBuffer[1] == PRE_DATA_FINISHED)
+		{
+			Connected[RemoteClient].bHasDataChunk = true;
 		}
 	}
 
@@ -851,6 +907,31 @@ static bool Host_CheckForConnections(void* connected)
 				uint8_t* stream = &NetBuffer[NetBufferLength];
 				NetBufferLength += Net_SetGameInfo(stream);
 				SendPacket(con.Address);
+				clientReady = false;
+			}
+
+			if (DataChunkSize && !con.bHasDataChunk)
+			{
+				const size_t last = DataChunkSize / MaxChunkSize;
+				if (con.DataChunkAck >= last)
+				{
+					NetBuffer[1] = PRE_DATA_FINISHED;
+					NetBufferLength = 2u;
+				}
+				else
+				{
+					NetBuffer[1] = PRE_DATA_CHUNK;
+					NetBuffer[2] = con.CurrentDataChunk >> 8;
+					NetBuffer[3] = con.CurrentDataChunk;
+					memcpy(&NetBuffer[4], &DataChunk[con.CurrentDataChunk], MaxChunkSize);
+					NetBufferLength = 4u + MaxChunkSize;
+					SendPacket(con.Address);
+
+					// Keep sending the last chunk until we got confirmation, that way if the
+					// client lagged out they'll be able to notify us when they recover.
+					if (con.CurrentDataChunk < last)
+						++con.CurrentDataChunk;
+				}
 				clientReady = false;
 			}
 
@@ -956,6 +1037,7 @@ static bool HostGame(int arg, bool forcedNetMode)
 	}
 
 	// Now go
+	FreeDataChunk();
 	I_NetMessage("Starting game");
 	I_NetDone();
 
@@ -1137,18 +1219,54 @@ static bool Guest_ContactHost(void* unused)
 			I_NetLog("Received GO");
 			return true;
 		}
+		else if (NetBuffer[1] == PRE_DATA_CHUNK)
+		{
+			const int seq = (NetBuffer[2] << 8) | NetBuffer[3];
+			if (seq > Connected[consoleplayer].DataChunkAck + 1)
+			{
+				NetBuffer[0] = NCMD_SETUP;
+				NetBuffer[1] = PRE_DATA_CHUNK_MISSING;
+				NetBufferLength = 2u;
+				SendPacket(from);
+			}
+			else if (seq == Connected[consoleplayer].DataChunkAck + 1)
+			{
+				AllocateDataChunkSize(DataChunkSize + NetBufferLength - 4u);
+				memcpy(&DataChunk[seq * MaxChunkSize], &NetBuffer[4], NetBufferLength - 4u);
+				Connected[consoleplayer].DataChunkAck = seq;
+
+				NetBuffer[0] = NCMD_SETUP;
+				NetBuffer[1] = PRE_DATA_CHUNK_ACK;
+				NetBuffer[2] = seq >> 8;
+				NetBuffer[3] = seq;
+				NetBufferLength = 4u;
+				SendPacket(from);
+			}
+		}
+		else if (NetBuffer[1] == PRE_DATA_FINISHED)
+		{
+			if (DataChunkSize)
+				Net_ReadDataChunk(DataChunk, DataChunkSize);
+
+			FreeDataChunk();
+			Connected[consoleplayer].bHasDataChunk = true;
+			NetBuffer[0] = NCMD_SETUP;
+			NetBuffer[1] = PRE_DATA_FINISHED;
+			NetBufferLength = 2u;
+			SendPacket(from);
+		}
 	}
 
 	NetBuffer[0] = NCMD_SETUP;
 	if (consoleplayer == -1)
 	{
 		NetBuffer[1] = PRE_CONNECT;
-		NetBuffer[2] = VER_MAJOR % 256;
-		NetBuffer[3] = VER_MINOR % 256;
-		NetBuffer[4] = VER_REVISION % 256;
+
+		uint8_t* engineInfo = &NetBuffer[2];
+		const int engineSize = Net_SetEngineInfo(engineInfo);
 		const size_t passSize = strlen(net_password) + 1;
-		memcpy(&NetBuffer[5], net_password, passSize);
-		NetBufferLength = 5u + passSize;
+		memcpy(&NetBuffer[2 + engineSize], net_password, passSize);
+		NetBufferLength = 2 + engineSize + passSize;
 		SendPacket(Connected[0].Address);
 	}
 	else
