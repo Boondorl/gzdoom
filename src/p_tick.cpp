@@ -194,16 +194,6 @@ void P_Ticker (void)
 					ac->SetDynamicLights();
 				}
 			}
-
-			it = Level->GetClientsideThinkerIterator<AActor>();
-			while ((ac = it.Next()))
-			{
-				if (ac->flags8 & MF8_RECREATELIGHTS)
-				{
-					ac->flags8 &= ~MF8_RECREATELIGHTS;
-					ac->SetDynamicLights();
-				}
-			}
 		}
 		return;
 	}
