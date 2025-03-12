@@ -469,7 +469,7 @@ static int GetNetBufferSize()
 			skipper += 2;
 
 		for (int i = 0; i < ranTics; ++i)
-			skipper += 3;
+			skipper += DesyncCheck::Size + 1;
 
 		for (int i = 0; i < numTics; ++i)
 		{
@@ -817,11 +817,15 @@ static void GetPackets()
 				pState.ConsistencyAck = consistencyAck;
 			}
 
-			TArray<int16_t> consistencies = {};
+			TArray<DesyncCheck> consistencies = {};
 			for (int r = 0; r < ranTics; ++r)
 			{
 				int ofs = NetBuffer[curByte++];
-				consistencies.Insert(ofs, (NetBuffer[curByte++] << 8) | NetBuffer[curByte++]);
+				DesyncCheck check = {};
+				uint8_t* checkStream = &NetBuffer[curByte];
+				check.ReadFromStream(checkStream);
+				consistencies.Insert(ofs, check);
+				curByte += DesyncCheck::Size;
 			}
 
 			for (size_t i = 0u; i < consistencies.Size(); ++i)
@@ -830,7 +834,7 @@ static void GetPackets()
 				if (cTic <= pState.CurrentNetConsistency)
 					continue;
 
-				if (cTic > pState.CurrentNetConsistency + 1 || !consistencies[i])
+				if (cTic > pState.CurrentNetConsistency + 1)
 				{
 					clientState.Flags |= CF_MISSING_CON;
 					break;
@@ -956,7 +960,7 @@ static void CheckConsistencies()
 			{
 				++clientState.LastVerifiedConsistency;
 				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
-				if (clientState.LocalConsistency[tic] != clientState.NetConsistency[tic])
+				if (!clientState.LocalConsistency[tic].Compare(clientState.NetConsistency[tic], client, !players[client].inconsistant))
 				{
 					players[client].inconsistant = true;
 					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
@@ -1011,11 +1015,23 @@ static void MakeConsistencies()
 	if (!netgame || demoplayback || (gametic % TicDup) || !IsMapLoaded())
 		return;
 
-	const uint32_t rngSum = StaticSumSeeds();
 	for (auto client : NetworkClients)
 	{
+		DesyncCheck check = {};
+		check.Seeds.Push(pr_spawnmobj.Seed());
+		check.Seeds.Push(pr_acs.Seed());
+		check.Seeds.Push(pr_chase.Seed());
+		check.Seeds.Push(pr_damagemobj.Seed());
+		if (players[client].mo != nullptr)
+		{
+			check.Pos = { players[client].mo->X(), players[client].mo->Y(), players[client].mo->Z() };
+			check.Yaw = players[client].mo->Angles.Yaw.Degrees();
+			check.Pitch = players[client].mo->Angles.Pitch.Degrees();
+			check.Health = players[client].health;
+		}
+
 		auto& clientState = ClientStates[client];
-		clientState.LocalConsistency[CurrentConsistency % BACKUPTICS] = CalculateConsistency(client, rngSum);
+		clientState.LocalConsistency[CurrentConsistency % BACKUPTICS] = check;
 	}
 
 	++CurrentConsistency;
@@ -1579,10 +1595,8 @@ void NetUpdate(int tics)
 						cmd[0] = r;
 						++cmd;
 						const int tic = (baseConsistency + curTicOfs + r) % BACKUPTICS;
-						cmd[0] = (clientState.LocalConsistency[tic] >> 8);
-						++cmd;
-						cmd[0] = clientState.LocalConsistency[tic];
-						++cmd;
+						auto& check = clientState.LocalConsistency[tic];
+						check.CopyToStream(cmd);
 					}
 
 					for (int t = 0; t < sendTics; ++t)
