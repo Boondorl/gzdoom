@@ -32,6 +32,7 @@
 #include "doomdef.h"
 #include "d_protocol.h"
 #include "i_net.h"
+#include "vectors.h"
 #include <queue>
 
 uint64_t I_msTime();
@@ -69,6 +70,112 @@ public:
 private:
 	uint8_t* m_Data;
 	int m_Len, m_BufferLen;
+};
+
+struct DesyncCheck
+{
+	inline static const size_t Size = 61u;
+
+	TArray<int> Seeds = {};
+	DVector3 Pos = { 0.0, 0.0, 0.0 };
+	double Yaw = 0.0, Pitch = 0.0;
+	int Health = 0;
+
+	void CopyToStream(uint8_t*& stream)
+	{
+		WriteInt8(Seeds.Size(), &stream);
+		for (auto seed : Seeds)
+			WriteInt32(seed, &stream);
+
+		WriteDouble(Pos.X, &stream);
+		WriteDouble(Pos.Y, &stream);
+		WriteDouble(Pos.Z, &stream);
+		WriteDouble(Yaw, &stream);
+		WriteDouble(Pitch, &stream);
+		WriteInt32(Health, &stream);
+	}
+
+	void ReadFromStream(uint8_t*& stream)
+	{
+		Seeds.Clear();
+		int size = ReadInt8(&stream);
+		for (int i = 0; i < size; ++i)
+			Seeds.Push(ReadInt32(&stream));
+
+		Pos = { ReadDouble(&stream), ReadDouble(&stream), ReadDouble(&stream) };
+		Yaw = ReadDouble(&stream);
+		Pitch = ReadDouble(&stream);
+		Health = ReadInt32(&stream);
+	}
+
+	bool Compare(const DesyncCheck& to, int player, bool message) const
+	{
+		bool res = true;
+		if (Seeds.Size() != to.Seeds.Size())
+		{
+			if (message)
+				Printf("Incorrect number of RNG seeds: expected %d, got %d\n", Seeds.Size(), to.Seeds.Size());
+			res = false;
+		}
+
+		if (res)
+		{
+			int i = 0;
+			for (; i < Seeds.Size(); ++i)
+			{
+				if (Seeds[i] != to.Seeds[i])
+					break;
+			}
+
+			if (i < Seeds.Size())
+			{
+				if (message)
+				{
+					Printf("RNG seeds did not match for ");
+					if (i == 0)
+						Printf("spawnmobj");
+					else if (i == 1)
+						Printf("acs");
+					else if (i == 2)
+						Printf("chase");
+					else
+						Printf("damagemobj");
+					Printf("\n");
+				}
+				res = false;
+			}
+		}
+
+		if (Pos != to.Pos)
+		{
+			if (message)
+				Printf("Position mismatch for %d: expected (%f, %f, %f), got (%f, %f, %f)\n", player, Pos.X, Pos.Y, Pos.Z, to.Pos.X, to.Pos.Y, to.Pos.Z);
+			res = false;
+		}
+
+		if (Yaw != to.Yaw)
+		{
+			if (message)
+				Printf("Angle mismatch for %d: expected %f, got %f\n", player, Yaw, to.Yaw);
+			res = false;
+		}
+
+		if (Pitch != to.Pitch)
+		{
+			if (message)
+				Printf("Pitch mismatch for %d: expected %f, got %f\n", player, Pitch, to.Pitch);
+			res = false;
+		}
+
+		if (Health != to.Health)
+		{
+			if (message)
+				Printf("Health mismatch for %d: expected %d, got %d\n", player, Health, to.Health);
+			res = false;
+		}
+
+		return res;
+	}
 };
 
 // New packet structure:
@@ -122,8 +229,8 @@ struct FClientNetState
 	int ConsistencyAck = -1;					// Last consistency the client reported from us.
 	int LastVerifiedConsistency = -1;			// Last consistency we checked from this client. If < CurrentNetConsistency, run through them.
 	int CurrentNetConsistency = -1;				// Last consistency we got from this client.
-	int16_t NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
-	int16_t LocalConsistency[BACKUPTICS] = {};	// Local consistency of the client to check against.
+	DesyncCheck NetConsistency[BACKUPTICS] = {};	// Consistencies we got from this client.
+	DesyncCheck LocalConsistency[BACKUPTICS] = {};	// Local consistency of the client to check against.
 };
 
 // Create any new ticcmds and broadcast to other players.
