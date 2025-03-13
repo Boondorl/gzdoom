@@ -114,7 +114,7 @@ struct DesyncCheck
 		if (Seeds.Size() != to.Seeds.Size())
 		{
 			if (message)
-				Printf("Incorrect number of RNG seeds: expected %d, got %d\n", Seeds.Size(), to.Seeds.Size());
+				Printf("Incorrect number of RNG seeds for %d: expected %d, got %d\n", player, Seeds.Size(), to.Seeds.Size());
 			res = false;
 		}
 
@@ -131,7 +131,7 @@ struct DesyncCheck
 			{
 				if (message)
 				{
-					Printf("RNG seeds did not match for ");
+					Printf("RNG seed mismatch for %d: ", player);
 					if (i == 0)
 						Printf("spawnmobj");
 					else if (i == 1)
