@@ -960,7 +960,7 @@ static void CheckConsistencies()
 			{
 				++clientState.LastVerifiedConsistency;
 				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
-				if (!clientState.LocalConsistency[tic].Compare(clientState.NetConsistency[tic], client, !players[client].inconsistant))
+				if (!clientState.LocalConsistency[tic].Compare(clientState.NetConsistency[tic], client, NetMode != NET_PacketServer ? !players[client].inconsistant : !players[Net_Arbitrator].inconsistant))
 				{
 					players[client].inconsistant = true;
 					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
