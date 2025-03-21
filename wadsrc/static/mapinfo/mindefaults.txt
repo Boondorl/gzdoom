@@ -63,6 +63,7 @@ gameinfo
 	messageboxclass = "MessageBoxMenu"
 	helpmenuclass = "ReadThisMenu"
 	menudelegateclass = "DoomMenuDelegate"
+	acsdelegateclass = "ACSDelegate"
 }
 
 gamedefaults

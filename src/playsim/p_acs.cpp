@@ -211,9 +211,9 @@
 		PCD_BLUETEAMSCORE,
 		PCD_REDTEAMSCORE,
 		PCD_ISONEFLAGCTF,
-		PCD_LSPEC6,				// These are never used. They should probably
-/*130*/	PCD_LSPEC6DIRECT,		// be given names like PCD_DUMMY.
-		PCD_PRINTNAME,
+		//PCD_GETINVASIONWAVE,
+/*130*/	//PCD_GETINVASIONSTATE,
+		PCD_PRINTNAME = 131,
 		PCD_MUSICCHANGE,
 		PCD_CONSOLECOMMANDDIRECT,
 		PCD_CONSOLECOMMAND,
@@ -652,6 +652,167 @@ struct CallReturn
 	unsigned int EntryInstrCount;
 };
 
+TObjPtr<DObject*> ACSDelegate = MakeObjPtr<DObject*>(nullptr);
+
+struct ACSFunctionSignature
+{
+	enum EDataType
+	{
+		VOID,
+		INT,
+		FIXED,
+		NAME,
+
+		// Only for P-Code args
+		BYTE,
+		SHORT,
+	};
+
+private:
+	VMFunction* _func = nullptr;
+	FName _funcName = NAME_None;
+	TArray<EDataType> _pcodeArgs = {}, _stackArgs = {};
+	EDataType _returnType = VOID;
+
+public:
+	ACSFunctionSignature() = default;
+	ACSFunctionSignature(FName funcName) : _funcName(funcName) {}
+	ACSFunctionSignature(FName funcName, TArray<EDataType>& stackArgs) : _funcName(funcName) { _stackArgs.Swap(stackArgs); }
+	ACSFunctionSignature(FName funcName, TArray<EDataType>& pcodeArgs, TArray<EDataType>& stackArgs) : _funcName(funcName)
+	{
+		_pcodeArgs.Swap(pcodeArgs);
+		_stackArgs.Swap(stackArgs);
+	}
+	ACSFunctionSignature(FName funcName, EDataType returnType) : _funcName(funcName), _returnType(returnType) {}
+	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType) { _stackArgs.Swap(stackArgs); }
+	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& pcodeArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType)
+	{
+		_pcodeArgs.Swap(pcodeArgs);
+		_stackArgs.Swap(stackArgs);
+	}
+
+	EDataType GetPCodeType(int i) const
+	{
+		return _pcodeArgs[i];
+	}
+
+	EDataType GetStackType(int i) const
+	{
+		return _stackArgs[i];
+	}
+
+	EDataType GetReturnType() const
+	{
+		return _returnType;
+	}
+
+	int GetPCodeArgCount() const
+	{
+		return _pcodeArgs.Size();
+	}
+
+	int GetStackArgCount() const
+	{
+		return _stackArgs.Size();
+	}
+
+	void SetFunction()
+	{
+		unsigned VIndex = GetVirtualIndex(PClass::FindClass("ACSDelegate"), _funcName.GetChars());
+		assert(VIndex != ~0u);
+
+		auto cls = ACSDelegate->GetClass();
+		_func = cls->Virtuals.Size() > VIndex ? cls->Virtuals[VIndex] : nullptr;
+	}
+
+	int CallFunction(int* args, int pcodeArgs, int stackArgs)
+	{
+		if (_func == nullptr)
+			I_FatalError("ACS delegate function %s had no corresponding ZScript function", _funcName.GetChars());
+		if (pcodeArgs != _pcodeArgs.Size())
+			I_FatalError("Tried to call ACS delegate function %s with mismatched P-Code arguments: expected %d, got %d", _funcName.GetChars(), _pcodeArgs.Size(), pcodeArgs);
+		if (stackArgs != _stackArgs.Size())
+			I_FatalError("Tried to call ACS delegate function %s with mismatched stack arguments: expected %d, got %d", _funcName.GetChars(), _stackArgs.Size(), stackArgs);
+
+		constexpr double FixedToFloat = 1.0 / 65536.0;
+		TArray<VMValue> params = {};
+		params.Push(ACSDelegate.Get());
+		for (int i = 0; i < pcodeArgs; ++i)
+		{
+			if (_pcodeArgs[i] == FIXED)
+				params.Push(args[i] * FixedToFloat);
+			else
+				params.Push(args[i]);
+		}
+		for (int i = pcodeArgs; i < pcodeArgs + stackArgs; ++i)
+		{
+			if (_stackArgs[i] == FIXED)
+				params.Push(args[i] * FixedToFloat);
+			else
+				params.Push(args[i]);
+		}
+
+		if (_returnType != VOID)
+		{
+			int res = 0;
+			VMReturn ret = &res;
+			VMCall(_func, params.Data(), params.Size(), &ret, 1);
+			return res;
+		}
+
+		VMCall(_func, params.Data(), params.Size(), nullptr, 0);
+		return 0;
+	}
+};
+
+static TMap<int, ACSFunctionSignature> DelegateFunctionMap = {};
+static TMap<int, ACSFunctionSignature> DelegatePCodeMap = {};
+
+void CreateACSDelegate()
+{
+	if (ACSDelegate != nullptr)
+		return;
+
+	if (!DelegateFunctionMap.CountUsed())
+	{
+		// Put any ACS Function calls here that should be rerouted to ZScript.
+	}
+
+	if (!DelegatePCodeMap.CountUsed())
+	{
+		// Put any ACS P-Code handling here that should be rerouted to ZScript.
+		DelegatePCodeMap[129] = { "GetInvasionWave", ACSFunctionSignature::INT };
+		DelegatePCodeMap[130] = { "GetInvasionState", ACSFunctionSignature::INT };
+	}
+
+	auto cls = PClass::FindClass(gameinfo.ACSDelegateClass);
+	if (!cls)
+		I_FatalError("%s: Undefined ACS delegate class", gameinfo.ACSDelegateClass.GetChars());
+	if (!cls->IsDescendantOf("ACSDelegate"))
+		I_FatalError("'%s' does not inherit from ACSDelegate", gameinfo.ACSDelegateClass.GetChars());
+
+	ACSDelegate = cls->CreateNew();
+
+	TMap<int, ACSFunctionSignature>::Iterator it = { DelegateFunctionMap };
+	TMap<int, ACSFunctionSignature>::Pair* pair = nullptr;
+	while (it.NextPair(pair))
+		pair->Value.SetFunction();
+
+	TMap<int, ACSFunctionSignature>::Iterator it2 = { DelegatePCodeMap };
+	while (it2.NextPair(pair))
+		pair->Value.SetFunction();
+}
+
+void ClearACSDelegate()
+{
+	DelegateFunctionMap.Clear();
+	DelegatePCodeMap.Clear();
+	if (ACSDelegate != nullptr)
+	{
+		ACSDelegate->Destroy();
+		ACSDelegate = nullptr;
+	}
+}
 
 static bool IsClientSideScript(const ScriptPtr& script)
 {
@@ -7031,12 +7192,50 @@ int DLevelScript::RunScript()
 			pcd = NEXTWORD;
 		}
 
+		ACSFunctionSignature* callback = nullptr;
 		switch (pcd)
 		{
 		default:
-			Printf ("Unknown P-Code %d in %s\n", pcd, ScriptPresentation(script).GetChars());
-			activeBehavior = savedActiveBehavior;
-			// fall through
+			callback = DelegatePCodeMap.CheckKey(pcd);
+			if (callback != nullptr)
+			{
+				// This is an insane person way of handling this but unfortunately Skulltag built
+				// some of its ACS functions directly into the VM itself.
+				TArray<int> args = {};
+				const int pcodeArgs = callback->GetPCodeArgCount();
+				for (int a = 0; a < pcodeArgs; ++a)
+				{
+					const ACSFunctionSignature::EDataType type = callback->GetPCodeType(a);
+					if (type == ACSFunctionSignature::BYTE)
+						args.Push(NEXTBYTE);
+					else if (type == ACSFunctionSignature::SHORT)
+						args.Push(NEXTSHORT);
+					else if (type == ACSFunctionSignature::NAME)
+						args.Push(TAGSTR(NEXTWORD));
+					else
+						args.Push(NEXTWORD);
+				}
+				const int stackArgs = callback->GetStackArgCount();
+				for (int a = 0; a < stackArgs; ++a)
+					args.Push(STACK(stackArgs - a));
+
+				sp -= stackArgs;
+				int res = callback->CallFunction(args.Data(), pcodeArgs, stackArgs);
+				const ACSFunctionSignature::EDataType retType = callback->GetReturnType();
+				if (retType != ACSFunctionSignature::VOID)
+				{
+					if (retType == ACSFunctionSignature::NAME)
+						res = TAGSTR(res);
+					PushToStack(res);
+				}
+				break;
+			}
+			else
+			{
+				Printf("Unknown P-Code %d in %s\n", pcd, ScriptPresentation(script).GetChars());
+				activeBehavior = savedActiveBehavior;
+			}
+			// fallthrough
 		case PCD_TERMINATE:
 			DPrintf (DMSG_NOTIFY, "%s finished\n", ScriptPresentation(script).GetChars());
 			state = SCRIPT_PleaseRemove;
@@ -7270,7 +7469,11 @@ int DLevelScript::RunScript()
 				int funcIndex = NEXTSHORT;
 
 				int retval, minCount = 0;
-				retval = CallFunction(argCount, funcIndex, &STACK(argCount), minCount);
+				callback = DelegateFunctionMap.CheckKey(funcIndex);
+				if (callback != nullptr)
+					retval = callback->CallFunction(&STACK(argCount), 0, argCount);
+				else
+					retval = CallFunction(argCount, funcIndex, &STACK(argCount), minCount);
 				if (minCount != 0)
 				{
 					Printf("Called ACS function index %d with too few args: %d (need %d)\n", funcIndex, argCount, minCount);

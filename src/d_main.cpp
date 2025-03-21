@@ -158,6 +158,8 @@ void I_ShutdownInput();
 void SetConsoleNotifyBuffer();
 void I_UpdateDiscordPresence(bool SendPresence, const char* curstatus, const char* appid, const char* steamappid);
 bool M_SetSpecialMenu(FName& menu, int param);	// game specific checks
+void CreateACSDelegate();
+void ClearACSDelegate();
 
 const FIWADInfo *D_FindIWAD(TArray<FString> &wadfiles, const char *iwad, const char *basewad);
 void InitWidgetResources(const char* basewad);
@@ -206,6 +208,7 @@ bool M_DemoNoPlay;	// [RH] if true, then skip any demos in the loop
 extern bool insave;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
 extern FName MessageBoxClass;
+extern TObjPtr<DObject*> ACSDelegate;
 
 CUSTOM_CVAR(Float, i_timescale, 1.0f, CVAR_NOINITCALL | CVAR_VIRTUAL)
 {
@@ -2978,6 +2981,7 @@ static void GC_MarkGameRoots()
 
 	// NextToThink must not be freed while thinkers are ticking.
 	GC::Mark(NextToThink);
+	GC::Mark(ACSDelegate);
 }
 
 static void System_ToggleFullConsole()
@@ -3438,6 +3442,8 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 	// [SP] Force vanilla transparency auto-detection to re-detect our game lumps now
 	UpdateVanillaTransparency();
 
+	CreateACSDelegate();
+
 	// [RH] Lock any cvars that should be locked now that we're
 	// about to begin the game.
 	FBaseCVar::EnableNoSet ();
@@ -3839,6 +3845,7 @@ void D_Cleanup()
 	C_ClearAliases();				// CCMDs won't be reinitialized so these need to be deleted here
 	DestroyCVarsFlagged(CVAR_MOD);	// Delete any cvar left by mods
 	DeinitMenus();
+	ClearACSDelegate();
 	savegameManager.ClearSaveGames();
 	LightDefaults.DeleteAndClear();			// this can leak heap memory if it isn't cleared.
 	TexAnim.DeleteAll();

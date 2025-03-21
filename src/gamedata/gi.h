@@ -168,6 +168,7 @@ struct gameinfo_t
 	FName MessageBoxClass;
 	FName HelpMenuClass;
 	FName MenuDelegateClass;
+	FName ACSDelegateClass;
 	FName backpacktype;
 	FString intermissionMusic;
 	int intermissionOrder;
