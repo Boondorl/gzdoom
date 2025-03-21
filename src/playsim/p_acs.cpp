@@ -666,26 +666,32 @@ struct ACSFunctionSignature
 		// Only for P-Code args
 		BYTE,
 		SHORT,
+
+		// Only for returns
+		STRING,
 	};
 
 private:
 	VMFunction* _func = nullptr;
 	FName _funcName = NAME_None;
+	int _minStackArgs = 0;
 	TArray<EDataType> _pcodeArgs = {}, _stackArgs = {};
 	EDataType _returnType = VOID;
 
 public:
 	ACSFunctionSignature() = default;
 	ACSFunctionSignature(FName funcName) : _funcName(funcName) {}
-	ACSFunctionSignature(FName funcName, TArray<EDataType>& stackArgs) : _funcName(funcName) { _stackArgs.Swap(stackArgs); }
-	ACSFunctionSignature(FName funcName, TArray<EDataType>& pcodeArgs, TArray<EDataType>& stackArgs) : _funcName(funcName)
+	ACSFunctionSignature(FName funcName, TArray<EDataType>& pcodeArgs) : _funcName(funcName) { _pcodeArgs.Swap(pcodeArgs); }
+	ACSFunctionSignature(FName funcName, int minStackArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _minStackArgs(minStackArgs) { _stackArgs.Swap(stackArgs); }
+	ACSFunctionSignature(FName funcName, TArray<EDataType>& pcodeArgs, int minStackArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _minStackArgs(minStackArgs)
 	{
 		_pcodeArgs.Swap(pcodeArgs);
 		_stackArgs.Swap(stackArgs);
 	}
 	ACSFunctionSignature(FName funcName, EDataType returnType) : _funcName(funcName), _returnType(returnType) {}
-	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType) { _stackArgs.Swap(stackArgs); }
-	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& pcodeArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType)
+	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& pcodeArgs) : _funcName(funcName), _returnType(returnType) { _pcodeArgs.Swap(pcodeArgs); }
+	ACSFunctionSignature(FName funcName, EDataType returnType, int minStackArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType), _minStackArgs(minStackArgs) { _stackArgs.Swap(stackArgs); }
+	ACSFunctionSignature(FName funcName, EDataType returnType, TArray<EDataType>& pcodeArgs, int minStackArgs, TArray<EDataType>& stackArgs) : _funcName(funcName), _returnType(returnType), _minStackArgs(minStackArgs)
 	{
 		_pcodeArgs.Swap(pcodeArgs);
 		_stackArgs.Swap(stackArgs);
@@ -731,28 +737,52 @@ public:
 			I_FatalError("ACS delegate function %s had no corresponding ZScript function", _funcName.GetChars());
 		if (pcodeArgs != _pcodeArgs.Size())
 			I_FatalError("Tried to call ACS delegate function %s with mismatched P-Code arguments: expected %d, got %d", _funcName.GetChars(), _pcodeArgs.Size(), pcodeArgs);
-		if (stackArgs != _stackArgs.Size())
+		if (stackArgs > _stackArgs.Size() || stackArgs < _minStackArgs)
 			I_FatalError("Tried to call ACS delegate function %s with mismatched stack arguments: expected %d, got %d", _funcName.GetChars(), _stackArgs.Size(), stackArgs);
 
 		constexpr double FixedToFloat = 1.0 / 65536.0;
 		TArray<VMValue> params = {};
 		params.Push(ACSDelegate.Get());
-		for (int i = 0; i < pcodeArgs; ++i)
+		int i = 0;
+		for (; i < pcodeArgs; ++i)
 		{
 			if (_pcodeArgs[i] == FIXED)
 				params.Push(args[i] * FixedToFloat);
 			else
 				params.Push(args[i]);
 		}
-		for (int i = pcodeArgs; i < pcodeArgs + stackArgs; ++i)
+		int a = 0;
+		for (; i < pcodeArgs + stackArgs; ++i, ++a)
 		{
-			if (_stackArgs[i] == FIXED)
+			if (_stackArgs[a] == FIXED)
 				params.Push(args[i] * FixedToFloat);
 			else
 				params.Push(args[i]);
 		}
+		// For any remaining values, pass nothing.
+		for (; i < pcodeArgs + _stackArgs.Size(); ++i, ++a)
+		{
+			if (_stackArgs[a] == FIXED)
+				params.Push(0.0);
+			else
+				params.Push(0);
+		}
 
-		if (_returnType != VOID)
+		if (_returnType == STRING)
+		{
+			FString res = {};
+			VMReturn ret = &res;
+			VMCall(_func, params.Data(), params.Size(), &ret, 1);
+			return GlobalACSStrings.AddString(res.GetChars());
+		}
+		else if (_returnType == FIXED)
+		{
+			double res = 0.0;
+			VMReturn ret = &res;
+			VMCall(_func, params.Data(), params.Size(), &ret, 1);
+			return static_cast<int>(res * 65536.0);
+		}
+		else if (_returnType != VOID)
 		{
 			int res = 0;
 			VMReturn ret = &res;
@@ -776,6 +806,11 @@ void CreateACSDelegate()
 	if (!DelegateFunctionMap.CountUsed())
 	{
 		// Put any ACS Function calls here that should be rerouted to ZScript.
+		TArray<ACSFunctionSignature::EDataType> args = {};
+		args.Push(ACSFunctionSignature::INT);
+		args.Push(ACSFunctionSignature::INT);
+		args.Push(ACSFunctionSignature::INT);
+		DelegateFunctionMap[148] = { "GetChatMessage", ACSFunctionSignature::STRING, 2, args };
 	}
 
 	if (!DelegatePCodeMap.CountUsed())

@@ -13,4 +13,5 @@ class ACSDelegate play
 
     virtual int GetInvasionWave() { return -1; }
     virtual EInvasionState GetInvasionState() { return -1; }
+    virtual string GetChatMessage(int player, int offset, bool keepColorCodes = false) { return ""; }
 }
