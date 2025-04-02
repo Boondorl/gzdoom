@@ -108,74 +108,7 @@ struct DesyncCheck
 		Health = ReadInt32(&stream);
 	}
 
-	bool Compare(const DesyncCheck& to, int player, bool message) const
-	{
-		bool res = true;
-		if (Seeds.Size() != to.Seeds.Size())
-		{
-			if (message)
-				Printf("Incorrect number of RNG seeds for %d: expected %d, got %d\n", player, Seeds.Size(), to.Seeds.Size());
-			res = false;
-		}
-
-		if (res)
-		{
-			int i = 0;
-			for (; i < Seeds.Size(); ++i)
-			{
-				if (Seeds[i] != to.Seeds[i])
-					break;
-			}
-
-			if (i < Seeds.Size())
-			{
-				if (message)
-				{
-					Printf("RNG seed mismatch for %d: ", player);
-					if (i == 0)
-						Printf("spawnmobj");
-					else if (i == 1)
-						Printf("acs");
-					else if (i == 2)
-						Printf("chase");
-					else
-						Printf("damagemobj");
-					Printf("\n");
-				}
-				res = false;
-			}
-		}
-
-		if (Pos != to.Pos)
-		{
-			if (message)
-				Printf("Position mismatch for %d: expected (%f, %f, %f), got (%f, %f, %f)\n", player, Pos.X, Pos.Y, Pos.Z, to.Pos.X, to.Pos.Y, to.Pos.Z);
-			res = false;
-		}
-
-		if (Yaw != to.Yaw)
-		{
-			if (message)
-				Printf("Angle mismatch for %d: expected %f, got %f\n", player, Yaw, to.Yaw);
-			res = false;
-		}
-
-		if (Pitch != to.Pitch)
-		{
-			if (message)
-				Printf("Pitch mismatch for %d: expected %f, got %f\n", player, Pitch, to.Pitch);
-			res = false;
-		}
-
-		if (Health != to.Health)
-		{
-			if (message)
-				Printf("Health mismatch for %d: expected %d, got %d\n", player, Health, to.Health);
-			res = false;
-		}
-
-		return res;
-	}
+	bool Compare(const DesyncCheck& to, int player, bool message) const;
 };
 
 // New packet structure:

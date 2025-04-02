@@ -938,6 +938,79 @@ static void SendHeartbeat()
 	}
 }
 
+bool DesyncCheck::Compare(const DesyncCheck& to, int player, bool message) const
+{
+	bool res = true;
+	const char* name = players[player].userinfo.GetName();
+	if (Seeds.Size() != to.Seeds.Size())
+	{
+		if (message)
+			Printf("Incorrect number of RNG seeds for %s (%d): expected %d, got %d\n", name, player, Seeds.Size(), to.Seeds.Size());
+		res = false;
+	}
+
+	if (res)
+	{
+		TArray<int> seeds = {};
+		for (int i = 0; i < Seeds.Size(); ++i)
+		{
+			if (Seeds[i] != to.Seeds[i])
+				seeds.Push(i);
+		}
+
+		if (seeds.Size())
+		{
+			if (message)
+			{
+				for (auto i : seeds)
+				{
+					Printf("RNG seed mismatch for %s (%d): ", name, player);
+					if (i == 0)
+						Printf("spawnmobj");
+					else if (i == 1)
+						Printf("acs");
+					else if (i == 2)
+						Printf("chase");
+					else
+						Printf("damagemobj");
+					Printf("\n");
+				}
+			}
+			res = false;
+		}
+	}
+
+	if (Pos != to.Pos)
+	{
+		if (message)
+			Printf("Position mismatch for %s (%d): expected (%f, %f, %f), got (%f, %f, %f)\n", name, player, Pos.X, Pos.Y, Pos.Z, to.Pos.X, to.Pos.Y, to.Pos.Z);
+		res = false;
+	}
+
+	if (Yaw != to.Yaw)
+	{
+		if (message)
+			Printf("Angle mismatch for %s (%d): expected %f, got %f\n", name, player, Yaw, to.Yaw);
+		res = false;
+	}
+
+	if (Pitch != to.Pitch)
+	{
+		if (message)
+			Printf("Pitch mismatch for %s (%d): expected %f, got %f\n", name, player, Pitch, to.Pitch);
+		res = false;
+	}
+
+	if (Health != to.Health)
+	{
+		if (message)
+			Printf("Health mismatch for %s (%d): expected %d, got %d\n", name, player, Health, to.Health);
+		res = false;
+	}
+
+	return res;
+}
+
 static void CheckConsistencies()
 {
 	// Check consistencies retroactively to see if there was a desync at some point. We still
@@ -946,27 +1019,14 @@ static void CheckConsistencies()
 	for (auto client : NetworkClients)
 	{
 		auto& clientState = ClientStates[client];
-		// If previously inconsistent, always mark it as such going forward. We don't want this to
-		// accidentally go away at some point since the game state is already completely broken.
-		if (players[client].inconsistant)
+		// Make sure we don't check past tics we haven't even ran yet.
+		const int limit = min<int>(CurrentConsistency - 1, clientState.CurrentNetConsistency);
+		while (clientState.LastVerifiedConsistency < limit)
 		{
-			clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-		}
-		else
-		{
-			// Make sure we don't check past tics we haven't even ran yet.
-			const int limit = min<int>(CurrentConsistency - 1, clientState.CurrentNetConsistency);
-			while (clientState.LastVerifiedConsistency < limit)
-			{
-				++clientState.LastVerifiedConsistency;
-				const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
-				if (!clientState.LocalConsistency[tic].Compare(clientState.NetConsistency[tic], client, NetMode != NET_PacketServer ? !players[client].inconsistant : !players[Net_Arbitrator].inconsistant))
-				{
-					players[client].inconsistant = true;
-					clientState.LastVerifiedConsistency = clientState.CurrentNetConsistency;
-					break;
-				}
-			}
+			++clientState.LastVerifiedConsistency;
+			const int tic = clientState.LastVerifiedConsistency % BACKUPTICS;
+			if (!clientState.LocalConsistency[tic].Compare(clientState.NetConsistency[tic], client, true))
+				players[client].inconsistant = true;
 		}
 	}
 }
