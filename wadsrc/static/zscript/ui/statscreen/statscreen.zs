@@ -80,7 +80,7 @@ class StatusScreen : ScreenJob abstract version("2.5")
 
 	InterBackground bg;
 	int				acceleratestage;	// used to accelerate or skip a stage
-	bool				playerready[MAXPLAYERS];
+	bool				playerready[MAXPLAYERS]; // This is no longer used since the server needs to track this
 	int				me;					// wbs.pnum
 	int				bcnt;
 	int				CurState;				// specifies current CurState
@@ -134,6 +134,11 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	int scalemode;
 	int wrapwidth;	// size used to word wrap level names
 	int scaleFactorX, scaleFactorY;
+
+	protected native static bool IsPlayerReady(int pNum);
+	protected native static int GetReadyTimer();
+	protected native static bool LevelIsStarting();
+	protected native static void ReadyPlayer();
 
 
 	//====================================================================
@@ -696,7 +701,8 @@ class StatusScreen : ScreenJob abstract version("2.5")
 		if (wbs.next == "") 
 		{
 			// Last map in episode - there is no next location!
-			jobstate = finished;
+			if (!netgame)
+				jobstate = finished;
 			return;
 		}
 
@@ -714,10 +720,17 @@ class StatusScreen : ScreenJob abstract version("2.5")
 
 	protected virtual void updateShowNextLoc ()
 	{
-		if (!--cnt || acceleratestage)
+		// If playing online, never allow advancing to NoState
+		if (!netgame && (!--cnt || acceleratestage))
+		{
 			initNoState();
+		}
 		else
+		{
 			snl_pointeron = (cnt & 31) < 20;
+			if (netgame && --cnt <= 0)
+				cnt = SHOWNEXTLOCDELAY * GameTicRate;
+		}
 	}
 
 	//====================================================================
@@ -799,7 +812,10 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	{
 		if (evt.type == InputEvent.Type_KeyDown)
 		{
-			accelerateStage = 1;
+			if (netgame && evt.KeyScan == InputEvent.Key_Space)
+				ReadyPlayer();
+			else
+				accelerateStage = 1;
 			return true;
 		}
 		return false;

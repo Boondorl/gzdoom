@@ -151,6 +151,14 @@ void Net_WriteBytes(const uint8_t *, int len);
 void Net_DoCommand(int cmd, uint8_t **stream, int player);
 void Net_SkipCommand(int cmd, uint8_t **stream);
 
+void Net_PlayerReadiedUp(int player);
+bool Net_IsPlayerReady(int player);
+bool Net_CheckCutsceneReady(int totalReady);
+void Net_UpdateIntermissionCountdown();
+bool Net_StartIntermissionStartTimer();
+bool Net_UpdateIntermissionStartTimer();
+void Net_StartIntermission(bool end);
+bool Net_IsStartingLevel();
 void Net_ResetCommands(bool midTic);
 void Net_SetWaiting();
 void Net_ClearBuffers();
@@ -160,6 +168,7 @@ void Net_ClearBuffers();
 extern usercmd_t			LocalCmds[LOCALCMDTICS];
 extern int					ClientTic;
 extern FClientNetState		ClientStates[MAXPLAYERS];
+extern bool					bInIntermission;
 
 class player_t;
 class DObject;
