@@ -26,7 +26,6 @@ class DeathmatchStatusScreen : StatusScreen
 
 		for(i = 0; i < MAXPLAYERS; i++)
 		{
-			playerready[i] = false;
 			cnt_frags[i] = cnt_deaths[i] = player_deaths[i] = 0;
 		}
 		total_frags = 0;
@@ -57,7 +56,11 @@ class DeathmatchStatusScreen : StatusScreen
 		bool stillticking;
 		bool doautoskip = autoSkip();
 
-		if ((acceleratestage || doautoskip) && ng_state != 6)
+		if (netgame && LevelIsStarting())
+		{
+			ng_state = 6;
+		}
+		else if ((acceleratestage || doautoskip) && ng_state != 6)
 		{
 			acceleratestage = 0;
 
@@ -125,7 +128,7 @@ class DeathmatchStatusScreen : StatusScreen
 		else if (ng_state == 6)
 		{
 			// All players are ready; proceed.
-			if ((acceleratestage) || doautoskip)
+			if ((!netgame && (acceleratestage || doautoskip)) || (netgame && LevelIsStarting()))
 			{
 				PlaySound("intermission/pastdmstats");
 				initShowNextLoc();
@@ -199,7 +202,7 @@ class DeathmatchStatusScreen : StatusScreen
 
 			screen.Dim(player.GetDisplayColor(), 0.8, x, y - ypadding, (deaths_x - x) + (8 * CleanXfac), lineheight);
 
-			//if (playerready[pnum] || player.Bot != NULL) // Bots are automatically assumed ready, to prevent confusion
+			if (IsPlayerReady(pnum)) // Bots are automatically assumed ready, to prevent confusion
 				screen.DrawTexture(readyico, true, x - (readysize.X * CleanXfac), y, DTA_CleanNoMove, true);
 
 			let thiscolor = GetRowColor(player, pnum == consoleplayer);

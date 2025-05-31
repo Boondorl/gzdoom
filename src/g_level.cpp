@@ -1092,6 +1092,7 @@ void RunIntermission(level_info_t* fromMap, level_info_t* toMap, DIntermissionCo
 		return;
 	}
 	gameaction = ga_intermission;
+	Net_StartIntermission(toMap == nullptr);
 }
 
 void G_DoCompleted (void)
