@@ -27,7 +27,6 @@ class CoopStatusScreen : StatusScreen
 
 		for (int i = 0; i < MAXPLAYERS; i++)
 		{
-			playerready[i] = false;
 			cnt_kills[i] = cnt_items[i] = cnt_secret[i] = cnt_frags[i] = 0;
 
 			if (!playeringame[i])
@@ -55,7 +54,11 @@ class CoopStatusScreen : StatusScreen
 		bool stillticking;
 		bool autoskip = autoSkip();
 
-		if ((acceleratestage || autoskip) && ng_state != 12)
+		if (netgame && LevelIsStarting())
+		{
+			ng_state = 12;
+		}
+		else if ((acceleratestage || autoskip) && ng_state != 12)
 		{
 			acceleratestage = 0;
 
@@ -217,7 +220,7 @@ class CoopStatusScreen : StatusScreen
 		else if (ng_state == 12)
 		{
 			// All players are ready; proceed.
-			if ((acceleratestage) || autoskip)
+			if ((!netgame && (acceleratestage || autoskip)) || (netgame && LevelIsStarting()))
 			{
 				PlaySound("intermission/pastcoopstats");
 				initShowNextLoc();
@@ -252,7 +255,7 @@ class CoopStatusScreen : StatusScreen
 		String text_bonus, text_secret, text_kills;
 		TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
 
-		y = drawLF();
+		int top = drawLF();
 
 		[maxnamewidth, maxscorewidth, maxiconheight] = GetPlayerWidths();
 		// Use the readyico height if it's bigger.
@@ -263,7 +266,7 @@ class CoopStatusScreen : StatusScreen
 		height = int(displayFont.GetHeight() * FontScale);
 		lineheight = MAX(height, maxiconheight * CleanYfac);
 		ypadding = (lineheight - height + 1) / 2;
-		y += CleanYfac;
+		y = top + height + CleanYfac*2;
 
 		text_bonus = Stringtable.Localize((gameinfo.gametype & GAME_Raven) ? "$SCORE_BONUS" : "$SCORE_ITEMS");
 		text_secret = Stringtable.Localize("$SCORE_SECRET");
@@ -303,7 +306,7 @@ class CoopStatusScreen : StatusScreen
 
 			screen.Dim(player.GetDisplayColor(), 0.8f, x, y - ypadding, (secret_x - x) + (8 * CleanXfac), lineheight);
 
-			//if (playerready[i] || player.Bot != NULL) // Bots are automatically assumed ready, to prevent confusion
+			if (IsPlayerReady(i)) // Bots are automatically assumed ready, to prevent confusion
 				screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
 
 			Color thiscolor = GetRowColor(player, i == consoleplayer);
@@ -325,6 +328,13 @@ class CoopStatusScreen : StatusScreen
 				}
 			}
 			y += lineheight + CleanYfac;
+		}
+
+		int startTimer = GetReadyTimer();
+		if (startTimer > 0)
+		{
+			double timerY = top + CleanYfac;
+			drawTextScaled(displayFont, 0, timerY, String.Format("%d", startTimer), FontScale, ~0u);
 		}
 
 		// Draw "OTHER" line

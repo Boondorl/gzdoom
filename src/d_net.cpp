@@ -96,6 +96,14 @@ enum ELevelStartStatus
 	LST_WAITING,
 };
 
+enum EReadyType
+{
+	RT_VOTE,
+	RT_ANYONE,
+	RT_HOST_ONLY,
+	RT_NONE, // Only useful for actual cutscenes.
+};
+
 // NETWORKING
 //
 // gametic is the tic about to (or currently being) run.
@@ -108,6 +116,7 @@ usercmd_t			LocalCmds[LOCALCMDTICS] = {};
 int					LastSentConsistency = 0;		// Last consistency we sent out. If < CurrentConsistency, send them out.
 int					CurrentConsistency = 0;			// Last consistency we generated.
 FClientNetState		ClientStates[MAXPLAYERS] = {};
+bool				bInIntermission = false;		// Changes some of the rules of how voting works.
 
 // If we're sending a packet to ourselves, store it here instead. This is the simplest way to execute
 // playback as it means in the world running code itself all player commands are built the exact same way
@@ -119,6 +128,10 @@ static uint8_t	LocalNetBuffer[MAX_MSGLEN] = {};
 static uint8_t	CurrentLobbyID = 0u;	// Ignore commands not from this lobby (useful when transitioning levels).
 static int		LastGameUpdate = 0;		// Track the last time the game actually ran the world.
 static uint64_t	MutedClients = 0u;		// Ignore messages from these clients.
+
+static int IntermissionStartTimer = 0; // Once everyone is ready, initiate a timer for when the next level should start.
+static int IntermissionCountdown = 0;	// If enough people are ready, count down the timer. This won't reset between unreadies, only on intermission entrance.
+static uint64_t CutsceneReady = 0u; // If in a cutscene, check if we're ready to move to move past it.
 
 static int  LevelStartDebug = 0;
 static int	LevelStartDelay = 0; // While this is > 0, don't start generating packets yet.
@@ -151,6 +164,37 @@ CVAR(Bool, net_ticbalance, false, CVAR_SERVERINFO | CVAR_NOSAVE) // Currently de
 CVAR(Bool, net_extratic, false, CVAR_SERVERINFO | CVAR_NOSAVE)
 CVAR(Bool, net_disablepause, false, CVAR_SERVERINFO | CVAR_NOSAVE)
 CVAR(Bool, net_repeatableactioncooldown, true, CVAR_SERVERINFO | CVAR_NOSAVE)
+CUSTOM_CVAR(Int, net_cutscenereadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSAVE)
+{
+	if (self < RT_VOTE)
+		self = RT_VOTE;
+	else if (self > RT_NONE)
+		self = RT_NONE;
+}
+CUSTOM_CVAR(Float, net_cutscenereadypercent, 0.6f, CVAR_SERVERINFO | CVAR_NOSAVE)
+{
+	if (self < 0.0f)
+		self = 0.0f;
+	else if (self > 1.0f)
+		self = 1.0f;
+}
+CUSTOM_CVAR(Int, net_intermissionreadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSAVE)
+{
+	if (self < RT_VOTE)
+		self = RT_VOTE;
+	else if (self > RT_HOST_ONLY)
+		self = RT_HOST_ONLY;
+}
+CUSTOM_CVAR(Float, net_intermissionreadypercent, 0.6f, CVAR_SERVERINFO | CVAR_NOSAVE)
+{
+	if (self < 0.0f)
+		self = 0.0f;
+	else if (self > 1.0f)
+		self = 1.0f;
+}
+
+CVAR(Float, net_intermissioncountdown, 30.0f, CVAR_SERVERINFO | CVAR_NOSAVE)
+CVAR(Float, net_intermissionstarttimer, 3.0f, CVAR_SERVERINFO | CVAR_NOSAVE)
 
 CVAR(Bool, cl_noboldchat, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, cl_nochatsound, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -363,6 +407,10 @@ void Net_ClearBuffers()
 	gametic = ClientTic = 0;
 	SkipCommandTimer = SkipCommandAmount = CommandsAhead = 0;
 	NetEvents.ResetStream();
+	
+	bInIntermission = false;
+	CutsceneReady = 0u;
+	IntermissionCountdown = IntermissionStartTimer = 0;
 	bCommandsReset = false;
 
 	LevelStartAck = 0u;
@@ -374,6 +422,94 @@ void Net_ClearBuffers()
 
 	playeringame[0] = true;
 	NetworkClients += 0;
+}
+
+bool Net_IsPlayerReady(int player)
+{
+	if ((bInIntermission && net_intermissionreadytype != RT_VOTE) || (!bInIntermission && net_cutscenereadytype != RT_VOTE))
+		return false;
+
+	return players[player].Bot != nullptr || (CutsceneReady & ((uint64_t)1u << player));
+}
+
+// Check if every client is ready to move on from the current cutscene.
+void Net_PlayerReadiedUp(int player)
+{
+	if (!netgame || demoplayback)
+		return;
+
+	// Allow unreadying in case a player needs to leave momentarily.
+	if (Net_IsPlayerReady(player))
+		CutsceneReady &= ~((uint64_t)1u << player);
+	else
+		CutsceneReady |= (uint64_t)1u << player;
+}
+
+void Net_StartIntermission(bool end)
+{
+	bInIntermission = !end;
+	IntermissionCountdown = bInIntermission && netgame && !demoplayback && net_intermissioncountdown > 0.0f ? static_cast<int>(ceil(net_intermissioncountdown * TICRATE)) : 0;
+}
+
+bool Net_IsStartingLevel()
+{
+	return bInIntermission && IntermissionStartTimer > 0;
+}
+
+bool Net_StartIntermissionStartTimer()
+{
+	if (!bInIntermission || net_intermissionstarttimer <= 0.0f)
+	{
+		IntermissionStartTimer = 0;
+		return false;
+	}
+
+	IntermissionStartTimer = static_cast<int>(ceil(net_intermissionstarttimer * TICRATE));
+	return true;
+}
+
+bool Net_UpdateIntermissionStartTimer()
+{
+	return --IntermissionStartTimer <= 0;
+}
+
+// Allow the game to automatically start after a set amount of time.
+bool Net_CheckCutsceneReady(int totalReady)
+{
+	const int type = bInIntermission ? net_intermissionreadytype : net_cutscenereadytype;
+	if (!bInIntermission && type == RT_NONE)
+		return false;
+
+	if (type == RT_ANYONE)
+		return CutsceneReady != 0;
+
+	if (type == RT_HOST_ONLY)
+		return (CutsceneReady & ((uint64_t)1u << Net_Arbitrator));
+
+	uint64_t mask = 0u;
+	for (auto client : NetworkClients)
+		mask |= (uint64_t)1u << client;
+
+	const bool skipCheck = (CutsceneReady & mask) == mask;
+	if (bInIntermission)
+	{
+		if (skipCheck)
+		{
+			IntermissionCountdown = 0;
+			return true;
+		}
+
+		if ((float)totalReady / NetworkClients.Size() < net_intermissionreadypercent)
+			return false;
+
+		if (IntermissionCountdown <= 0)
+			return true;
+
+		--IntermissionCountdown;
+		return false;
+	}
+
+	return skipCheck || (float)totalReady / NetworkClients.Size() >= net_cutscenereadypercent;
 }
 
 void Net_ResetCommands(bool midTic)
@@ -554,7 +690,10 @@ static void ClientConnecting(int client)
 static void DisconnectClient(int clientNum)
 {
 	NetworkClients -= clientNum;
-	MutedClients &= ~((uint64_t)1u << clientNum);
+	const uint64_t mask = ~((uint64_t)1u << clientNum);
+	MutedClients &= mask;
+	CutsceneReady &= mask;
+	LevelStartAck &= mask;
 	I_ClearClient(clientNum);
 	// Capture the pawn leaving in the next world tick.
 	players[clientNum].playerstate = PST_GONE;
@@ -1965,7 +2104,8 @@ void TryRunTics()
 
 	// Listen for other clients and send out data as needed. This is also
 	// needed for singleplayer! But is instead handled entirely through local
-	// buffers. This has a limit of 17 tics that can be generated.
+	// buffers. This has a limit of one seconds worth of commands that can be
+	// generated in advanced from the last time the game updated.
 	NetUpdate(totalTics);
 
 	LastEnterTic = EnterTic;
@@ -2743,7 +2883,12 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 		break;
 
 	case DEM_ENDSCREENJOB:
+		bInIntermission = false;
 		EndScreenJob();
+		break;
+
+	case DEM_READIED:
+		Net_PlayerReadiedUp(player);
 		break;
 
 	case DEM_ZSC_CMD:
@@ -2986,6 +3131,54 @@ int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 //
 //
 //==========================================================================
+
+// Intermission lobby info
+static int IsPlayerReady(int player)
+{
+	return Net_IsPlayerReady(player);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, IsPlayerReady, IsPlayerReady)
+{
+	PARAM_PROLOGUE;
+	PARAM_INT(player);
+	ACTION_RETURN_BOOL(IsPlayerReady(player));
+}
+
+static int GetReadyTimer()
+{
+	return IntermissionCountdown;
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, GetReadyTimer, GetReadyTimer)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_INT(GetReadyTimer());
+}
+
+// If no start timer is defined then the match will auto start anyway.
+static int LevelIsStarting()
+{
+	return Net_IsStartingLevel();
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, LevelIsStarting, LevelIsStarting)
+{
+	PARAM_PROLOGUE;
+	ACTION_RETURN_BOOL(LevelIsStarting());
+}
+
+static void ReadyPlayer()
+{
+	Net_WriteInt8(DEM_READIED);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, ReadyPlayer, ReadyPlayer)
+{
+	PARAM_PROLOGUE;
+	ReadyPlayer();
+	return 0;
+}
 
 // [RH] List "ping" times
 CCMD(pings)
