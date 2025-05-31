@@ -151,10 +151,8 @@ void Net_WriteBytes(const uint8_t *, int len);
 void Net_DoCommand(int cmd, uint8_t **stream, int player);
 void Net_SkipCommand(int cmd, uint8_t **stream);
 
-void Net_PlayerReadiedUp(int player);
 bool Net_IsPlayerReady(int player);
-bool Net_CheckCutsceneReady(int totalReady);
-void Net_UpdateIntermissionCountdown();
+bool Net_CheckCutsceneReady();
 bool Net_StartIntermissionStartTimer();
 bool Net_UpdateIntermissionStartTimer();
 void Net_StartIntermission(bool end);

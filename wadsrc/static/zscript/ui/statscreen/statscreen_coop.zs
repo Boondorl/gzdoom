@@ -266,7 +266,7 @@ class CoopStatusScreen : StatusScreen
 		height = int(displayFont.GetHeight() * FontScale);
 		lineheight = MAX(height, maxiconheight * CleanYfac);
 		ypadding = (lineheight - height + 1) / 2;
-		y = top + height + CleanYfac*2;
+		y = top + height * 2 + CleanYfac * 3;
 
 		text_bonus = Stringtable.Localize((gameinfo.gametype & GAME_Raven) ? "$SCORE_BONUS" : "$SCORE_ITEMS");
 		text_secret = Stringtable.Localize("$SCORE_SECRET");
@@ -297,17 +297,22 @@ class CoopStatusScreen : StatusScreen
 		missed_secrets = wbs.maxsecret;
 
 		// Draw lines for each player
+		int totalReady, totalClients;
 		for (i = 0; i < MAXPLAYERS; ++i)
 		{
 			if (!playeringame[i])
 				continue;
 
 			PlayerInfo player = players[i];
+			totalClients += !player.Bot;
 
 			screen.Dim(player.GetDisplayColor(), 0.8f, x, y - ypadding, (secret_x - x) + (8 * CleanXfac), lineheight);
 
 			if (IsPlayerReady(i)) // Bots are automatically assumed ready, to prevent confusion
+			{
 				screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
+				totalReady += !player.Bot;
+			}
 
 			Color thiscolor = GetRowColor(player, i == consoleplayer);
 			if (player.mo.ScoreIcon.isValid())
@@ -330,11 +335,22 @@ class CoopStatusScreen : StatusScreen
 			y += lineheight + CleanYfac;
 		}
 
-		int startTimer = GetReadyTimer();
-		if (startTimer > 0)
+		string readyTracker = String.Format("%d / %d", totalReady, totalClients);
+		int infoY = top + CleanYfac;
+		int infoX = Screen.GetWidth() / 2;
+		drawTextScaled(displayFont, infoX - displayFont.StringWidth(readyTracker) * FontScale / 2, infoY, readyTracker, FontScale, textcolor);
+		if (totalClients > 1)
 		{
-			double timerY = top + CleanYfac;
-			drawTextScaled(displayFont, 0, timerY, String.Format("%d", startTimer), FontScale, ~0u);
+			int startTimer = GetReadyTimer();
+			if (startTimer > 0)
+			{
+				infoY += height + CleanYFac;
+				int col = textcolor;
+				if (startTimer <= GameTicRate * 5)
+					col = Font.CR_RED;
+
+				drawTextScaled(displayFont, infoX - displayFont.StringWidth("00:00") * FontScale / 2, infoY, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), FontScale, col);
+			}
 		}
 
 		// Draw "OTHER" line
