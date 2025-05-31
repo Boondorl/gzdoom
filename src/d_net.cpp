@@ -171,7 +171,7 @@ CUSTOM_CVAR(Int, net_cutscenereadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSAVE)
 	else if (self > RT_NONE)
 		self = RT_NONE;
 }
-CUSTOM_CVAR(Float, net_cutscenereadypercent, 0.6f, CVAR_SERVERINFO | CVAR_NOSAVE)
+CUSTOM_CVAR(Float, net_cutscenereadypercent, 0.5f, CVAR_SERVERINFO | CVAR_NOSAVE)
 {
 	if (self < 0.0f)
 		self = 0.0f;
@@ -185,7 +185,7 @@ CUSTOM_CVAR(Int, net_intermissionreadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSA
 	else if (self > RT_HOST_ONLY)
 		self = RT_HOST_ONLY;
 }
-CUSTOM_CVAR(Float, net_intermissionreadypercent, 0.6f, CVAR_SERVERINFO | CVAR_NOSAVE)
+CUSTOM_CVAR(Float, net_intermissionreadypercent, 0.5f, CVAR_SERVERINFO | CVAR_NOSAVE)
 {
 	if (self < 0.0f)
 		self = 0.0f;
@@ -426,6 +426,9 @@ void Net_ClearBuffers()
 
 bool Net_IsPlayerReady(int player)
 {
+	if (demoplayback)
+		return true;
+
 	if ((bInIntermission && net_intermissionreadytype != RT_VOTE) || (!bInIntermission && net_cutscenereadytype != RT_VOTE))
 		return false;
 
@@ -474,7 +477,7 @@ bool Net_UpdateIntermissionStartTimer()
 }
 
 // Allow the game to automatically start after a set amount of time.
-bool Net_CheckCutsceneReady(int totalReady)
+bool Net_CheckCutsceneReady()
 {
 	const int type = bInIntermission ? net_intermissionreadytype : net_cutscenereadytype;
 	if (!bInIntermission && type == RT_NONE)
@@ -487,13 +490,18 @@ bool Net_CheckCutsceneReady(int totalReady)
 		return (CutsceneReady & ((uint64_t)1u << Net_Arbitrator));
 
 	uint64_t mask = 0u;
+	int totalReady = 0;
+	// Bots will be automatically assumed to be ready, so we don't include them.
 	for (auto client : NetworkClients)
+	{
 		mask |= (uint64_t)1u << client;
+		totalReady += Net_IsPlayerReady(client);
+	}
 
-	const bool skipCheck = (CutsceneReady & mask) == mask;
+	const bool allReady = (CutsceneReady & mask) == mask;
 	if (bInIntermission)
 	{
-		if (skipCheck)
+		if (allReady)
 		{
 			IntermissionCountdown = 0;
 			return true;
@@ -509,7 +517,14 @@ bool Net_CheckCutsceneReady(int totalReady)
 		return false;
 	}
 
-	return skipCheck || (float)totalReady / NetworkClients.Size() >= net_cutscenereadypercent;
+	return allReady || (float)totalReady / NetworkClients.Size() >= net_cutscenereadypercent;
+}
+
+void Net_ClearCutscene()
+{
+	CutsceneReady = 0u;
+	IntermissionStartTimer = IntermissionCountdown = 0;
+	bInIntermission = false;
 }
 
 void Net_ResetCommands(bool midTic)
@@ -2883,7 +2898,7 @@ void Net_DoCommand(int cmd, uint8_t **stream, int player)
 		break;
 
 	case DEM_ENDSCREENJOB:
-		bInIntermission = false;
+		Net_ClearCutscene();
 		EndScreenJob();
 		break;
 
@@ -3138,11 +3153,24 @@ static int IsPlayerReady(int player)
 	return Net_IsPlayerReady(player);
 }
 
-DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, IsPlayerReady, IsPlayerReady)
+DEFINE_ACTION_FUNCTION_NATIVE(_ScreenJob, IsPlayerReady, IsPlayerReady)
 {
 	PARAM_PROLOGUE;
 	PARAM_INT(player);
 	ACTION_RETURN_BOOL(IsPlayerReady(player));
+}
+
+static void ReadyPlayer()
+{
+	if (netgame && !demoplayback)
+		Net_WriteInt8(DEM_READIED);
+}
+
+DEFINE_ACTION_FUNCTION_NATIVE(_ScreenJob, ReadyPlayer, ReadyPlayer)
+{
+	PARAM_PROLOGUE;
+	ReadyPlayer();
+	return 0;
 }
 
 static int GetReadyTimer()
@@ -3156,7 +3184,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, GetReadyTimer, GetReadyTimer)
 	ACTION_RETURN_INT(GetReadyTimer());
 }
 
-// If no start timer is defined then the match will auto start anyway.
 static int LevelIsStarting()
 {
 	return Net_IsStartingLevel();
@@ -3166,18 +3193,6 @@ DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, LevelIsStarting, LevelIsStarting)
 {
 	PARAM_PROLOGUE;
 	ACTION_RETURN_BOOL(LevelIsStarting());
-}
-
-static void ReadyPlayer()
-{
-	Net_WriteInt8(DEM_READIED);
-}
-
-DEFINE_ACTION_FUNCTION_NATIVE(_StatusScreen, ReadyPlayer, ReadyPlayer)
-{
-	PARAM_PROLOGUE;
-	ReadyPlayer();
-	return 0;
 }
 
 // [RH] List "ping" times

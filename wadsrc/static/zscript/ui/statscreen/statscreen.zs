@@ -135,10 +135,8 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	int wrapwidth;	// size used to word wrap level names
 	int scaleFactorX, scaleFactorY;
 
-	protected native static bool IsPlayerReady(int pNum);
 	protected native static int GetReadyTimer();
 	protected native static bool LevelIsStarting();
-	protected native static void ReadyPlayer();
 
 
 	//====================================================================
@@ -812,10 +810,16 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	{
 		if (evt.type == InputEvent.Type_KeyDown)
 		{
-			if (netgame && evt.KeyScan == InputEvent.Key_Space)
+			if (netgame
+				&& (evt.KeyScan == InputEvent.Key_Space || evt.KeyScan == InputEvent.Key_Mouse1
+					|| evt.KeyScan == InputEvent.Key_Pad_A || evt.KeyScan == InputEvent.Key_Joy1))
+			{
 				ReadyPlayer();
+			}
 			else
+			{
 				accelerateStage = 1;
+			}
 			return true;
 		}
 		return false;

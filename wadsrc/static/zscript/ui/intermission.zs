@@ -1,5 +1,11 @@
 
 
+extend class ScreenJob
+{
+	protected native static bool IsPlayerReady(int pNum);
+	protected native static void ReadyPlayer();
+}
+
 class IntermissionController native ui
 {
     // This is mostly a black box to the native intermission code.
