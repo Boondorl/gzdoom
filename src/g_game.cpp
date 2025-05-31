@@ -1120,7 +1120,7 @@ void D_RunCutscene()
 
 	// Check for cutscenes naturally running out their length. Only the host can send out a network message
 	// this way to force everyone to be synced.
-	if (ScreenJobTick() && (!netgame || (!bInIntermission && consoleplayer == Net_Arbitrator)))
+	if (ScreenJobTick() && (!netgame || consoleplayer == Net_Arbitrator))
 		Net_WriteInt8(DEM_ENDSCREENJOB);
 }
 
@@ -1140,12 +1140,7 @@ static void D_CheckCutsceneAdvance()
 	}
 	else
 	{
-		int totalReady = 0;
-		// Bots will be automatically assumed to be ready, so we don't include them.
-		for (auto client : NetworkClients)
-			totalReady += Net_IsPlayerReady(client);
-
-		if (Net_CheckCutsceneReady(totalReady) && !Net_StartIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
+		if (Net_CheckCutsceneReady() && !Net_StartIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
 			Net_WriteInt8(DEM_ENDSCREENJOB);
 	}
 }
