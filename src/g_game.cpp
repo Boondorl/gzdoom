@@ -1104,6 +1104,52 @@ static void G_FullConsole()
 
 }
 
+void D_RunCutscene()
+{
+	// The event data already has the moment when the cutscene ends, so just play it back
+	// until it exits the cutscene.
+	if (demoplayback)
+	{
+		ScreenJobTick();
+		return;
+	}
+
+	// Allow pausing actual cutscenes.
+	if (!bInIntermission && paused)
+		return;
+
+	// Check for cutscenes naturally running out their length. Only the host can send out a network message
+	// this way to force everyone to be synced.
+	if (ScreenJobTick() && (!netgame || (!bInIntermission && consoleplayer == Net_Arbitrator)))
+		Net_WriteInt8(DEM_ENDSCREENJOB);
+}
+
+// This is used to allow the server to check for when players are ready to advance. For singleplayer we can just
+// use the net message from the cutscene finishing to know when to go.
+static void D_CheckCutsceneAdvance()
+{
+	if (!netgame || demoplayback)
+		return;
+
+	// A net message is sent out by the host despite this being synchronized since the demo file also needs to know
+	// when to advance.
+	if (Net_IsStartingLevel())
+	{
+		if (Net_UpdateIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
+			Net_WriteInt8(DEM_ENDSCREENJOB);
+	}
+	else
+	{
+		int totalReady = 0;
+		// Bots will be automatically assumed to be ready, so we don't include them.
+		for (auto client : NetworkClients)
+			totalReady += Net_IsPlayerReady(client);
+
+		if (Net_CheckCutsceneReady(totalReady) && !Net_StartIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
+			Net_WriteInt8(DEM_ENDSCREENJOB);
+	}
+}
+
 //
 // G_Ticker
 // Make ticcmd_ts for the players.
@@ -1205,7 +1251,7 @@ void G_Ticker ()
 		C_AdjustBottom ();
 	}
 
-	// get commands, check consistancy, and build new consistancy check
+	// get commands
 	const int curTic = gametic / TicDup;
 
 	//Added by MC: For some of that bot stuff. The main bot function.
@@ -1221,9 +1267,6 @@ void G_Ticker ()
 			G_WriteDemoTiccmd(nextCmd, client, curTic);
 
 		players[client].oldbuttons = cmd->buttons;
-		// If the user alt-tabbed away, paused gets set to -1. In this case,
-		// we do not want to read more demo commands until paused is no
-		// longer negative.
 		if (demoplayback)
 			G_ReadDemoTiccmd(cmd, client);
 		else
@@ -1261,11 +1304,7 @@ void G_Ticker ()
 
 	case GS_CUTSCENE:
 	case GS_INTRO:
-		if (ScreenJobTick())
-		{
-			// synchronize termination with the playsim.
-			Net_WriteInt8(DEM_ENDSCREENJOB);
-		}
+		D_CheckCutsceneAdvance();
 		break;
 
 	default:
