@@ -54,11 +54,7 @@ class CoopStatusScreen : StatusScreen
 		bool stillticking;
 		bool autoskip = autoSkip();
 
-		if (netgame && LevelIsStarting())
-		{
-			ng_state = 12;
-		}
-		else if ((acceleratestage || autoskip) && ng_state != 12)
+		if ((acceleratestage || autoskip) && ng_state != 12)
 		{
 			acceleratestage = 0;
 
@@ -219,8 +215,7 @@ class CoopStatusScreen : StatusScreen
 		}
 		else if (ng_state == 12)
 		{
-			// All players are ready; proceed.
-			if ((!netgame && (acceleratestage || autoskip)) || (netgame && LevelIsStarting()))
+			if (acceleratestage || autoskip)
 			{
 				PlaySound("intermission/pastcoopstats");
 				initShowNextLoc();
@@ -255,7 +250,7 @@ class CoopStatusScreen : StatusScreen
 		String text_bonus, text_secret, text_kills;
 		TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
 
-		int top = drawLF();
+		y = drawLF();
 
 		[maxnamewidth, maxscorewidth, maxiconheight] = GetPlayerWidths();
 		// Use the readyico height if it's bigger.
@@ -266,7 +261,7 @@ class CoopStatusScreen : StatusScreen
 		height = int(displayFont.GetHeight() * FontScale);
 		lineheight = MAX(height, maxiconheight * CleanYfac);
 		ypadding = (lineheight - height + 1) / 2;
-		y = top + height * 2 + CleanYfac * 3;
+		y += CleanYfac;
 
 		text_bonus = Stringtable.Localize((gameinfo.gametype & GAME_Raven) ? "$SCORE_BONUS" : "$SCORE_ITEMS");
 		text_secret = Stringtable.Localize("$SCORE_SECRET");
@@ -308,7 +303,7 @@ class CoopStatusScreen : StatusScreen
 
 			screen.Dim(player.GetDisplayColor(), 0.8f, x, y - ypadding, (secret_x - x) + (8 * CleanXfac), lineheight);
 
-			if (IsPlayerReady(i)) // Bots are automatically assumed ready, to prevent confusion
+			if (ScreenJobRunner.IsPlayerReady(i)) // Bots are automatically assumed ready, to prevent confusion
 			{
 				screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
 				totalReady += !player.Bot;
@@ -333,24 +328,6 @@ class CoopStatusScreen : StatusScreen
 				}
 			}
 			y += lineheight + CleanYfac;
-		}
-
-		string readyTracker = String.Format("%d / %d", totalReady, totalClients);
-		int infoY = top + CleanYfac;
-		int infoX = Screen.GetWidth() / 2;
-		drawTextScaled(displayFont, infoX - displayFont.StringWidth(readyTracker) * FontScale / 2, infoY, readyTracker, FontScale, textcolor);
-		if (totalClients > 1)
-		{
-			int startTimer = GetReadyTimer();
-			if (startTimer > 0)
-			{
-				infoY += height + CleanYFac;
-				int col = textcolor;
-				if (startTimer <= GameTicRate * 5)
-					col = Font.CR_RED;
-
-				drawTextScaled(displayFont, infoX - displayFont.StringWidth("00:00") * FontScale / 2, infoY, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), FontScale, col);
-			}
 		}
 
 		// Draw "OTHER" line
