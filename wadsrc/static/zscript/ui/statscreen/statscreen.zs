@@ -135,8 +135,6 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	int wrapwidth;	// size used to word wrap level names
 	int scaleFactorX, scaleFactorY;
 
-	protected native static int GetReadyTimer();
-	protected native static bool LevelIsStarting();
 
 
 	//====================================================================
@@ -699,8 +697,7 @@ class StatusScreen : ScreenJob abstract version("2.5")
 		if (wbs.next == "") 
 		{
 			// Last map in episode - there is no next location!
-			if (!netgame)
-				jobstate = finished;
+			jobstate = finished;
 			return;
 		}
 
@@ -718,17 +715,10 @@ class StatusScreen : ScreenJob abstract version("2.5")
 
 	protected virtual void updateShowNextLoc ()
 	{
-		// If playing online, never allow advancing to NoState
-		if (!netgame && (!--cnt || acceleratestage))
-		{
+		if (!--cnt || acceleratestage)
 			initNoState();
-		}
 		else
-		{
 			snl_pointeron = (cnt & 31) < 20;
-			if (netgame && --cnt <= 0)
-				cnt = SHOWNEXTLOCDELAY * GameTicRate;
-		}
 	}
 
 	//====================================================================
@@ -810,16 +800,7 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	{
 		if (evt.type == InputEvent.Type_KeyDown)
 		{
-			if (netgame
-				&& (evt.KeyScan == InputEvent.Key_Space || evt.KeyScan == InputEvent.Key_Mouse1
-					|| evt.KeyScan == InputEvent.Key_Pad_A || evt.KeyScan == InputEvent.Key_Joy1))
-			{
-				ReadyPlayer();
-			}
-			else
-			{
-				accelerateStage = 1;
-			}
+			accelerateStage = 1;
 			return true;
 		}
 		return false;
