@@ -22,7 +22,7 @@ extend class ScreenJobRunner
 
 	void DrawReadiedPlayers(double smoothratio)
 	{
-		if (!netgame)
+		if (!netgame || net_cutscenereadytype != 0 || GetSkipType() == ST_UNSKIPPABLE)
 			return;
 		
 		TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
@@ -43,7 +43,7 @@ extend class ScreenJobRunner
 
 		if (totalClients > 1)
 		{
-			Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, (int(readysize.X) + 8) * CleanXFac, 0, String.Format("%d/%d", readyClients, totalClients), DTA_CleanNoMove, true);
+			Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, (int(readysize.X) + 4) * CleanXFac, CleanYFac, String.Format("%d/%d", readyClients, totalClients), DTA_CleanNoMove, true);
 			int startTimer = GetReadyTimer();
 			if (startTimer > 0)
 			{
@@ -51,7 +51,7 @@ extend class ScreenJobRunner
 				if (startTimer <= GameTicRate * 5)
 					col = Font.CR_RED;
 
-				Screen.DrawText(ConFont, col, 0, ConFont.GetHeight() * CleanYFac + CleanYFac, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), DTA_CleanNoMove, true);
+				Screen.DrawText(ConFont, col, 0, int(readysize.Y) * CleanYFac + CleanYFac, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), DTA_CleanNoMove, true);
 			}
 		}
 	}
