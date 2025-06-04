@@ -1116,7 +1116,7 @@ void D_RunCutscene()
 				return;
 
 			int type = ST_VOTE;
-			IFVM(NAME_ScreenJobRunner, GetSkipType)
+			IFVM(ScreenJobRunner, GetSkipType)
 				type = VMCallSingle<int>(func, cutscene.runner);
 
 			if (type != ST_UNSKIPPABLE)

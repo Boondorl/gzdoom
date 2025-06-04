@@ -1050,7 +1050,8 @@ DIntermissionController* FLevelLocals::CreateIntermission()
 
 void RunIntermission(level_info_t* fromMap, level_info_t* toMap, DIntermissionController* intermissionScreen, DObject* statusScreen, std::function<void(bool)> completionf)
 {
-	cutscene.runner = CreateRunner(false, ST_MUST_BE_SKIPPABLE);
+	// Make sure the finale can't be skipped, otherwise the intermission always needs to be skippable.
+	cutscene.runner = CreateRunner(false, toMap != nullptr ? ST_MUST_BE_SKIPPABLE : ST_UNSKIPPABLE);
 	GC::WriteBarrier(cutscene.runner);
 	cutscene.completion = std::move(completionf);
 	
