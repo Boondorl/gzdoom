@@ -1050,7 +1050,7 @@ DIntermissionController* FLevelLocals::CreateIntermission()
 
 void RunIntermission(level_info_t* fromMap, level_info_t* toMap, DIntermissionController* intermissionScreen, DObject* statusScreen, std::function<void(bool)> completionf)
 {
-	cutscene.runner = CreateRunner(false);
+	cutscene.runner = CreateRunner(false, ST_MUST_BE_SKIPPABLE);
 	GC::WriteBarrier(cutscene.runner);
 	cutscene.completion = std::move(completionf);
 	
@@ -1092,7 +1092,6 @@ void RunIntermission(level_info_t* fromMap, level_info_t* toMap, DIntermissionCo
 		return;
 	}
 	gameaction = ga_intermission;
-	Net_StartIntermission(toMap == nullptr);
 }
 
 void G_DoCompleted (void)

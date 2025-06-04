@@ -56,11 +56,7 @@ class DeathmatchStatusScreen : StatusScreen
 		bool stillticking;
 		bool doautoskip = autoSkip();
 
-		if (netgame && LevelIsStarting())
-		{
-			ng_state = 6;
-		}
-		else if ((acceleratestage || doautoskip) && ng_state != 6)
+		if ((acceleratestage || doautoskip) && ng_state != 6)
 		{
 			acceleratestage = 0;
 
@@ -128,7 +124,7 @@ class DeathmatchStatusScreen : StatusScreen
 		else if (ng_state == 6)
 		{
 			// All players are ready; proceed.
-			if ((!netgame && (acceleratestage || doautoskip)) || (netgame && LevelIsStarting()))
+			if (acceleratestage || doautoskip)
 			{
 				PlaySound("intermission/pastdmstats");
 				initShowNextLoc();
@@ -154,7 +150,7 @@ class DeathmatchStatusScreen : StatusScreen
 		String text_deaths, text_frags;
 		TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
 
-		int top = drawLF();
+		y = drawLF();
 
 		[maxnamewidth, maxscorewidth, maxiconheight] = GetPlayerWidths();
 		// Use the readyico height if it's bigger.
@@ -165,7 +161,7 @@ class DeathmatchStatusScreen : StatusScreen
 		height = int(displayFont.GetHeight() * FontScale);
 		lineheight = MAX(height, maxiconheight * CleanYfac);
 		ypadding = (lineheight - height + 1) / 2;
-		y = top + height * 2 + CleanYfac * 3;
+		y += CleanYfac;
 
 		text_deaths = Stringtable.Localize("$SCORE_DEATHS");
 		//text_color = Stringtable.Localize("$SCORE_COLOR");
@@ -204,7 +200,7 @@ class DeathmatchStatusScreen : StatusScreen
 			totalClients += !player.Bot;
 			screen.Dim(player.GetDisplayColor(), 0.8, x, y - ypadding, (deaths_x - x) + (8 * CleanXfac), lineheight);
 
-			if (IsPlayerReady(pnum)) // Bots are automatically assumed ready, to prevent confusion
+			if (ScreenJobRunner.IsPlayerReady(pnum)) // Bots are automatically assumed ready, to prevent confusion
 			{
 				screen.DrawTexture(readyico, true, x - (readysize.X * CleanXfac), y, DTA_CleanNoMove, true);
 				totalReady += !player.Bot;
@@ -224,24 +220,6 @@ class DeathmatchStatusScreen : StatusScreen
 				drawNumScaled(displayFont, deaths_x, y + ypadding, FontScale, cnt_deaths[pnum], 0, textcolor);
 			}
 			y += lineheight + CleanYfac;
-		}
-
-		string readyTracker = String.Format("%d / %d", totalReady, totalClients);
-		int infoY = top + CleanYfac;
-		int infoX = Screen.GetWidth() / 2;
-		drawTextScaled(displayFont, infoX - displayFont.StringWidth(readyTracker) * FontScale / 2, infoY, readyTracker, FontScale, textcolor);
-		if (totalClients > 1)
-		{
-			int startTimer = GetReadyTimer();
-			if (startTimer > 0)
-			{
-				infoY += height + CleanYFac;
-				int col = textcolor;
-				if (startTimer <= GameTicRate * 5)
-					col = Font.CR_RED;
-
-				drawTextScaled(displayFont, infoX - displayFont.StringWidth("00:00") * FontScale / 2, infoY, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), FontScale, col);
-			}
 		}
 
 		// Draw "TOTAL" line
