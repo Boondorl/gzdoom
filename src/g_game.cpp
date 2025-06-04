@@ -1106,43 +1106,33 @@ static void G_FullConsole()
 
 void D_RunCutscene()
 {
-	// The event data already has the moment when the cutscene ends, so just play it back
-	// until it exits the cutscene.
-	if (demoplayback)
+	// Only single player games can cancel out of the screen job via client-side logic.
+	if (ScreenJobTick() && !demoplayback)
 	{
-		ScreenJobTick();
-		return;
-	}
+		if (netgame)
+		{
+			// Only the host can determine this.
+			if (consoleplayer != Net_Arbitrator)
+				return;
 
-	// Allow pausing actual cutscenes.
-	if (!bInIntermission && paused)
-		return;
+			int type = ST_VOTE;
+			IFVM(NAME_ScreenJobRunner, GetSkipType)
+				type = VMCallSingle<int>(func, cutscene.runner);
 
-	// Check for cutscenes naturally running out their length. Only the host can send out a network message
-	// this way to force everyone to be synced.
-	if (ScreenJobTick() && (!netgame || consoleplayer == Net_Arbitrator))
+			if (type != ST_UNSKIPPABLE)
+				return;
+		}
+
 		Net_WriteInt8(DEM_ENDSCREENJOB);
+	}
 }
 
 // This is used to allow the server to check for when players are ready to advance. For singleplayer we can just
 // use the net message from the cutscene finishing to know when to go.
 static void D_CheckCutsceneAdvance()
 {
-	if (!netgame || demoplayback)
-		return;
-
-	// A net message is sent out by the host despite this being synchronized since the demo file also needs to know
-	// when to advance.
-	if (Net_IsStartingLevel())
-	{
-		if (Net_UpdateIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
-			Net_WriteInt8(DEM_ENDSCREENJOB);
-	}
-	else
-	{
-		if (Net_CheckCutsceneReady() && !Net_StartIntermissionStartTimer() && consoleplayer == Net_Arbitrator)
-			Net_WriteInt8(DEM_ENDSCREENJOB);
-	}
+	if (netgame && !demoplayback && Net_CheckCutsceneReady())
+		Net_AdvanceCutscene();
 }
 
 //

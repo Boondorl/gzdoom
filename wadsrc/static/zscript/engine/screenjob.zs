@@ -321,6 +321,15 @@ class ScreenJobRunner : Object UI
 		State_Run,
 		State_Fadeout,
 	}
+	enum ESkipType
+	{
+		ST_VOTE,
+		ST_MUST_BE_SKIPPABLE,
+		ST_UNSKIPPABLE,
+	}
+
+	private ESkipType skipType;
+
 	Array<ScreenJob> jobs;
 	//CompletionFunc completion;
 	int index;
@@ -335,13 +344,20 @@ class ScreenJobRunner : Object UI
 	
 	native static void setTransition(int type);
 
-	void Init(bool clearbefore_, bool skipall_)
+	ESkipType GetSkipType() const
+	{
+		return skipType;
+	}
+
+	void Init(bool clearbefore_, bool skipall_, ESkipType type = ST_VOTE)
 	{
 		clearbefore = clearbefore_;
 		skipall = skipall_;
 		index = -1;
 		fadeticks = 0;
 		last_paused_tic = -1;
+		skipType = type;
+		ResetReadyTimer();
 	}
 
 	override void OnDestroy()
@@ -418,6 +434,7 @@ class ScreenJobRunner : Object UI
 	{
 		if (jobs.Size() == 0) 
 		{
+			DrawReadiedPlayers(smoothratio);
 			return 1;
 		}
 		int x = index >= jobs.Size()? jobs.Size()-1 : index;
@@ -433,6 +450,7 @@ class ScreenJobRunner : Object UI
 		}
 		int state = job.DrawFrame(smoothratio);
 		Screen.SetScreenFade(1.);
+		DrawReadiedPlayers(smoothratio);
 		return state;
 	}
 
@@ -462,6 +480,7 @@ class ScreenJobRunner : Object UI
 
 	virtual bool OnEvent(InputEvent ev)
 	{
+		if (ConsumedInput(ev)) return true;
 		if (paused || index < 0 || index >= jobs.Size()) return false;
 		if (jobs[index].jobstate != ScreenJob.running) return false;
 		return jobs[index].OnEvent(ev);
