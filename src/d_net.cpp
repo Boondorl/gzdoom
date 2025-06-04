@@ -407,11 +407,18 @@ void Net_ClearBuffers()
 
 bool Net_IsPlayerReady(int player)
 {
-	if (demoplayback)
-		return true;
-
-	if (net_cutscenereadytype != RT_VOTE)
+	if (demoplayback || net_cutscenereadytype != RT_VOTE)
 		return false;
+
+	if (cutscene.runner)
+	{
+		int type = ST_VOTE;
+		IFVM(ScreenJobRunner, GetSkipType)
+			type = VMCallSingle<int>(func, cutscene.runner);
+
+		if (type == ST_UNSKIPPABLE)
+			return false;
+	}
 
 	return players[player].Bot != nullptr || (CutsceneReady & ((uint64_t)1u << player));
 }
@@ -437,8 +444,11 @@ void Net_StartCutscene()
 // Allow the game to automatically start after a set amount of time.
 bool Net_CheckCutsceneReady()
 {
+	if (!cutscene.runner)
+		return false;
+
 	int type = ST_VOTE;
-	IFVM(NAME_ScreenJobRunner, GetSkipType)
+	IFVM(ScreenJobRunner, GetSkipType)
 		type = VMCallSingle<int>(func, cutscene.runner);
 
 	if (type == ST_UNSKIPPABLE)
