@@ -136,7 +136,6 @@ class StatusScreen : ScreenJob abstract version("2.5")
 	int scaleFactorX, scaleFactorY;
 
 
-
 	//====================================================================
 	//
 	// Set fixed size mode.
