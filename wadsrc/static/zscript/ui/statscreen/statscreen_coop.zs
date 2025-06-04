@@ -215,7 +215,7 @@ class CoopStatusScreen : StatusScreen
 		}
 		else if (ng_state == 12)
 		{
-			if (acceleratestage || autoskip)
+			if ((acceleratestage) || autoskip)
 			{
 				PlaySound("intermission/pastcoopstats");
 				initShowNextLoc();
@@ -292,22 +292,17 @@ class CoopStatusScreen : StatusScreen
 		missed_secrets = wbs.maxsecret;
 
 		// Draw lines for each player
-		int totalReady, totalClients;
 		for (i = 0; i < MAXPLAYERS; ++i)
 		{
 			if (!playeringame[i])
 				continue;
 
 			PlayerInfo player = players[i];
-			totalClients += !player.Bot;
 
 			screen.Dim(player.GetDisplayColor(), 0.8f, x, y - ypadding, (secret_x - x) + (8 * CleanXfac), lineheight);
 
 			if (ScreenJobRunner.IsPlayerReady(i)) // Bots are automatically assumed ready, to prevent confusion
-			{
 				screen.DrawTexture(readyico, true, x - (readysize.Y * CleanXfac), y, DTA_CleanNoMove, true);
-				totalReady += !player.Bot;
-			}
 
 			Color thiscolor = GetRowColor(player, i == consoleplayer);
 			if (player.mo.ScoreIcon.isValid())

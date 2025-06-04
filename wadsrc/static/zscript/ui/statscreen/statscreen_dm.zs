@@ -123,8 +123,7 @@ class DeathmatchStatusScreen : StatusScreen
 		}
 		else if (ng_state == 6)
 		{
-			// All players are ready; proceed.
-			if (acceleratestage || doautoskip)
+			if ((acceleratestage) || doautoskip)
 			{
 				PlaySound("intermission/pastdmstats");
 				initShowNextLoc();
@@ -188,7 +187,6 @@ class DeathmatchStatusScreen : StatusScreen
 		GetSortedPlayers(sortedplayers, teamplay);
 
 		// Draw lines for each player
-		int totalReady, totalClients;
 		for (i = 0; i < sortedplayers.Size(); i++)
 		{
 			pnum = sortedplayers[i];
@@ -197,14 +195,10 @@ class DeathmatchStatusScreen : StatusScreen
 			if (!playeringame[pnum])
 				continue;
 
-			totalClients += !player.Bot;
 			screen.Dim(player.GetDisplayColor(), 0.8, x, y - ypadding, (deaths_x - x) + (8 * CleanXfac), lineheight);
 
 			if (ScreenJobRunner.IsPlayerReady(pnum)) // Bots are automatically assumed ready, to prevent confusion
-			{
 				screen.DrawTexture(readyico, true, x - (readysize.X * CleanXfac), y, DTA_CleanNoMove, true);
-				totalReady += !player.Bot;
-			}
 
 			let thiscolor = GetRowColor(player, pnum == consoleplayer);
 			if (player.mo.ScoreIcon.isValid())
