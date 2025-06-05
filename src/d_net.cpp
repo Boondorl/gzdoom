@@ -101,7 +101,6 @@ enum EReadyType
 	RT_VOTE,
 	RT_ANYONE,
 	RT_HOST_ONLY,
-	RT_NONE, // Only useful for actual cutscenes.
 };
 
 // NETWORKING
@@ -166,8 +165,8 @@ CUSTOM_CVAR(Int, net_cutscenereadytype, RT_VOTE, CVAR_SERVERINFO | CVAR_NOSAVE)
 {
 	if (self < RT_VOTE)
 		self = RT_VOTE;
-	else if (self > RT_NONE)
-		self = RT_NONE;
+	else if (self > RT_HOST_ONLY)
+		self = RT_HOST_ONLY;
 }
 CUSTOM_CVAR(Float, net_cutscenereadypercent, 0.5f, CVAR_SERVERINFO | CVAR_NOSAVE)
 {
@@ -454,19 +453,10 @@ bool Net_CheckCutsceneReady()
 	if (type == ST_UNSKIPPABLE)
 		return false;
 
-	int readyType = net_cutscenereadytype;
-	if (readyType == RT_NONE)
-	{
-		if (type == ST_MUST_BE_SKIPPABLE)
-			readyType = RT_HOST_ONLY;
-		else
-			return false;
-	}
-
-	if (readyType == RT_ANYONE)
+	if (net_cutscenereadytype == RT_ANYONE)
 		return CutsceneReady != 0;
 
-	if (readyType == RT_HOST_ONLY)
+	if (net_cutscenereadytype == RT_HOST_ONLY)
 		return (CutsceneReady & ((uint64_t)1u << Net_Arbitrator));
 
 	uint64_t mask = 0u;
