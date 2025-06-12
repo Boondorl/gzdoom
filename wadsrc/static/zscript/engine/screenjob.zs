@@ -327,8 +327,15 @@ class ScreenJobRunner : Object UI
 		ST_MUST_BE_SKIPPABLE,
 		ST_UNSKIPPABLE,
 	}
+	enum EInputType
+	{
+		INP_KEYBOARD_MOUSE,
+		INP_CONTROLLER,
+		INP_JOYSTICK,
+	}
 
 	private ESkipType skipType;
+	private EInputType lastInput;
 
 	Array<ScreenJob> jobs;
 	//CompletionFunc completion;
@@ -347,6 +354,35 @@ class ScreenJobRunner : Object UI
 	ESkipType GetSkipType() const
 	{
 		return skipType;
+	}
+
+	EInputType GetLastInputType() const
+	{
+		return lastInput;
+	}
+
+	protected void SetLastInputType(InputEvent ev)
+	{
+		if (ev.Type == InputEvent.Type_Mouse)
+		{
+			lastInput = INP_KEYBOARD_MOUSE;
+		}
+		else if (ev.Type == InputEvent.Type_KeyDown)
+		{
+			if (ev.KeyScan >= InputEvent.Key_Pad_LThumb_Right && ev.KeyScan <= InputEvent.Key_Pad_Y)
+			{
+				lastInput = INP_CONTROLLER;
+			}
+			else if ((ev.KeyScan >= InputEvent.Key_Joy1 && ev.KeyScan <= InputEvent.Key_JoyPOV4_Up)
+					|| (ev.KeyScan >= InputEvent.Key_JoyAxis1Plus && ev.KeyScan <= InputEvent.Key_JoyAxis8Minus))
+			{
+				lastInput = INP_JOYSTICK;
+			}
+			else
+			{
+				lastInput = INP_KEYBOARD_MOUSE;
+			}
+		}
 	}
 
 	void Init(bool clearbefore_, bool skipall_, ESkipType type = ST_VOTE)
@@ -480,6 +516,8 @@ class ScreenJobRunner : Object UI
 
 	virtual bool OnEvent(InputEvent ev)
 	{
+		SetLastInputType(ev);
+
 		if (ConsumedInput(ev)) return true;
 		if (paused || index < 0 || index >= jobs.Size()) return false;
 		if (jobs[index].jobstate != ScreenJob.running) return false;
