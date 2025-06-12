@@ -54,6 +54,25 @@ extend class ScreenJobRunner
 				Screen.DrawText(ConFont, col, 0, int(readysize.Y) * CleanYFac + CleanYFac, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), DTA_CleanNoMove, true);
 			}
 		}
+
+		string contType;
+		switch (GetLastInputType())
+		{
+			case INP_KEYBOARD_MOUSE:
+				contType = "$NET_CONTINUE_MKB";
+				break;
+			case INP_CONTROLLER:
+				contType = "$NET_CONTINUE_CONTROLLER";
+				break;
+			case INP_JOYSTICK:
+				contType = "$NET_CONTINUE_JOYSTICK";
+				break;
+		}
+
+		string contTxt = StringTable.Localize(contType);
+		int xOfs = (Screen.GetWidth() - ConFont.StringWidth(contTxt) * CleanXFac) / 2;
+		int yOfs = Screen.GetHeight() - ConFont.GetHeight() * CleanYFac - CleanYFac;
+		Screen.DrawText(ConFont, Font.CR_GREEN, xOfs, yOfs, contTxt, DTA_CleanNoMove, true);
 	}
 }
 
