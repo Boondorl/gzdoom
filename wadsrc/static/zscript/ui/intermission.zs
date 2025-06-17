@@ -22,57 +22,63 @@ extend class ScreenJobRunner
 
 	void DrawReadiedPlayers(double smoothratio)
 	{
-		if (!netgame || net_cutscenereadytype != 0 || GetSkipType() == ST_UNSKIPPABLE)
+		if (!netgame || GetSkipType() == ST_UNSKIPPABLE)
 			return;
 		
-		TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
-		Vector2 readysize = TexMan.GetScaledSize(readyico);
-		
-		if (IsPlayerReady(consoleplayer))
-			Screen.DrawTexture(readyico, true, 0, 0, DTA_CleanNoMove, true, DTA_TopLeft, true);
-
-		int totalClients, readyClients;
-		for (int i; i < MAXPLAYERS; ++i)
+		if (net_cutscenereadytype == 0)
 		{
-			if (!playerInGame[i] || players[i].Bot)
-				continue;
-
-			++totalClients;
-			readyClients += IsPlayerReady(i);
-		}
-
-		if (totalClients > 1)
-		{
-			Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, (int(readysize.X) + 4) * CleanXFac, CleanYFac, String.Format("%d/%d", readyClients, totalClients), DTA_CleanNoMove, true);
-			int startTimer = GetReadyTimer();
-			if (startTimer > 0)
+			int totalClients, readyClients;
+			for (int i; i < MAXPLAYERS; ++i)
 			{
-				int col = Font.CR_UNTRANSLATED;
-				if (startTimer <= GameTicRate * 5)
-					col = Font.CR_RED;
+				if (!playerInGame[i] || players[i].Bot)
+					continue;
 
-				Screen.DrawText(ConFont, col, 0, int(readysize.Y) * CleanYFac + CleanYFac, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), DTA_CleanNoMove, true);
+				++totalClients;
+				readyClients += IsPlayerReady(i);
+			}
+
+			if (totalClients > 1)
+			{
+				TextureID readyico = TexMan.CheckForTexture("READYICO", TexMan.Type_MiscPatch);
+				Vector2 readysize = TexMan.GetScaledSize(readyico);
+				
+				if (IsPlayerReady(consoleplayer))
+					Screen.DrawTexture(readyico, true, 0, 0, DTA_CleanNoMove, true, DTA_TopLeft, true);
+
+				Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, (int(readysize.X) + 4) * CleanXFac, CleanYFac, String.Format("%d/%d", readyClients, totalClients), DTA_CleanNoMove, true);
+				int startTimer = GetReadyTimer();
+				if (startTimer > 0)
+				{
+					int col = Font.CR_UNTRANSLATED;
+					if (startTimer <= GameTicRate * 5)
+						col = Font.CR_RED;
+
+					Screen.DrawText(ConFont, col, 0, int(readysize.Y) * CleanYFac + CleanYFac, SystemTime.Format("%M:%S", int(ceil(double(startTimer) / GameTicRate))), DTA_CleanNoMove, true);
+				}
 			}
 		}
 
-		string contType;
-		switch (GetLastInputType())
+		if (net_cutscenereadytype != 2 || consoleplayer == Net_Arbitrator)
 		{
-			case INP_KEYBOARD_MOUSE:
-				contType = "$NET_CONTINUE_MKB";
-				break;
-			case INP_CONTROLLER:
-				contType = "$NET_CONTINUE_CONTROLLER";
-				break;
-			case INP_JOYSTICK:
-				contType = "$NET_CONTINUE_JOYSTICK";
-				break;
-		}
+			string contType;
+			switch (GetLastInputType())
+			{
+				case INP_KEYBOARD_MOUSE:
+					contType = "$NET_CONTINUE_MKB";
+					break;
+				case INP_CONTROLLER:
+					contType = "$NET_CONTINUE_CONTROLLER";
+					break;
+				case INP_JOYSTICK:
+					contType = "$NET_CONTINUE_JOYSTICK";
+					break;
+			}
 
-		string contTxt = StringTable.Localize(contType);
-		int xOfs = (Screen.GetWidth() - ConFont.StringWidth(contTxt) * CleanXFac) / 2;
-		int yOfs = Screen.GetHeight() - ConFont.GetHeight() * CleanYFac - CleanYFac;
-		Screen.DrawText(ConFont, Font.CR_GREEN, xOfs, yOfs, contTxt, DTA_CleanNoMove, true);
+			string contTxt = StringTable.Localize(contType);
+			int xOfs = (Screen.GetWidth() - ConFont.StringWidth(contTxt) * CleanXFac) / 2;
+			int yOfs = Screen.GetHeight() - ConFont.GetHeight() * CleanYFac - CleanYFac;
+			Screen.DrawText(ConFont, Font.CR_GREEN, xOfs, yOfs, contTxt, DTA_CleanNoMove, true);
+		}
 	}
 }
 
