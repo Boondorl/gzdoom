@@ -206,14 +206,14 @@ struct
 					}
 				}
 
-				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_snext)
+				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_tnext)
 				{
 					bool isHead = false;
 					AActor* act = nullptr;
 					if (node->m_sector->touching_thinglist == node)
 						isHead = true;
 					else
-						act = node->m_tprev->m_thing;
+						act = node->m_sprev->m_thing;
 
 					PrevTouchingSectors[node->m_sector] = { isHead, MakeObjPtr<AActor*>(act) };
 				}
@@ -293,7 +293,7 @@ struct
 					}
 				}
 
-				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_snext)
+				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_tnext)
 				{
 					auto prev = PrevTouchingSectors.CheckKey(node->m_sector);
 					if (prev == nullptr)
@@ -306,16 +306,16 @@ struct
 					{
 						if (node->m_sector->touching_thinglist != node)
 						{
-							if (node->m_tprev != nullptr)
-								node->m_tprev->m_tnext = node->m_tnext;
-							if (node->m_tnext != nullptr)
-								node->m_tnext->m_tprev = node->m_tprev;
+							if (node->m_sprev != nullptr)
+								node->m_sprev->m_snext = node->m_snext;
+							if (node->m_snext != nullptr)
+								node->m_snext->m_sprev = node->m_sprev;
 
 							node->m_sprev = nullptr;
-							node->m_tnext = node->m_sector->touching_thinglist;
+							node->m_snext = node->m_sector->touching_thinglist;
 							node->m_sector->touching_thinglist = node;
-							if (node->m_tnext != nullptr)
-								node->m_tnext->m_sprev = node;
+							if (node->m_snext != nullptr)
+								node->m_snext->m_sprev = node;
 						}
 					}
 					else
@@ -323,20 +323,20 @@ struct
 						AActor* act = prev->Prev;
 						if (act != nullptr)
 						{
-							for (msecnode_t* n = node->m_sector->touching_thinglist; n != nullptr; n = n->m_tnext)
+							for (msecnode_t* n = node->m_sector->touching_thinglist; n != nullptr; n = n->m_snext)
 							{
 								if (n->m_thing == act)
 								{
-									if (node->m_tprev != nullptr)
-										node->m_tprev->m_tnext = node->m_tnext;
-									if (node->m_tnext != nullptr)
-										node->m_tnext->m_tprev = node->m_tprev;
+									if (node->m_sprev != nullptr)
+										node->m_sprev->m_snext = node->m_snext;
+									if (node->m_snext != nullptr)
+										node->m_snext->m_sprev = node->m_sprev;
 
-									node->m_tnext = n->m_tnext;
-									node->m_tprev = n;
-									n->m_tnext = node;
-									if (node->m_tnext != nullptr)
-										node->m_tnext->m_tprev = node;
+									node->m_snext = n->m_snext;
+									node->m_sprev = n;
+									n->m_snext = node;
+									if (node->m_snext != nullptr)
+										node->m_snext->m_sprev = node;
 
 									break;
 								}
