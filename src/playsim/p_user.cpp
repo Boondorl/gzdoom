@@ -171,12 +171,14 @@ struct
 		// those nodes are bound to in order to properly attempt to restore. If we can't restore correctly,
 		// just let the game desync since this likely means someone messed with the world in an unrecoverable
 		// way regardless.
+		ListBackup PrevHashActor = {};
 		ListBackup PrevSectorActor = {};
 		TMap<sector_t*, ListBackup> PrevTouchingSectors = {};
 		TMap<size_t, ListBackup> PrevBlockNodes = {};
 
 		void Clear()
 		{
+			PrevHashActor.Clear();
 			PrevSectorActor.Clear();
 			PrevTouchingSectors.Clear();
 			PrevBlockNodes.Clear();
@@ -185,6 +187,28 @@ struct
 		void Set(const AActor& mo)
 		{
 			Clear();
+
+			if (mo.tid != 0)
+			{
+				auto& hash = mo.IsClientside() ? mo.Level->ClientSideTIDHash : mo.Level->TIDHash;
+				const size_t slot = mo.tid & 127;
+				if (hash[slot] == &mo)
+				{
+					PrevHashActor.bHead = true;
+				}
+				else
+				{
+					for (AActor* act = hash[slot]; act != nullptr; act = act->inext)
+					{
+						if (act->inext == &mo)
+						{
+							PrevHashActor.Prev = act;
+							break;
+						}
+					}
+				}
+			}
+
 			if (mo.IsClientside())
 				return;
 
@@ -249,7 +273,46 @@ struct
 
 		void Restore(AActor& mo)
 		{
-			mo.LinkToWorld(nullptr);
+			if (mo.tid != 0)
+			{
+				auto& hash = mo.IsClientside() ? mo.Level->ClientSideTIDHash : mo.Level->TIDHash;
+				const size_t slot = mo.tid & 127;
+				if (PrevHashActor.bHead)
+				{
+					if (hash[slot] != &mo)
+					{
+						if (mo.inext != nullptr)
+							mo.inext->iprev = mo.iprev;
+						*(mo.iprev) = mo.inext;
+
+						hash[slot]->iprev = &mo.inext;
+						mo.inext = hash[slot];
+						hash[slot] = &mo;
+						mo.iprev = &hash[slot];
+					}
+				}
+				else
+				{
+					AActor* prev = PrevHashActor.Prev;
+					if (prev != nullptr)
+					{
+						if (mo.inext != nullptr)
+							mo.inext->iprev = mo.iprev;
+						*(mo.iprev) = mo.inext;
+
+						mo.iprev = &prev->inext;
+						mo.inext = prev->inext;
+						prev->inext = &mo;
+						if (mo.inext != nullptr)
+							mo.inext->iprev = &mo.inext;
+					}
+					else
+					{
+						DPrintf(2, "Reference Actor in hash list was deleted while predicting\n");
+					}
+				}
+			}
+
 			if (mo.IsClientside())
 				return;
 
@@ -441,11 +504,24 @@ struct
 	{
 		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
 		{
+			// Don't call the scripting virtual since it's expected to only be for actual loading.
+			if (BackedUpObjects.Find(mo) < BackedUpObjects.Size())
+				mo->PostSerialize();
+
 			auto exists = BackupActors.CheckKey(key);
 			if (exists != nullptr)
 				exists->Restore(*mo);
 			else
 				DPrintf(2, "Tried to restore non-backed up Actor while unpredicting\n");
+		}
+	}
+
+	void UnlinkActor(AActor* mo)
+	{
+		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
+		{
+			mo->UnlinkFromWorld(nullptr);
+			mo->SetTID(0);
 		}
 	}
 	
@@ -543,10 +619,8 @@ struct
 
 			// These need to be unlinked before restoring to ensure whatever flags they
 			// currently have are respected.
-			if (!(mo->ObjectFlags & OF_EuthanizeMe))
-				mo->UnlinkFromWorld(nullptr);
-			if (mo->alternative)
-				mo->alternative->UnlinkFromWorld(nullptr);
+			UnlinkActor(mo);
+			UnlinkActor(mo->alternative);
 		}
 
 		arc.ReadObjectsFrom(BackupMap);
