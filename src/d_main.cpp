@@ -2965,6 +2965,8 @@ static void Doom_CastSpriteIDToString(FString* a, unsigned int b)
 
 extern DThinker* NextToThink;
 
+size_t PropagatePredictionData();
+
 static void GC_MarkGameRoots()
 {
 	GC::Mark(staticEventManager.FirstEventHandler);
@@ -2981,6 +2983,7 @@ static void GC_MarkGameRoots()
 
 	// NextToThink must not be freed while thinkers are ticking.
 	GC::Mark(NextToThink);
+	PropagatePredictionData();
 }
 
 static void System_ToggleFullConsole()

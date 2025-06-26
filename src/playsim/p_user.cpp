@@ -155,59 +155,301 @@ struct
 		int LastPredictedPortalGroup = -1;
 	} PredictedPos = {};
 
-	// These need to be backed up individually since Actors can't simply be relinked into the world, otherwise
-	// order of operations could cause desyncs. Try and best insert them where they last were, otherwise the game is
-	// probably messed up anyway and a desync is already inbound.
 	struct ActorBackup {
-		AActor** PrevSectorActor = nullptr;
-		msecnode_t* PrevTouchingSector = nullptr;
-		FBlockNode** PrevBlockNode = nullptr, ** PrevBlockActor = nullptr;
+		struct ListBackup {
+			bool bHead = false;
+			TObjPtr<AActor*> Prev = MakeObjPtr<AActor*>(nullptr);
+
+			void Clear()
+			{
+				bHead = false;
+				Prev = nullptr;
+			}
+		};
+
+		// Since nodes commonly get reused we can't rely on their address, so we have to use the things
+		// those nodes are bound to in order to properly attempt to restore. If we can't restore correctly,
+		// just let the game desync since this likely means someone messed with the world in an unrecoverable
+		// way regardless.
+		ListBackup PrevSectorActor = {};
+		TMap<sector_t*, ListBackup> PrevTouchingSectors = {};
+		TMap<size_t, ListBackup> PrevBlockNodes = {};
 
 		void Clear()
 		{
-			PrevSectorActor = nullptr;
-			PrevTouchingSector = nullptr;
-			PrevBlockNode = PrevBlockActor = nullptr;
+			PrevSectorActor.Clear();
+			PrevTouchingSectors.Clear();
+			PrevBlockNodes.Clear();
 		}
 
 		void Set(const AActor& mo)
 		{
 			Clear();
+			if (mo.IsClientside())
+				return;
 
 			if (!(mo.flags & MF_NOSECTOR))
 			{
-				PrevSectorActor = mo.sprev;
-				PrevTouchingSector = mo.touching_sectorlist;
+				if (mo.Sector->thinglist == &mo)
+				{
+					PrevSectorActor.bHead = true;
+				}
+				else
+				{
+					for (AActor* act = mo.Sector->thinglist; act != nullptr; act = act->snext)
+					{
+						if (act->snext == &mo)
+						{
+							PrevSectorActor.Prev = act;
+							break;
+						}
+					}
+				}
+
+				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_snext)
+				{
+					bool isHead = false;
+					AActor* act = nullptr;
+					if (node->m_sector->touching_thinglist == node)
+						isHead = true;
+					else
+						act = node->m_tprev->m_thing;
+
+					PrevTouchingSectors[node->m_sector] = { isHead, MakeObjPtr<AActor*>(act) };
+				}
 			}
 
 			if (!(mo.flags & MF_NOBLOCKMAP))
 			{
-				PrevBlockNode = mo.BlockNode->PrevBlock;
-				PrevBlockActor = mo.BlockNode->PrevActor;
+				for (FBlockNode* node = mo.BlockNode; node != nullptr; node = node->NextBlock)
+				{
+					auto head = mo.Level->blockmap.blocklinks[node->BlockIndex];
+					bool isHead = false;
+					AActor* act = nullptr;
+					if (head == node)
+					{
+						isHead = true;
+					}
+					else
+					{
+						for (; head != nullptr; head = head->NextActor)
+						{
+							if (head->NextActor == node)
+							{
+								act = head->Me;
+								break;
+							}
+						}
+					}
+
+					PrevBlockNodes[node->BlockIndex] = { isHead, MakeObjPtr<AActor*>(act) };
+				}
 			}
 		}
 
-		void Restore(AActor& mo) const
+		void Restore(AActor& mo)
 		{
-			mo.LinkToWorld(nullptr, false, mo.Sector);
+			mo.LinkToWorld(nullptr);
+			if (mo.IsClientside())
+				return;
 
-			mo.sprev = PrevSectorActor;
-			mo.touching_sectorlist = PrevTouchingSector;
+			// Now that new nodes have been assigned, attempt to move them into the correct
+			// positions. If that spot isn't found, just leave it in its current place (this
+			// means a non-backed up Actor got destroyed or moved).
+			if (!(mo.flags & MF_NOSECTOR))
+			{
+				if (PrevSectorActor.bHead)
+				{
+					if (mo.Sector->thinglist != &mo)
+					{
+						if (mo.snext != nullptr)
+							mo.snext->sprev = mo.sprev;
+						*(mo.sprev) = mo.snext;
+
+						mo.Sector->thinglist->sprev = &mo.snext;
+						mo.snext = mo.Sector->thinglist;
+						mo.Sector->thinglist = &mo;
+						mo.sprev = &mo.Sector->thinglist;
+					}
+				}
+				else
+				{
+					AActor* prev = PrevSectorActor.Prev;
+					if (prev != nullptr)
+					{
+						if (mo.snext != nullptr)
+							mo.snext->sprev = mo.sprev;
+						*(mo.sprev) = mo.snext;
+
+						mo.sprev = &prev->snext;
+						mo.snext = prev->snext;
+						prev->snext = &mo;
+						if (mo.snext != nullptr)
+							mo.snext->sprev = &mo.snext;
+					}
+					else
+					{
+						DPrintf(2, "Reference Actor in thinglist was deleted while predicting\n");
+					}
+				}
+
+				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_snext)
+				{
+					auto prev = PrevTouchingSectors.CheckKey(node->m_sector);
+					if (prev == nullptr)
+					{
+						DPrintf(2, "Unknown sector found in touching sector list while unpredicting\n");
+						continue;
+					}
+
+					if (prev->bHead)
+					{
+						if (node->m_sector->touching_thinglist != node)
+						{
+							if (node->m_tprev != nullptr)
+								node->m_tprev->m_tnext = node->m_tnext;
+							if (node->m_tnext != nullptr)
+								node->m_tnext->m_tprev = node->m_tprev;
+
+							node->m_sprev = nullptr;
+							node->m_tnext = node->m_sector->touching_thinglist;
+							node->m_sector->touching_thinglist = node;
+							if (node->m_tnext != nullptr)
+								node->m_tnext->m_sprev = node;
+						}
+					}
+					else
+					{
+						AActor* act = prev->Prev;
+						if (act != nullptr)
+						{
+							for (msecnode_t* n = node->m_sector->touching_thinglist; n != nullptr; n = n->m_tnext)
+							{
+								if (n->m_thing == act)
+								{
+									if (node->m_tprev != nullptr)
+										node->m_tprev->m_tnext = node->m_tnext;
+									if (node->m_tnext != nullptr)
+										node->m_tnext->m_tprev = node->m_tprev;
+
+									node->m_tnext = n->m_tnext;
+									node->m_tprev = n;
+									n->m_tnext = node;
+									if (node->m_tnext != nullptr)
+										node->m_tnext->m_tprev = node;
+
+									break;
+								}
+							}
+						}
+						else
+						{
+							DPrintf(2, "Reference Actor in sector touching list was deleted while predicting\n");
+						}
+					}
+				}
+			}
 			
 			if (!(mo.flags & MF_NOBLOCKMAP))
 			{
-				
+				for (FBlockNode* node = mo.BlockNode; node != nullptr; node = node->NextBlock)
+				{
+					auto prev = PrevBlockNodes.CheckKey(node->BlockIndex);
+					if (prev == nullptr)
+					{
+						DPrintf(2, "Unknown blocknode found in blockmap list while unpredicting\n");
+						continue;
+					}
+
+					if (prev->bHead)
+					{
+						auto head = mo.Level->blockmap.blocklinks[node->BlockIndex];
+						if (head != node)
+						{
+							if (node->NextActor != nullptr)
+								node->NextActor->PrevActor = node->PrevActor;
+							*(node->PrevActor) = node->NextActor;
+
+							head->PrevActor = &node->NextActor;
+							node->NextActor = head;
+							head = node;
+							node->PrevActor = &head;
+						}
+					}
+					else
+					{
+						AActor* act = prev->Prev;
+						if (act != nullptr)
+						{
+							for (FBlockNode* n = mo.Level->blockmap.blocklinks[node->BlockIndex]; n != nullptr; n = n->NextActor)
+							{
+								if (n->Me == act)
+								{
+									if (node->NextActor != nullptr)
+										node->NextActor->PrevActor = node->PrevActor;
+									*(node->PrevActor) = node->NextActor;
+
+									node->NextActor = n->NextActor;
+									if (node->NextActor != nullptr)
+										node->NextActor->PrevActor = &node->NextActor;
+									n->NextActor = node;
+									node->PrevActor = &n->NextActor;
+
+									break;
+								}
+							}
+						}
+						else
+						{
+							DPrintf(2, "Reference Actor in blocknode list was deleted while predicting\n");
+						}
+					}
+				}
 			}
+		}
+
+		size_t PropagateMark()
+		{
+			GC::Mark(PrevSectorActor.Prev);
+
+			TMap<sector_t*, ListBackup>::Iterator secIt = { PrevTouchingSectors };
+			TMap<sector_t*, ListBackup>::Pair* pair = nullptr;
+			while (secIt.NextPair(pair))
+				GC::Mark(pair->Value.Prev);
+
+			TMap<size_t, ListBackup>::Iterator blockIt = { PrevBlockNodes };
+			TMap<size_t, ListBackup>::Pair* pair2 = nullptr;
+			while (blockIt.NextPair(pair2))
+				GC::Mark(pair2->Value.Prev);
+
+			return 0u;
 		}
 	};
 
-	TArray<FRandom> RNGBackup = {};
+	TMap<FName, ActorBackup> BackupActors = {};
 
-	FLevelLocals* BackupLevel = nullptr;
-	TMap<size_t, TObjPtr<DObject*>> BackupMap = {};
+	void BackupActor(const AActor* mo, FName key)
+	{
+		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
+		{
+			auto& backup = BackupActors[key];
+			backup.Set(*mo);
+		}
+	}
+
+	void RestoreActor(AActor* mo, FName key)
+	{
+		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
+		{
+			auto exists = BackupActors.CheckKey(key);
+			if (exists != nullptr)
+				exists->Restore(*mo);
+			else
+				DPrintf(2, "Tried to restore non-backed up Actor while unpredicting\n");
+		}
+	}
+	
 	TArray<DObject*> BackedUpObjects = {};
-	TMap<FName, ActorBackup> BackedUpActors = {};
-	FileSys::FCompressedBuffer WorldBackup = { 0u, 0u, 0, 0u, nullptr, nullptr };
 
 	void BackupObject(DObject* obj)
 	{
@@ -222,24 +464,10 @@ struct
 			obj->Destroy();
 	}
 
-	void BackupActor(const AActor* mo, FName key)
-	{
-		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
-		{
-			auto& backup = BackedUpActors[key];
-			backup.Set(*mo);
-		}
-	}
-
-	void RestoreActor(AActor* mo, FName key) const
-	{
-		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
-		{
-			auto exists = BackedUpActors.CheckKey(key);
-			if (exists != nullptr)
-				exists->Restore(*mo);
-		}
-	}
+	TArray<FRandom> RNGBackup = {};
+	FLevelLocals* BackupLevel = nullptr;
+	TMap<size_t, TObjPtr<DObject*>> BackupMap = {};
+	FileSys::FCompressedBuffer WorldBackup = { 0u, 0u, 0, 0u, nullptr, nullptr };
 
 	void BackupWorld()
 	{
@@ -259,11 +487,12 @@ struct
 		{
 			player.Serialize(arc);
 
-			//BackupActor(player.mo, NAME_PlayerPawn);
-			//BackupActor(player.mo->alternative, NAME_Morph);
+			// Store the current state of the pawns' physics lists to try and best restore it when unpredicting.
+			BackupActor(mo, NAME_PlayerPawn);
+			BackupActor(mo->alternative, NAME_Morph);
 
-			// Only serialize a select few objects on the player. We don't want them backing up the entire
-			// world on accident, just back up some of the more important aspects of the pawn.
+			// Only serialize a select few objects on the player. We don't want mods backing up the entire
+			// world on accident, just some of the more important aspects of the pawn.
 			BackedUpObjects.Clear();
 			BackupObject(mo);
 			BackupObject(mo->ViewPos);
@@ -278,6 +507,7 @@ struct
 			arc.Close();
 		}
 
+		// TODO: These should be deprecated in favor of just prediction checking these actions...
 		mo->flags &= ~MF_PICKUP;
 		mo->flags2 &= ~MF2_PUSHWALL;
 		player.cheats |= CF_PREDICTING;
@@ -293,7 +523,7 @@ struct
 		arc.save_full = true;
 		if (!arc.OpenReader(&WorldBackup))
 		{
-			I_Error("Failed to restore player");
+			I_Error("Failed to restore player from predicting");
 			return;
 		}
 
@@ -301,6 +531,8 @@ struct
 		auto mo = player.mo;
 		if (mo != nullptr)
 		{
+			// Clean up any objects in these fields that didn't exist previously to make sure they
+			// restore correctly (especially for Behaviors).
 			CheckDestruction(mo);
 			CheckDestruction(mo->ViewPos);
 			CheckDestruction(mo->alternative);
@@ -308,15 +540,23 @@ struct
 			TMap<FName, TObjPtr<DBehavior*>>::Pair* pair = nullptr;
 			while (it.NextPair(pair))
 				CheckDestruction(pair->Value);
+
+			// These need to be unlinked before restoring to ensure whatever flags they
+			// currently have are respected.
+			if (!(mo->ObjectFlags & OF_EuthanizeMe))
+				mo->UnlinkFromWorld(nullptr);
+			if (mo->alternative)
+				mo->alternative->UnlinkFromWorld(nullptr);
 		}
 
 		arc.ReadObjectsFrom(BackupMap);
-		if (arc.mObjectErrors)
+		if (arc.mErrors)
 		{
-			I_Error("Failed to restore player");
+			I_Error("Failed to restore player from predicting");
 			return;
 		}
 
+		// Save a few fields since these are meant to run locally and not be restored.
 		AActor* curCam = player.camera;
 		const bool settingsController = player.settings_controller;
 		const int invTics = player.inventorytics;
@@ -326,43 +566,46 @@ struct
 		player.Serialize(arc);
 		arc.Close();
 
-		// Now that everything's data has been restored, relink them into the world properly.
-		mo = player.mo;
-		mo->UnlinkFromWorld(nullptr);
-		mo->LinkToWorld(nullptr);
-		//RestoreActor(mo, NAME_PlayerPawn);
-		//RestoreActor(mo->alternative, NAME_Morph);
-
-		FRandom::RestoreRNGState(RNGBackup);
-
-		// Restore the camera instead of using the backup's copy, because spynext/prev
-		// could cause it to change during prediction.
 		player.camera = curCam;
 		player.settings_controller = settingsController;
 		player.inventorytics = invTics;
 		invSelField = invSel;
+
+		// Now that everything's data has been restored, relink them into the world properly.
+		mo = player.mo;
+		RestoreActor(mo, NAME_PlayerPawn);
+		RestoreActor(mo->alternative, NAME_Morph);
+
+		FRandom::RestoreRNGState(RNGBackup);
+	}
+
+	size_t PropagateMark()
+	{
+		TMap<size_t, TObjPtr<DObject*>>::Iterator backupIt = { BackupMap };
+		TMap<size_t, TObjPtr<DObject*>>::Pair* backupPair = nullptr;
+		while (backupIt.NextPair(backupPair))
+			GC::Mark(backupPair->Value);
+
+		TMap<FName, ActorBackup>::Iterator actorIt = { BackupActors };
+		TMap<FName, ActorBackup>::Pair* actorPair = nullptr;
+		while (actorIt.NextPair(actorPair))
+			actorPair->Value.PropagateMark();
+
+		return 0u;
 	}
 } static PredictionData = {};
+
+size_t PropagatePredictionData()
+{
+	if (!PredictionData.bWorldPredicting)
+		return 0u;
+
+	return PredictionData.PropagateMark();
+}
 
 static DVector3 LastPredictedPosition;
 static int LastPredictedPortalGroup;
 static int LastPredictedTic;
-
-static TArray<FRandom> PredictionRNG;
-
-static player_t PredictionPlayerBackup;
-static AActor *PredictionActor;
-static TArray<uint8_t> PredictionActorBackupArray;
-static TArray<AActor *> PredictionSectorListBackup;
-
-static TArray<sector_t *> PredictionTouchingSectorsBackup;
-static TArray<msecnode_t *> PredictionTouchingSectors_sprev_Backup;
-
-struct
-{
-	DVector3 Pos = {};
-	int Flags = 0;
-} static PredictionViewPosBackup;
 
 // [GRB] Custom player classes
 TArray<FPlayerClass> PlayerClasses;
