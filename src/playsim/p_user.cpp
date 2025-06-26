@@ -394,6 +394,8 @@ struct
 										node->m_sprev->m_snext = node->m_snext;
 									if (node->m_snext != nullptr)
 										node->m_snext->m_sprev = node->m_sprev;
+									if (node->m_sector->touching_thinglist == node)
+										node->m_sector->touching_thinglist = node->m_snext;
 
 									node->m_snext = n->m_snext;
 									node->m_sprev = n;
@@ -473,6 +475,7 @@ struct
 
 		size_t PropagateMark()
 		{
+			GC::Mark(PrevHashActor.Prev);
 			GC::Mark(PrevSectorActor.Prev);
 
 			TMap<sector_t*, ListBackup>::Iterator secIt = { PrevTouchingSectors };
