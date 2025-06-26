@@ -145,6 +145,205 @@ CUSTOM_CVAR(Float, fov, 90.f, CVAR_ARCHIVE | CVAR_USERINFO | CVAR_NOINITCALL)
 	p->SetFOV(fov);
 }
 
+struct
+{
+	bool bWorldPredicting = false;
+	int LastPredictedTic = -1;
+
+	struct {
+		DVector3 LastPredictedPosition = { 0.0, 0.0, 0.0 };
+		int LastPredictedPortalGroup = -1;
+	} PredictedPos = {};
+
+	// These need to be backed up individually since Actors can't simply be relinked into the world, otherwise
+	// order of operations could cause desyncs. Try and best insert them where they last were, otherwise the game is
+	// probably messed up anyway and a desync is already inbound.
+	struct ActorBackup {
+		AActor** PrevSectorActor = nullptr;
+		msecnode_t* PrevTouchingSector = nullptr;
+		FBlockNode** PrevBlockNode = nullptr, ** PrevBlockActor = nullptr;
+
+		void Clear()
+		{
+			PrevSectorActor = nullptr;
+			PrevTouchingSector = nullptr;
+			PrevBlockNode = PrevBlockActor = nullptr;
+		}
+
+		void Set(const AActor& mo)
+		{
+			Clear();
+
+			if (!(mo.flags & MF_NOSECTOR))
+			{
+				PrevSectorActor = mo.sprev;
+				PrevTouchingSector = mo.touching_sectorlist;
+			}
+
+			if (!(mo.flags & MF_NOBLOCKMAP))
+			{
+				PrevBlockNode = mo.BlockNode->PrevBlock;
+				PrevBlockActor = mo.BlockNode->PrevActor;
+			}
+		}
+
+		void Restore(AActor& mo) const
+		{
+			mo.LinkToWorld(nullptr, false, mo.Sector);
+
+			mo.sprev = PrevSectorActor;
+			mo.touching_sectorlist = PrevTouchingSector;
+			
+			if (!(mo.flags & MF_NOBLOCKMAP))
+			{
+				
+			}
+		}
+	};
+
+	TArray<FRandom> RNGBackup = {};
+
+	FLevelLocals* BackupLevel = nullptr;
+	TMap<size_t, TObjPtr<DObject*>> BackupMap = {};
+	TArray<DObject*> BackedUpObjects = {};
+	TMap<FName, ActorBackup> BackedUpActors = {};
+	FileSys::FCompressedBuffer WorldBackup = { 0u, 0u, 0, 0u, nullptr, nullptr };
+
+	void BackupObject(DObject* obj)
+	{
+		if (obj != nullptr && !(obj->ObjectFlags & OF_EuthanizeMe) && BackedUpObjects.Find(obj) >= BackedUpObjects.Size())
+			BackedUpObjects.Push(obj);
+	}
+
+	void CheckDestruction(DObject* obj) const
+	{
+		// Any predicted objects in the important lists should be destroyed to prevent weird list reinsertion.
+		if (obj != nullptr && !(obj->ObjectFlags & OF_EuthanizeMe) && BackedUpObjects.Find(obj) >= BackedUpObjects.Size())
+			obj->Destroy();
+	}
+
+	void BackupActor(const AActor* mo, FName key)
+	{
+		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
+		{
+			auto& backup = BackedUpActors[key];
+			backup.Set(*mo);
+		}
+	}
+
+	void RestoreActor(AActor* mo, FName key) const
+	{
+		if (mo != nullptr && !(mo->ObjectFlags & OF_EuthanizeMe))
+		{
+			auto exists = BackedUpActors.CheckKey(key);
+			if (exists != nullptr)
+				exists->Restore(*mo);
+		}
+	}
+
+	void BackupWorld()
+	{
+		auto& player = players[consoleplayer];
+		if (player.mo == nullptr || bWorldPredicting)
+			return;
+
+		auto mo = player.mo;
+		bWorldPredicting = true;
+		BackupLevel = mo->Level;
+
+		FRandom::SaveRNGState(RNGBackup);
+
+		FDoomSerializer arc = { BackupLevel };
+		arc.save_full = true;
+		if (arc.OpenWriter(false))
+		{
+			player.Serialize(arc);
+
+			//BackupActor(player.mo, NAME_PlayerPawn);
+			//BackupActor(player.mo->alternative, NAME_Morph);
+
+			// Only serialize a select few objects on the player. We don't want them backing up the entire
+			// world on accident, just back up some of the more important aspects of the pawn.
+			BackedUpObjects.Clear();
+			BackupObject(mo);
+			BackupObject(mo->ViewPos);
+			BackupObject(mo->alternative);
+			TMap<FName, TObjPtr<DBehavior*>>::Iterator it = { mo->Behaviors };
+			TMap<FName, TObjPtr<DBehavior*>>::Pair* pair = nullptr;
+			while (it.NextPair(pair))
+				BackupObject(pair->Value);
+
+			WorldBackup.Clean();
+			WorldBackup = arc.GetCompressedOutput(&BackupMap, &BackedUpObjects);
+			arc.Close();
+		}
+
+		mo->flags &= ~MF_PICKUP;
+		mo->flags2 &= ~MF2_PUSHWALL;
+		player.cheats |= CF_PREDICTING;
+	}
+
+	void RestoreWorld()
+	{
+		if (WorldBackup.mBuffer == nullptr || !bWorldPredicting)
+			return;
+
+		bWorldPredicting = false;
+		FDoomSerializer arc = { BackupLevel };
+		arc.save_full = true;
+		if (!arc.OpenReader(&WorldBackup))
+		{
+			I_Error("Failed to restore player");
+			return;
+		}
+
+		auto& player = players[consoleplayer];
+		auto mo = player.mo;
+		if (mo != nullptr)
+		{
+			CheckDestruction(mo);
+			CheckDestruction(mo->ViewPos);
+			CheckDestruction(mo->alternative);
+			TMap<FName, TObjPtr<DBehavior*>>::Iterator it = { mo->Behaviors };
+			TMap<FName, TObjPtr<DBehavior*>>::Pair* pair = nullptr;
+			while (it.NextPair(pair))
+				CheckDestruction(pair->Value);
+		}
+
+		arc.ReadObjectsFrom(BackupMap);
+		if (arc.mObjectErrors)
+		{
+			I_Error("Failed to restore player");
+			return;
+		}
+
+		AActor* curCam = player.camera;
+		const bool settingsController = player.settings_controller;
+		const int invTics = player.inventorytics;
+		auto& invSelField = mo->PointerVar<AActor*>(NAME_InvSel);
+		auto invSel = invSelField;
+
+		player.Serialize(arc);
+		arc.Close();
+
+		// Now that everything's data has been restored, relink them into the world properly.
+		mo = player.mo;
+		mo->UnlinkFromWorld(nullptr);
+		mo->LinkToWorld(nullptr);
+		//RestoreActor(mo, NAME_PlayerPawn);
+		//RestoreActor(mo->alternative, NAME_Morph);
+
+		FRandom::RestoreRNGState(RNGBackup);
+
+		// Restore the camera instead of using the backup's copy, because spynext/prev
+		// could cause it to change during prediction.
+		player.camera = curCam;
+		player.settings_controller = settingsController;
+		player.inventorytics = invTics;
+		invSelField = invSel;
+	}
+} static PredictionData = {};
+
 static DVector3 LastPredictedPosition;
 static int LastPredictedPortalGroup;
 static int LastPredictedTic;
@@ -1494,57 +1693,7 @@ void P_PredictPlayer (player_t *player)
 		return;
 	}
 
-	FRandom::SaveRNGState(PredictionRNG);
-
-	// Save original values for restoration later
-	PredictionPlayerBackup.CopyFrom(*player, false);
-
-	auto act = player->mo;
-	PredictionActor = player->mo;
-	PredictionActorBackupArray.Resize(act->GetClass()->Size);
-	memcpy(PredictionActorBackupArray.Data(), &act->snext, act->GetClass()->Size - ((uint8_t *)&act->snext - (uint8_t *)act));
-
-	// Since this is a DObject it needs to have its fields backed up manually for restore, otherwise any changes
-	// to it will be permanent while predicting. This is now auto-created on pawns to prevent creation spam.
-	if (act->ViewPos != nullptr)
-	{
-		PredictionViewPosBackup.Pos = act->ViewPos->Offset;
-		PredictionViewPosBackup.Flags = act->ViewPos->Flags;
-	}
-
-	act->flags &= ~MF_PICKUP;
-	act->flags2 &= ~MF2_PUSHWALL;
-	player->cheats |= CF_PREDICTING;
-
-	BackupNodeList(act, act->touching_sectorlist, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
-
-	// Keep an ordered list off all actors in the linked sector.
-	PredictionSectorListBackup.Clear();
-	if (!(act->flags & MF_NOSECTOR))
-	{
-		AActor *link = act->Sector->thinglist;
-		
-		while (link != NULL)
-		{
-			PredictionSectorListBackup.Push(link);
-			link = link->snext;
-		}
-	}
-
-	// Blockmap ordering also needs to stay the same, so unlink the block nodes
-	// without releasing them. (They will be used again in P_UnpredictPlayer).
-	FBlockNode *block = act->BlockNode;
-
-	while (block != NULL)
-	{
-		if (block->NextActor != NULL)
-		{
-			block->NextActor->PrevActor = block->PrevActor;
-		}
-		*(block->PrevActor) = block->NextActor;
-		block = block->NextBlock;
-	}
-	act->BlockNode = NULL;
+	PredictionData.BackupWorld();
 
 	// This essentially acts like a mini P_Ticker where only the stuff relevant to the client is actually
 	// called. Call order is preserved.
@@ -1627,99 +1776,7 @@ void P_PredictPlayer (player_t *player)
 
 void P_UnPredictPlayer ()
 {
-	player_t *player = &players[consoleplayer];
-
-	if (player->cheats & CF_PREDICTING)
-	{
-		unsigned int i;
-		AActor *act = player->mo;
-
-		if (act != PredictionActor)
-		{
-			// Q: Can this happen? If yes, can we continue?
-		}
-
-		FRandom::RestoreRNGState(PredictionRNG);
-
-		AActor *savedcamera = player->camera;
-
-		auto &actInvSel = act->PointerVar<AActor*>(NAME_InvSel);
-		auto InvSel = actInvSel;
-		int inventorytics = player->inventorytics;
-		const bool settings_controller = player->settings_controller;
-
-		player->CopyFrom(PredictionPlayerBackup, false);
-
-		player->settings_controller = settings_controller;
-		// Restore the camera instead of using the backup's copy, because spynext/prev
-		// could cause it to change during prediction.
-		player->camera = savedcamera;
-
-		// Unlink from all lists
-		act->UnlinkFromWorld(nullptr);
-		memcpy(&act->snext, PredictionActorBackupArray.Data(), PredictionActorBackupArray.Size() - ((uint8_t *)&act->snext - (uint8_t *)act));
-		// Clear stale pointers. The blockmap node is kept since it's the one that will be relinked back into the blockmap. Given
-		// it was removed from the list without being freed before predicting it's still valid.
-		act->touching_lineportallist = nullptr;
-		act->touching_rendersectors = act->touching_sectorlist = act->touching_sectorportallist = nullptr;
-		act->sprev = (AActor**)(size_t)0xBeefCafe;
-		act->snext = nullptr;
-
-		if (act->ViewPos != nullptr)
-		{
-			act->ViewPos->Offset = PredictionViewPosBackup.Pos;
-			act->ViewPos->Flags = PredictionViewPosBackup.Flags;
-		}
-
-		// The blockmap ordering needs to remain unchanged, too.
-		// Restore sector links and refrences.
-		// [ED850] This is somewhat of a duplicate of LinkToWorld(), but we need to keep every thing the same,
-		// otherwise we end up fixing bugs in blockmap logic (i.e undefined behaviour with polyobject collisions),
-		// which we really don't want to do here.
-		if (!(act->flags & MF_NOSECTOR))
-		{
-			sector_t *sec = act->Sector;
-			AActor *me, *next;
-			AActor **link;// , **prev;
-
-			// The thinglist is just a pointer chain. We are restoring the exact same things, so we can NULL the head safely
-			sec->thinglist = NULL;
-
-			for (i = PredictionSectorListBackup.Size(); i-- > 0;)
-			{
-				me = PredictionSectorListBackup[i];
-				link = &sec->thinglist;
-				next = *link;
-				if ((me->snext = next))
-					next->sprev = &me->snext;
-				me->sprev = link;
-				*link = me;
-			}
-
-			// Only the touching list actually needs to be restored to avoid impacting gameplay. The rest is just clientside fluff that can
-			// be handled by relinking.
-			act->touching_sectorlist = RestoreNodeList(act, &sector_t::touching_thinglist, PredictionTouchingSectors_sprev_Backup, PredictionTouchingSectorsBackup);
-			if (act->renderradius >= 0.0)
-				act->touching_rendersectors = P_CreateSecNodeList(act, act->RenderRadius(), nullptr, &sector_t::touching_renderthings);
-		}
-
-		// Now fix the pointers in the blocknode chain
-		FBlockNode *block = act->BlockNode;
-		while (block != NULL)
-		{
-			*(block->PrevActor) = block;
-			if (block->NextActor != NULL)
-			{
-				block->NextActor->PrevActor = &block->NextActor;
-			}
-			block = block->NextBlock;
-		}
-
-		act->UpdateRenderSectorList();
-
-		actInvSel = InvSel;
-		player->inventorytics = inventorytics;
-	}
+	PredictionData.RestoreWorld();
 }
 
 void player_t::Serialize(FSerializer &arc)

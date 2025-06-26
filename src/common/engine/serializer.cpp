@@ -61,7 +61,6 @@
 using namespace FileSys;
 
 extern DObject *WP_NOCHANGE;
-bool save_full = false;	// for testing. Should be removed afterward.
 
 #include "serializer_internal.h"
 
@@ -660,6 +659,38 @@ void FSerializer::WriteObjects()
 	}
 }
 
+void FSerializer::WriteObjectsTo(TMap<size_t, TObjPtr<DObject*>>& to, TArray<DObject*>* fullSerialize)
+{
+	to.Clear();
+	if (!isWriting() || !w->mDObjects.Size())
+		return;
+		
+	const size_t fullSize = fullSerialize != nullptr ? fullSerialize->Size() : 0u;
+
+	BeginArray("objects");
+	// we cannot use the C++11 shorthand syntax here because the array may grow while being processed.
+	for (size_t i = 0u; i < w->mDObjects.Size(); ++i)
+	{
+		auto obj = w->mDObjects[i];
+		if (fullSize && fullSerialize->Find(obj) < fullSize)
+		{
+			BeginObject(nullptr);
+			w->Key("classtype");
+			w->String(obj->GetClass()->TypeName.GetChars());
+			w->Key("index");
+			w->Uint(i);
+
+			obj->SerializeUserVars(*this);
+			obj->Serialize(*this);
+			obj->CheckIfSerialized();
+			EndObject();
+		}
+
+		to[i] = obj;
+	}
+	EndArray();
+}
+
 //==========================================================================
 //
 // Writes out all collected objects
@@ -761,6 +792,89 @@ void FSerializer::ReadObjects(bool hubtravel)
 	}
 }
 
+void FSerializer::ReadObjectsFrom(TMap<size_t, TObjPtr<DObject*>>& from)
+{
+	if (!isReading())
+		return;
+
+	// Reserialize objects based on their existing objects, this way we don't have to constantly
+	// destroy and create new objects.
+	r->mDObjects.Resize(from.CountUsed());
+	TMap<size_t, TObjPtr<DObject*>>::Iterator it = { from };
+	TMap<size_t, TObjPtr<DObject*>>::Pair* pair = nullptr;
+	while (it.NextPair(pair))
+		r->mDObjects[pair->Key] = pair->Value;
+
+	if (BeginArray("objects"))
+	{
+		bool foundErrors = false;
+		TArray<DObject*> serialized = {};
+
+		// Do an initial pass to generate any missing objects first that must be present
+		// (only those that were actually serialized).
+		const size_t size = ArraySize();
+		for (size_t i = 0u; i < size; ++i)
+		{
+			if (BeginObject(nullptr))
+			{
+				FString clsName = {};
+				uint32_t index = 0u;
+				Serialize(*this, "classtype", clsName, nullptr);
+				Serialize(*this, "index", index, nullptr);
+
+				DObject* obj = nullptr;
+				PClass* cls = PClass::FindClass(clsName);
+				if (cls == nullptr)
+				{
+					Printf(TEXTCOLOR_RED "Unknown object class '%s' in snapshot\n", clsName.GetChars());
+					foundErrors = true;
+					r->mDObjects[index] = nullptr;
+				}
+				else
+				{
+					obj = r->mDObjects[index];
+					if (obj == nullptr)
+					{
+						obj = cls->CreateNew();
+						r->mDObjects[index] = obj;
+					}
+				}
+				serialized.Push(obj);
+				EndObject();
+			}
+		}
+
+		r->mObjectsRead = true;
+		if (!foundErrors)
+		{
+			// Do a second pass that actually serializes all the objects now that the pointers
+			// are all set properly.
+			r->mObjects.Last().mIndex = 0;
+			for (auto obj : serialized)
+			{
+				if (BeginObject(nullptr))
+				{
+					if (obj != nullptr)
+					{
+						obj->SerializeUserVars(*this);
+						obj->Serialize(*this);
+					}
+					EndObject();
+				}
+			}
+		}
+
+		if (foundErrors)
+		{
+			Printf(TEXTCOLOR_RED "Failed to restore all objects in snapshot\n");
+			mErrors++;
+			mObjectErrors++;
+		}
+
+		EndArray();
+	}
+}
+
 //==========================================================================
 //
 //
@@ -785,11 +899,20 @@ const char *FSerializer::GetOutput(unsigned *len)
 //
 //==========================================================================
 
-FCompressedBuffer FSerializer::GetCompressedOutput()
+FCompressedBuffer FSerializer::GetCompressedOutput(TMap<size_t, TObjPtr<DObject*>>* objMap, TArray<DObject*>* fullSerialize)
 {
-	if (isReading()) return{ 0,0,0,0,0,nullptr };
+	if (isReading())
+	{
+		if (objMap != nullptr)
+			objMap->Clear();
+		return { 0,0,0,0,0,nullptr };
+	}
+
 	FCompressedBuffer buff;
-	WriteObjects();
+	if (objMap != nullptr)
+		WriteObjectsTo(*objMap, fullSerialize);
+	else
+		WriteObjects();
 	EndObject();
 	buff.filename = nullptr;
 	buff.mSize = (unsigned)w->mOutString.GetSize();

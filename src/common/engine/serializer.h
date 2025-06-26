@@ -11,8 +11,6 @@
 #include "dictionary.h"
 #include "bonecomponents.h"
 
-extern bool save_full;
-
 struct FWriter;
 struct FReader;
 class PClass;
@@ -71,10 +69,12 @@ public:
 	FWriter *w = nullptr;
 	FReader *r = nullptr;
 	bool soundNamesAreUnique = false; // While in GZDoom, sound names are unique, that isn't universally true - let the serializer handle both cases with a flag.
+	bool save_full = false;	// Should only be used for prediction snapshots.
 
 	unsigned ArraySize();
 	void WriteKey(const char *key);
 	void WriteObjects();
+	void WriteObjectsTo(TMap<size_t, TObjPtr<DObject*>>& to, TArray<DObject*>* fullSerialize = nullptr);
 
 private:
 	virtual void CloseReaderCustom() {}
@@ -90,6 +90,7 @@ public:
 	bool OpenReader(const char *buffer, size_t length);
 	bool OpenReader(FileSys::FCompressedBuffer *input);
 	void Close();
+	void ReadObjectsFrom(TMap<size_t, TObjPtr<DObject*>>& from);
 	void ReadObjects(bool hubtravel);
 	bool BeginObject(const char *name);
 	void EndObject();
@@ -101,7 +102,7 @@ public:
 	unsigned GetSize(const char *group);
 	const char *GetKey();
 	const char *GetOutput(unsigned *len = nullptr);
-	FileSys::FCompressedBuffer GetCompressedOutput();
+	FileSys::FCompressedBuffer GetCompressedOutput(TMap<size_t, TObjPtr<DObject*>>* objMap = nullptr, TArray<DObject*>* fullSerialize = nullptr);
 	// The sprite serializer is a special case because it is needed by the VM to handle its 'spriteid' type.
 	virtual FSerializer &Sprite(const char *key, int32_t &spritenum, int32_t *def);
 	// This is only needed by the type system.
