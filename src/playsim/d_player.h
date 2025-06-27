@@ -311,7 +311,7 @@ public:
 	player_t &operator= (const player_t &p) = delete;
 	void CopyFrom(player_t &src, bool copyPSP);
 
-	void Serialize(FSerializer &arc);
+	void Serialize(FSerializer &arc, bool fromPrediction = false);
 	size_t PropagateMark();
 
 	void SetLogNumber (int num);

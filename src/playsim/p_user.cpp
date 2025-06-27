@@ -567,7 +567,7 @@ struct
 		arc.save_full = true;
 		if (arc.OpenWriter(false))
 		{
-			player.Serialize(arc);
+			player.Serialize(arc, true);
 
 			// Store the current state of the pawns' physics lists to try and best restore it when unpredicting.
 			BackupActor(mo, NAME_PlayerPawn);
@@ -643,7 +643,7 @@ struct
 		auto& invSelField = mo->PointerVar<AActor*>(NAME_InvSel);
 		auto invSel = invSelField;
 
-		player.Serialize(arc);
+		player.Serialize(arc, true);
 		arc.Close();
 
 		player.camera = curCam;
@@ -1909,7 +1909,7 @@ void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float 
 void P_PredictPlayer ()
 {
 	auto& player = players[consoleplayer];
-	if (demoplayback
+	if (demoplayback || gamestate != GS_LEVEL
 		|| player.mo == nullptr || player.playerstate != PST_LIVE
 		|| (!netgame && cl_debugprediction <= 0))
 	{
@@ -2007,7 +2007,7 @@ void P_UnPredictPlayer ()
 	PredictionData.RestoreWorld();
 }
 
-void player_t::Serialize(FSerializer &arc)
+void player_t::Serialize(FSerializer &arc, bool fromPrediction)
 {
 	FString skinname;
 
@@ -2017,14 +2017,19 @@ void player_t::Serialize(FSerializer &arc)
 		("playerstate", playerstate)
 		("cmd", cmd);
 
-	if (arc.isReading())
+	// We don't want to touch these while restoring from predicting since it'll
+	// cause existing handles to become corrupted.
+	if (!fromPrediction)
 	{
-		userinfo.Reset(mo->Level->PlayerNum(this));
-		ReadUserInfo(arc, userinfo, skinname);
-	}
-	else
-	{
-		WriteUserInfo(arc, userinfo);
+		if (arc.isReading())
+		{
+			userinfo.Reset(mo->Level->PlayerNum(this));
+			ReadUserInfo(arc, userinfo, skinname);
+		}
+		else
+		{
+			WriteUserInfo(arc, userinfo);
+		}
 	}
 
 	arc("desiredfov", DesiredFOV)
@@ -2105,16 +2110,19 @@ void player_t::Serialize(FSerializer &arc)
 		("angleoffsettargets", angleOffsetTargets)
 		("lastsafepos", LastSafePos);
 
-	if (arc.isWriting ())
+	if (!fromPrediction)
 	{
-		// If the player reloaded because they pressed +use after dying, we
-		// don't want +use to still be down after the game is loaded.
-		oldbuttons = ~0;
-		original_oldbuttons = ~0;
-	}
-	if (skinname.IsNotEmpty())
-	{
-		userinfo.SkinChanged(skinname.GetChars(), CurrentPlayerClass);
+		if (arc.isWriting())
+		{
+			// If the player reloaded because they pressed +use after dying, we
+			// don't want +use to still be down after the game is loaded.
+			oldbuttons = ~0;
+			original_oldbuttons = ~0;
+		}
+		if (skinname.IsNotEmpty())
+		{
+			userinfo.SkinChanged(skinname.GetChars(), CurrentPlayerClass);
+		}
 	}
 }
 
