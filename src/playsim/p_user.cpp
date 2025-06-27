@@ -642,6 +642,7 @@ struct
 		const int invTics = player.inventorytics;
 		auto& invSelField = mo->PointerVar<AActor*>(NAME_InvSel);
 		auto invSel = invSelField;
+		DPSprite* pspHead = player.psprites; // These don't get backed up properly.
 
 		player.Serialize(arc, true);
 		arc.Close();
@@ -650,6 +651,7 @@ struct
 		player.settings_controller = settingsController;
 		player.inventorytics = invTics;
 		invSelField = invSel;
+		player.psprites = pspHead;
 
 		// Now that everything's data has been restored, relink them into the world properly.
 		mo = player.mo;
