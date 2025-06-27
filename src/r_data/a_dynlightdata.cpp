@@ -91,7 +91,7 @@ FSerializer &Serialize(FSerializer &arc, const char *key, TDeletingArray<FLightD
 {
 	if (arc.isWriting())
 	{
-		if (value.Size() == 0) return arc;	// do not save empty arrays
+		if (!arc.save_full && value.Size() == 0) return arc;	// do not save empty arrays
 	}
 	bool res = arc.BeginArray(key);
 	if (arc.isReading())

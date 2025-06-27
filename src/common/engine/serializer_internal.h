@@ -231,7 +231,7 @@ FSerializer &SerializePointer(FSerializer &arc, const char *key, T *&value, T **
 {
 	assert(base != nullptr);
 	assert(count > 0);
-	if (arc.isReading() || !arc.w->inObject() || defval == nullptr || value != *defval)
+	if (arc.isReading() || !arc.canSkip() || defval == nullptr || value != *defval)
 	{
 		int64_t vv = -1;
 		if (value != nullptr)

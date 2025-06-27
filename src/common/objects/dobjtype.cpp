@@ -144,7 +144,11 @@ bool PClass::ReadAllFields(FSerializer &ar, void *addr) const
 		ar.mErrors++;
 		return false;
 	}
-	while ((key = ar.GetKey()))
+	key = ar.GetKey();
+	// Check if it's a locally serialized object.
+	if (!strcmp(key, "index"))
+		key = ar.GetKey();
+	while (key)
 	{
 		if (strncmp(key, "class:", 6))
 		{
@@ -175,6 +179,7 @@ bool PClass::ReadAllFields(FSerializer &ar, void *addr) const
 			DPrintf(DMSG_ERROR, "Unknown superclass %s of class %s\n",
 				key+6, TypeName.GetChars());
 		}
+		key = ar.GetKey();
 	}
 	return readsomething || !foundsomething;
 }

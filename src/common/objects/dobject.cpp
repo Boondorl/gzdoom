@@ -577,7 +577,7 @@ void DObject::Serialize(FSerializer &arc)
 		
 	ObjectFlags |= OF_SerialSuccess;
 
-	if (arc.isReading() && (ObjectFlags & OF_Networked))
+	if (!arc.save_full && arc.isReading() && (ObjectFlags & OF_Networked))
 	{
 		ClearNetworkID();
 		EnableNetworking(true);

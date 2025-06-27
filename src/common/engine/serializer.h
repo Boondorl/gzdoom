@@ -285,7 +285,7 @@ FSerializer &Serialize(FSerializer &arc, const char *key, TArray<T, TT> &value, 
 {
 	if (arc.isWriting())
 	{
-		if (value.Size() == 0 && key) return arc;	// do not save empty arrays
+		if (!arc.save_full && value.Size() == 0 && key) return arc;	// do not save empty arrays
 	}
 	bool res = arc.BeginArray(key);
 	if (arc.isReading())
@@ -310,7 +310,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, TPointer<T>& value, TP
 {
 	if (arc.isWriting())
 	{
-		if (value.Data() == nullptr && key) return arc;
+		if (!arc.save_full && value.Data() == nullptr && key) return arc;
 	}
 	bool res = arc.BeginArray(key);
 	if (arc.isReading())
