@@ -513,6 +513,9 @@ struct
 			if (BackedUpObjects.Find(mo) < BackedUpObjects.Size())
 				mo->PostSerialize();
 
+			if (mo->player != nullptr)
+				NetworkEntityManager::SetClientNetworkEntity(mo, mo->player - players);
+
 			auto exists = BackupActors.CheckKey(key);
 			if (exists != nullptr)
 				exists->Restore(*mo);
