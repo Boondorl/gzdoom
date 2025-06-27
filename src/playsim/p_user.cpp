@@ -148,12 +148,14 @@ CUSTOM_CVAR(Float, fov, 90.f, CVAR_ARCHIVE | CVAR_USERINFO | CVAR_NOINITCALL)
 struct
 {
 	bool bWorldPredicting = false;
-	int LastPredictedTic = -1;
+	bool bResetPrediction = false;
+	int LastPredictedTic = 0;
 
 	struct {
-		DVector3 LastPredictedPosition = { 0.0, 0.0, 0.0 };
-		int LastPredictedPortalGroup = -1;
-	} PredictedPos = {};
+		DVector3 Pos = { 0.0, 0.0, 0.0 };
+		int PortalGroup = -1;
+		int Tic = -1;
+	} LastLocation = {};
 
 	struct ActorBackup {
 		struct ListBackup {
@@ -555,8 +557,9 @@ struct
 			return;
 
 		auto mo = player.mo;
-		bWorldPredicting = true;
+		bWorldPredicting = bResetPrediction = true;
 		BackupLevel = mo->Level;
+		LastPredictedTic = gametic;
 
 		FRandom::SaveRNGState(RNGBackup);
 
@@ -589,7 +592,7 @@ struct
 		// TODO: These should be deprecated in favor of just prediction checking these actions...
 		mo->flags &= ~MF_PICKUP;
 		mo->flags2 &= ~MF2_PUSHWALL;
-		player.cheats |= CF_PREDICTING;
+		player.cheats |= CF_PREDICTING; // This has to be kept for backwards compat, but bWorldPredicting should be used instead.
 	}
 
 	void RestoreWorld()
@@ -620,7 +623,7 @@ struct
 			while (it.NextPair(pair))
 				CheckDestruction(pair->Value);
 
-			// These need to be unlinked before restoring to ensure whatever flags they
+			// These need to be unlinked before restoring to ensure whatever properties they
 			// currently have are respected.
 			UnlinkActor(mo);
 			UnlinkActor(mo->alternative);
@@ -679,10 +682,6 @@ size_t PropagatePredictionData()
 
 	return PredictionData.PropagateMark();
 }
-
-static DVector3 LastPredictedPosition;
-static int LastPredictedPortalGroup;
-static int LastPredictedTic;
 
 // [GRB] Custom player classes
 TArray<FPlayerClass> PlayerClasses;
@@ -1886,9 +1885,9 @@ void P_PlayerThink (player_t *player)
 
 void P_PredictionLerpReset()
 {
-	LastPredictedPosition = DVector3{};
-	LastPredictedPortalGroup = 0;
-	LastPredictedTic = -1;
+	PredictionData.LastLocation.Pos.Zero();
+	PredictionData.LastLocation.PortalGroup = -1;
+	PredictionData.LastLocation.Tic = -1;
 }
 
 void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float scale, float threshold, float minMove)
@@ -1907,179 +1906,85 @@ void P_LerpCalculate(AActor* pmo, const DVector3& from, DVector3 &result, float 
 	result = pmo->Vec3Offset(-diff.X, -diff.Y, -diff.Z);
 }
 
-template<class nodetype, class linktype>
-void BackupNodeList(AActor *act, nodetype *head, nodetype *linktype::*otherlist, TArray<nodetype*, nodetype*> &prevbackup, TArray<linktype *, linktype *> &otherbackup)
+void P_PredictPlayer ()
 {
-	// The ordering of the touching_sectorlist needs to remain unchanged
-	// Also store a copy of all previous sector_thinglist nodes
-	prevbackup.Clear();
-	otherbackup.Clear();
-
-	for (auto mnode = head; mnode != nullptr; mnode = mnode->m_tnext)
-	{
-		otherbackup.Push(mnode->m_sector);
-
-		for (auto snode = mnode->m_sector->*otherlist; snode; snode = snode->m_snext)
-		{
-			if (snode->m_thing == act)
-			{
-				prevbackup.Push(snode->m_sprev);
-				break;
-			}
-		}
-	}
-}
-
-template<class nodetype, class linktype>
-nodetype *RestoreNodeList(AActor *act, nodetype *linktype::*otherlist, TArray<nodetype*, nodetype*> &prevbackup, TArray<linktype *, linktype *> &otherbackup)
-{
-	nodetype* head = NULL;
-	for (auto i = otherbackup.Size(); i-- > 0;)
-	{
-		head = P_AddSecnode(otherbackup[i], act, head, otherbackup[i]->*otherlist);
-	}
-	//act->touching_sectorlist = ctx.sector_list;	// Attach to thing
-	//ctx.sector_list = NULL;		// clear for next time
-
-	// In the old code this block never executed because of the commented-out NULL assignment above. Needs to be checked
-	nodetype* node = head;
-	while (node)
-	{
-		if (node->m_thing == NULL)
-		{
-			if (node == head)
-				head = node->m_tnext;
-			node = P_DelSecnode(node, otherlist);
-		}
-		else
-		{
-			node = node->m_tnext;
-		}
-	}
-
-	nodetype *snode;
-
-	// Restore sector thinglist order
-	for (auto i = otherbackup.Size(); i-- > 0;)
-	{
-		// If we were already the head node, then nothing needs to change
-		if (prevbackup[i] == NULL)
-			continue;
-
-		for (snode = otherbackup[i]->*otherlist; snode; snode = snode->m_snext)
-		{
-			if (snode->m_thing == act)
-			{
-				if (snode->m_sprev)
-					snode->m_sprev->m_snext = snode->m_snext;
-				else
-					snode->m_sector->*otherlist = snode->m_snext;
-				if (snode->m_snext)
-					snode->m_snext->m_sprev = snode->m_sprev;
-
-				snode->m_sprev = prevbackup[i];
-
-				// At the moment, we don't exist in the list anymore, but we do know what our previous node is, so we set its current m_snext->m_sprev to us.
-				if (snode->m_sprev->m_snext)
-					snode->m_sprev->m_snext->m_sprev = snode;
-				snode->m_snext = snode->m_sprev->m_snext;
-				snode->m_sprev->m_snext = snode;
-				break;
-			}
-		}
-	}
-	return head;
-}
-
-void P_PredictPlayer (player_t *player)
-{
-	int maxtic;
-
-	if (demoplayback ||
-		player->mo == NULL ||
-		player != player->mo->Level->GetConsolePlayer() ||
-		player->playerstate != PST_LIVE ||
-		(!netgame && cl_debugprediction == 0) ||
-		/*player->morphTics ||*/
-		(player->cheats & CF_PREDICTING))
-	{
-		return;
-	}
-
-	maxtic = ClientTic;
-
-	if (gametic == maxtic)
+	auto& player = players[consoleplayer];
+	if (demoplayback
+		|| player.mo == nullptr || player.playerstate != PST_LIVE
+		|| (!netgame && cl_debugprediction <= 0))
 	{
 		return;
 	}
 
 	PredictionData.BackupWorld();
+	if (ClientTic <= PredictionData.LastPredictedTic)
+		return;
 
 	// This essentially acts like a mini P_Ticker where only the stuff relevant to the client is actually
 	// called. Call order is preserved.
 	bool rubberband = false, rubberbandLimit = false;
 	DVector3 rubberbandPos = {};
-	const bool canRubberband = LastPredictedTic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
+	const bool canRubberband = PredictionData.bResetPrediction && PredictionData.LastLocation.Tic >= 0 && cl_rubberband_scale > 0.0f && cl_rubberband_scale < 1.0f;
 	const double rubberbandThreshold = max<float>(cl_rubberband_minmove, cl_rubberband_threshold);
-	for (int i = gametic; i < maxtic; ++i)
+	for (int i = PredictionData.LastPredictedTic; i < ClientTic; ++i)
 	{
 		// Make sure any portal paths have been cleared from the previous movement.
 		R_ClearInterpolationPath();
 		r_NoInterpolate = false;
 		// Because we're always predicting, this will get set by teleporters and then can never unset itself in the renderer properly.
-		player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
+		player.mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
 		// Got snagged on something. Start correcting towards the player's final predicted position. We're
 		// being intentionally generous here by not really caring how the player got to that position, only
 		// that they ended up in the same spot on the same tick.
-		if (canRubberband && LastPredictedTic == i)
+		if (canRubberband && PredictionData.LastLocation.Tic == i)
 		{
-			DVector3 diff = player->mo->Pos() - LastPredictedPosition;
-			diff += player->mo->Level->Displacements.getOffset(player->mo->Sector->PortalGroup, LastPredictedPortalGroup);
+			DVector3 diff = player.mo->Pos() - PredictionData.LastLocation.Pos;
+			diff += player.mo->Level->Displacements.getOffset(player.mo->Sector->PortalGroup, PredictionData.LastLocation.PortalGroup);
 			double dist = diff.LengthSquared();
 			if (dist >= EQUAL_EPSILON * EQUAL_EPSILON && dist > rubberbandThreshold * rubberbandThreshold)
 			{
 				rubberband = true;
-				rubberbandPos = player->mo->Pos();
+				rubberbandPos = player.mo->Pos();
 				rubberbandLimit = cl_rubberband_limit > 0.0f && dist > cl_rubberband_limit * cl_rubberband_limit;
 			}
 		}
 
-		player->oldbuttons = player->cmd.buttons;
-		player->cmd = LocalCmds[i % LOCALCMDTICS];
+		player.oldbuttons = player.cmd.buttons;
+		player.cmd = LocalCmds[i % LOCALCMDTICS];
 		if (paused)
 			continue;
 
-		player->mo->ClearInterpolation();
-		player->mo->ClearFOVInterpolation();
-		P_PlayerThink(player);
-		player->mo->CallTick();
+		player.mo->ClearInterpolation();
+		player.mo->ClearFOVInterpolation();
+		P_PlayerThink(&player);
+		player.mo->CallTick();
 	}
 
 	if (rubberband)
 	{
 		DPrintf(DMSG_NOTIFY, "Prediction mismatch at (%.3f, %.3f, %.3f)\nExpected: (%.3f, %.3f, %.3f)\nCorrecting to (%.3f, %.3f, %.3f)\n",
-			LastPredictedPosition.X, LastPredictedPosition.Y, LastPredictedPosition.Z,
+			PredictionData.LastLocation.Pos.X, PredictionData.LastLocation.Pos.Y, PredictionData.LastLocation.Pos.Z,
 			rubberbandPos.X, rubberbandPos.Y, rubberbandPos.Z,
-			player->mo->X(), player->mo->Y(), player->mo->Z());
+			player.mo->X(), player.mo->Y(), player.mo->Z());
 
 		if (rubberbandLimit)
 		{
 			// If too far away, instantly snap the player's view to their correct position.
-			player->mo->renderflags |= RF_NOINTERPOLATEVIEW;
+			player.mo->renderflags |= RF_NOINTERPOLATEVIEW;
 		}
 		else
 		{
 			R_ClearInterpolationPath();
-			player->mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
+			player.mo->renderflags &= ~RF_NOINTERPOLATEVIEW;
 
 			DVector3 snapPos = {};
-			P_LerpCalculate(player->mo, LastPredictedPosition, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
-			player->mo->PrevPortalGroup = LastPredictedPortalGroup;
-			player->mo->Prev = LastPredictedPosition;
-			const double zOfs = player->viewz - player->mo->Z();
-			player->mo->SetXYZ(snapPos);
-			player->viewz = snapPos.Z + zOfs;
+			P_LerpCalculate(player.mo, PredictionData.LastLocation.Pos, snapPos, cl_rubberband_scale, cl_rubberband_threshold, cl_rubberband_minmove);
+			player.mo->PrevPortalGroup = PredictionData.LastLocation.PortalGroup;
+			player.mo->Prev = PredictionData.LastLocation.Pos;
+			const double zOfs = player.viewz - player.mo->Z();
+			player.mo->SetXYZ(snapPos);
+			player.viewz = snapPos.Z + zOfs;
 		}
 	}
 	else if (paused)
@@ -2087,11 +1992,14 @@ void P_PredictPlayer (player_t *player)
 		r_NoInterpolate = true;
 	}
 
+	PredictionData.LastPredictedTic = ClientTic;
+	PredictionData.bResetPrediction = false;
+
 	// This is intentionally done after rubberbanding starts since it'll automatically smooth itself towards
 	// the right spot until it reaches it.
-	LastPredictedTic = maxtic;
-	LastPredictedPosition = player->mo->Pos();
-	LastPredictedPortalGroup = player->mo->Level->PointInSector(LastPredictedPosition)->PortalGroup;
+	PredictionData.LastLocation.Pos = player.mo->Pos();
+	PredictionData.LastLocation.PortalGroup = player.mo->Level->PointInSector(PredictionData.LastLocation.Pos)->PortalGroup;
+	PredictionData.LastLocation.Tic = ClientTic;
 }
 
 void P_UnPredictPlayer ()

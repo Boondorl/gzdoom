@@ -2019,8 +2019,7 @@ void TryRunTics()
 		// tic passes this isn't guaranteed to happen since it's capped to 35 in advance).
 		if (ClientTic > startCommand)
 		{
-			P_UnPredictPlayer();
-			P_PredictPlayer(&players[consoleplayer]);
+			P_PredictPlayer();
 			S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
 		}
 
@@ -2062,7 +2061,7 @@ void TryRunTics()
 			break;
 		}
 	}
-	P_PredictPlayer(&players[consoleplayer]);
+	P_PredictPlayer();
 	S_UpdateSounds(players[consoleplayer].camera);	// Update sounds only after predicting the client's newest position.
 
 	// These should use the actual tics since they're not actually tied to the gameplay logic.
