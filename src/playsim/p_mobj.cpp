@@ -4242,7 +4242,47 @@ void AActor::CheckPortalTransition(bool islinked)
 			else break;
 		}
 	}
-	if (islinked && moved) LinkToWorld(&ctx);
+	if (islinked)
+	{
+		// Check if our head is clipping through a portal. If so, make sure to properly relink so purely vertical movements
+		// will still add us to the correct spot in the blockmap, otherwise things won't be able to hit us well. The bottom
+		// also needs to be double checked because the blockmap doesn't care about floor height.
+		const bool didMove = moved;
+		if (!Sector->PortalBlocksMovement(sector_t::ceiling) && Top() > Sector->GetPortalPlaneZ(sector_t::ceiling))
+		{
+			if (!moved)
+				moved = !(renderflags2 & RF2_ABOVEPORTAL);
+			renderflags2 |= RF2_ABOVEPORTAL;
+		}
+		else
+		{
+			if (!moved)
+				moved = (renderflags2 & RF2_ABOVEPORTAL);
+			renderflags2 &= ~RF2_ABOVEPORTAL;
+		}
+		if (!Sector->PortalBlocksMovement(sector_t::floor) && Z() < Sector->GetPortalPlaneZ(sector_t::floor))
+		{
+			if (!moved)
+				moved = !(renderflags2 & RF2_BELOWPORTAL);
+			renderflags2 |= RF2_BELOWPORTAL;
+		}
+		else
+		{
+			if (!moved)
+				moved = (renderflags2 & RF2_BELOWPORTAL);
+			renderflags2 &= ~RF2_BELOWPORTAL;
+		}
+		if (moved)
+		{
+			if (!didMove)
+				UnlinkFromWorld(&ctx);
+			LinkToWorld(&ctx);
+		}
+	}
+	else
+	{
+		renderflags2 &= ~(RF2_ABOVEPORTAL | RF2_BELOWPORTAL);
+	}
 }
 
 DEFINE_ACTION_FUNCTION(AActor, CheckPortalTransition)

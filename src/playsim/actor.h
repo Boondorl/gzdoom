@@ -509,6 +509,8 @@ enum ActorRenderFlag2
 	RF2_SQUAREPIXELS			= 0x0100,	// apply +ROLLSPRITE scaling math so that non rolling sprites get the same scaling
 	RF2_STRETCHPIXELS			= 0x0200,	// don't apply SQUAREPIXELS for ROLLSPRITES
 	RF2_LIGHTMULTALPHA			= 0x0400,	// attached lights use alpha as intensity multiplier
+	RF2_ABOVEPORTAL				= 0x0800,	// Top is currently clipping through a portal.
+	RF2_BELOWPORTAL				= 0x1000,	// Feet are currently below a portal under the floor.
 };
 
 // This translucency value produces the closest match to Heretic's TINTTAB.
