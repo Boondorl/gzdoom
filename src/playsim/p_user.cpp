@@ -358,6 +358,7 @@ struct
 					}
 				}
 
+				int reached = 0;
 				for (msecnode_t* node = mo.touching_sectorlist; node != nullptr; node = node->m_tnext)
 				{
 					auto prev = PrevTouchingSectors.CheckKey(node->m_sector);
@@ -367,6 +368,7 @@ struct
 						continue;
 					}
 
+					++reached;
 					if (prev->bHead)
 					{
 						if (node->m_sector->touching_thinglist != node)
@@ -415,10 +417,14 @@ struct
 						}
 					}
 				}
+
+				if (reached < PrevTouchingSectors.CountUsed())
+					DPrintf(DMSG_WARNING, "Not all touching sector nodes were visited while unpredicting\n");
 			}
 			
 			if (!(mo.flags & MF_NOBLOCKMAP))
 			{
+				int reached = 0;
 				for (FBlockNode* node = mo.BlockNode; node != nullptr; node = node->NextBlock)
 				{
 					auto prev = PrevBlockNodes.CheckKey(node->BlockIndex);
@@ -428,6 +434,7 @@ struct
 						continue;
 					}
 
+					++reached;
 					if (prev->bHead)
 					{
 						auto head = mo.Level->blockmap.blocklinks[node->BlockIndex];
@@ -472,6 +479,9 @@ struct
 						}
 					}
 				}
+
+				if (reached < PrevBlockNodes.CountUsed())
+					DPrintf(DMSG_WARNING, "Not all touching blocknodes were visited while unpredicting\n");
 			}
 		}
 
