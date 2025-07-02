@@ -9,6 +9,7 @@ class LauncherBanner;
 class LauncherButtonbar;
 class PlayGamePage;
 class SettingsPage;
+class NetworkPage;
 struct WadStuff;
 
 class LauncherWindow : public Widget
@@ -32,6 +33,7 @@ private:
 
 	PlayGamePage* PlayGame = nullptr;
 	SettingsPage* Settings = nullptr;
+	NetworkPage* Network = nullptr;
 
 	int ExecResult = -1;
 };

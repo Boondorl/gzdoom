@@ -3,6 +3,7 @@
 #include "launcherbuttonbar.h"
 #include "playgamepage.h"
 #include "settingspage.h"
+#include "networkpage.h"
 #include "v_video.h"
 #include "version.h"
 #include "i_interface.h"
@@ -25,7 +26,7 @@ int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int defaultiwad, int*
 
 	DisplayWindow::RunLoop();
 
-	if(extraArgs) *extraArgs = launcher->PlayGame->GetExtraArgs();
+	if(extraArgs) *extraArgs = launcher->Network->IsStarting() ? launcher->Network->GetExtraArgs() : launcher->PlayGame->GetExtraArgs();
 
 	return launcher->ExecResult;
 }
@@ -40,9 +41,11 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int
 
 	PlayGame = new PlayGamePage(this, wads, numwads, defaultiwad);
 	Settings = new SettingsPage(this, autoloadflags);
+	Network = new NetworkPage(this, wads, numwads);
 
 	Pages->AddTab(PlayGame, "Play");
 	Pages->AddTab(Settings, "Settings");
+	Pages->AddTab(Network, "Multiplayer");
 
 	UpdateLanguage();
 
@@ -53,8 +56,9 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int
 void LauncherWindow::Start()
 {
 	Settings->Save();
+	Network->Save();
 
-	ExecResult = PlayGame->GetSelectedGame();
+	ExecResult = Network->IsStarting() ? Network->GetSelectedGame() : PlayGame->GetSelectedGame();
 	DisplayWindow::ExitLoop();
 }
 
@@ -68,8 +72,10 @@ void LauncherWindow::UpdateLanguage()
 {
 	Pages->SetTabText(PlayGame, GStrings.GetString("PICKER_TAB_PLAY"));
 	Pages->SetTabText(Settings, GStrings.GetString("OPTMNU_TITLE"));
+	Pages->SetTabText(Network, "Multiplayer");
 	PlayGame->UpdateLanguage();
 	Settings->UpdateLanguage();
+	Network->UpdateLanguage();
 	Buttonbar->UpdateLanguage();
 }
 
