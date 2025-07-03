@@ -15,9 +15,9 @@ struct WadStuff;
 class LauncherWindow : public Widget
 {
 public:
-	static int ExecModal(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags, FString * extraArgs = nullptr);
+	static int ExecModal(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags, FString * extraArgs = nullptr, FString* netArgs = nullptr);
 
-	LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags);
+	LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags);
 	void UpdateLanguage();
 
 	void Start();
@@ -35,5 +35,8 @@ private:
 	SettingsPage* Settings = nullptr;
 	NetworkPage* Network = nullptr;
 
-	int ExecResult = -1;
+	int* DefaultIWAD = nullptr;
+	int* DefaultNetIWAD = nullptr;
+
+	int ExecResult = 0;
 };

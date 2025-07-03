@@ -18,7 +18,7 @@ class JoinSubPage;
 class NetworkPage : public Widget
 {
 public:
-	NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads);
+	NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defNetIWAD);
 
 	void UpdateLanguage();
 	void Save();
@@ -27,6 +27,7 @@ public:
 	bool IsStarting() const;
 	int GetSelectedGame() const;
 	std::string GetExtraArgs() const;
+	void SetExtraArgs(const std::string& args);
 
 private:
 	void OnGeometryChanged() override;

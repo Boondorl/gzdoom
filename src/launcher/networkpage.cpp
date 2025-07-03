@@ -16,7 +16,7 @@
 EXTERN_CVAR(Bool, net_ticbalance)
 EXTERN_CVAR(Bool, net_extratic)
 
-NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads) : Widget(launcher), Launcher(launcher)
+NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defNetIWAD) : Widget(launcher), Launcher(launcher)
 {
 	ParametersEdit = new LineEdit(this);
 	ParametersLabel = new TextLabel(this);
@@ -48,7 +48,11 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads) 
 		IWADsList->AddItem(work.GetChars());
 	}
 
-	IWADsList->SetSelectedItem(0);
+	if (defNetIWAD >= 0 && defNetIWAD < numwads)
+	{
+		IWADsList->SetSelectedItem(defNetIWAD);
+		IWADsList->ScrollToItem(defNetIWAD);
+	}
 }
 
 void NetworkPage::Save()
@@ -57,6 +61,7 @@ void NetworkPage::Save()
 		return;
 
 	FString args = ParametersEdit->GetText();
+	args.AppendFormat("\\/"); // Make sure these don't get saved into the cvar.
 	if (hosting)
 		HostPage->BuildCommand(args);
 	else
@@ -98,6 +103,11 @@ int NetworkPage::GetSelectedGame() const
 std::string NetworkPage::GetExtraArgs() const
 {
 	return ParametersEdit->GetText();
+}
+
+void NetworkPage::SetExtraArgs(const std::string& args)
+{
+	ParametersEdit->SetText(args);
 }
 
 void NetworkPage::OnGeometryChanged()

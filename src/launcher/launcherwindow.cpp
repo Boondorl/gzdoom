@@ -13,35 +13,40 @@
 #include <zwidget/window/window.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
-int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags, FString * extraArgs)
+int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags, FString * extraArgs, FString* netArgs)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 615.0;
 	double windowHeight = 700.0;
 
-	auto launcher = std::make_unique<LauncherWindow>(wads, numwads, defaultiwad, autoloadflags);
+	auto launcher = std::make_unique<LauncherWindow>(wads, numwads, defaultiwad, defNetIWAD, autoloadflags);
 	launcher->SetFrameGeometry((screenSize.width - windowWidth) * 0.5, (screenSize.height - windowHeight) * 0.5, windowWidth, windowHeight);
 	if(extraArgs) launcher->PlayGame->SetExtraArgs(extraArgs->GetChars());
+	if (netArgs) launcher->Network->SetExtraArgs(netArgs->GetChars());
 	launcher->Show();
 
 	DisplayWindow::RunLoop();
 
-	if(extraArgs) *extraArgs = launcher->Network->IsStarting() ? launcher->Network->GetExtraArgs() : launcher->PlayGame->GetExtraArgs();
+	if(extraArgs && launcher->ExecResult > 0) *extraArgs = launcher->PlayGame->GetExtraArgs();
+	if (netArgs && launcher->ExecResult < 0) *netArgs = launcher->Network->GetExtraArgs();
 
 	return launcher->ExecResult;
 }
 
-LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int defaultiwad, int* autoloadflags) : Widget(nullptr, WidgetType::Window)
+LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags) : Widget(nullptr, WidgetType::Window)
 {
 	SetWindowTitle(GAMENAME);
+
+	DefaultIWAD = defaultiwad;
+	DefaultNetIWAD = defNetIWAD;
 
 	Banner = new LauncherBanner(this);
 	Pages = new TabWidget(this);
 	Buttonbar = new LauncherButtonbar(this);
 
-	PlayGame = new PlayGamePage(this, wads, numwads, defaultiwad);
+	PlayGame = new PlayGamePage(this, wads, numwads, defaultiwad ? *defaultiwad : 0);
 	Settings = new SettingsPage(this, autoloadflags);
-	Network = new NetworkPage(this, wads, numwads);
+	Network = new NetworkPage(this, wads, numwads, defNetIWAD ? *defNetIWAD : 0);
 
 	Pages->AddTab(PlayGame, "Play");
 	Pages->AddTab(Settings, "Settings");
@@ -58,13 +63,18 @@ void LauncherWindow::Start()
 	Settings->Save();
 	Network->Save();
 
-	ExecResult = Network->IsStarting() ? Network->GetSelectedGame() : PlayGame->GetSelectedGame();
+	if (DefaultIWAD)
+		*DefaultIWAD = PlayGame->GetSelectedGame();
+	if (DefaultNetIWAD)
+		*DefaultNetIWAD = Network->GetSelectedGame();
+
+	ExecResult = Network->IsStarting() ? -1 : 1;
 	DisplayWindow::ExitLoop();
 }
 
 void LauncherWindow::Exit()
 {
-	ExecResult = -1;
+	ExecResult = 0;
 	DisplayWindow::ExitLoop();
 }
 

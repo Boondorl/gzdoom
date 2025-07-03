@@ -53,6 +53,7 @@
 
 EXTERN_CVAR(Bool, queryiwad);
 EXTERN_CVAR(String, defaultiwad);
+EXTERN_CVAR(String, defaultnetiwad);
 EXTERN_CVAR(Bool, disableautoload)
 EXTERN_CVAR(Bool, autoloadlights)
 EXTERN_CVAR(Bool, autoloadbrightmaps)
@@ -585,6 +586,7 @@ FString FIWadManager::IWADPathFileSearch(const FString &file)
 }
 
 CVAR(String, extra_args, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
+CVAR(String, extra_netargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 
 int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char *iwad, const char *zdoom_wad, const char *optional_wad)
 {
@@ -754,7 +756,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 					  "iwads to the list beneath [IWADSearch.Directories]");
 #endif
 	}
-	int pick = 0;
+	int pick = 0, netPick = 0;
 
 	// Present the IWAD selection box.
 	bool alwaysshow = (queryiwad && !Args->CheckParm("-iwad") && !foundprio);
@@ -770,6 +772,18 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				if (basename.CompareNoCase(defaultiwad) == 0)
 				{
 					pick = i;
+					break;
+				}
+			}
+		}
+		if (defaultnetiwad[0] != '\0')
+		{
+			for (unsigned i = 0; i < picks.Size(); ++i)
+			{
+				FString& basename = mIWadInfos[picks[i].mInfoIndex].Name;
+				if (basename.CompareNoCase(defaultnetiwad) == 0)
+				{
+					netPick = i;
 					break;
 				}
 			}
@@ -794,15 +808,37 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				if (autoloadwidescreen) flags |= 8;
 
 				FString extraArgs = *extra_args;
+				FString netArgs = *extra_netargs;
 
-				pick = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, pick, flags, extraArgs);
-				if (pick >= 0)
+				int ret = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, pick, netPick, flags, extraArgs, netArgs);
+				if (ret)
 				{
 					extraArgs.StripLeftRight();
+					netArgs.StripLeftRight();
 
 					extra_args = extraArgs.GetChars();
-					
-					if(extraArgs.Len() > 0)
+					TArray<FString> realNetArgs = netArgs.Split("\\/");
+					if (realNetArgs.Size())
+					{
+						realNetArgs[0].StripLeftRight();
+						extra_netargs = realNetArgs[0].GetChars();
+					}
+					else
+					{
+						extra_netargs = netArgs.GetChars();
+					}
+
+					if (ret < 0)
+					{
+						pick = netPick;
+						for (auto& arg : realNetArgs)
+						{
+							arg.StripLeftRight();
+							if (arg.Len())
+								Args->AppendArgsString(arg);
+						}
+					}
+					else if (extraArgs.Len() > 0)
 					{
 						Args->AppendArgsString(extraArgs);
 					}
@@ -813,7 +849,10 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 					autoloadwidescreen = !!(flags & 8);
 
 					// The newly selected IWAD becomes the new default
-					defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
+					if (ret < 0)
+						defaultnetiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
+					else
+						defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
 				}
 				else
 				{
