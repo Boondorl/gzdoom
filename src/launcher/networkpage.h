@@ -74,10 +74,21 @@ private:
 	CheckboxLabel* ExtraTicCheckbox = nullptr;
 	CheckboxLabel* BalanceTicsCheckbox = nullptr;
 
+	TextLabel* GameModesLabel = nullptr;
+	CheckboxLabel* CoopCheckbox = nullptr;
+	CheckboxLabel* DeathmatchCheckbox = nullptr;
+	CheckboxLabel* TeamDeathmatchCheckbox = nullptr;
+	TextLabel* TeamLabel = nullptr;
+	LineEdit* TeamEdit = nullptr;
+
 	LineEdit* MaxPlayersEdit = nullptr;
 	LineEdit* PortEdit = nullptr;
 	TextLabel* MaxPlayersLabel = nullptr;
 	TextLabel* PortLabel = nullptr;
+
+	TextLabel* MaxPlayerHintLabel = nullptr;
+	TextLabel* PortHintLabel = nullptr;
+	TextLabel* TeamHintLabel = nullptr;
 };
 
 class JoinSubPage : public Widget
@@ -100,4 +111,11 @@ private:
 	LineEdit* AddressPortEdit = nullptr;
 	TextLabel* AddressLabel = nullptr;
 	TextLabel* AddressPortLabel = nullptr;
+
+	TextLabel* TeamDeathmatchLabel = nullptr;
+	TextLabel* TeamLabel = nullptr;
+	LineEdit* TeamEdit = nullptr;
+
+	TextLabel* PortHintLabel = nullptr;
+	TextLabel* TeamHintLabel = nullptr;
 };

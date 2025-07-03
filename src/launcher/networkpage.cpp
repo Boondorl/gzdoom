@@ -115,7 +115,7 @@ void NetworkPage::OnGeometryChanged()
 	const double w = GetWidth();
 	const double h = GetHeight();
 
-	const double wSize = w * 0.5 - 2.5;
+	const double wSize = w * 0.45 - 2.5;
 	double y = h - (ParametersLabel->GetPreferredHeight() + 2.0);
 
 	ParametersEdit->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight() + 2.0);
@@ -130,7 +130,7 @@ void NetworkPage::OnGeometryChanged()
 
 	IWADsList->SetFrameGeometry(0.0, 0.0, wSize, y);
 
-	const double xOfs = w * 0.5 + 2.5;
+	const double xOfs = w * 0.45 + 2.5;
 	StartPages->SetFrameGeometry(xOfs, 0.0, w - xOfs, h);
 }
 
@@ -180,12 +180,35 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	ExtraTicCheckbox->SetChecked(net_extratic);
 	BalanceTicsCheckbox->SetChecked(net_ticbalance);
 
+	GameModesLabel = new TextLabel(this);
+	CoopCheckbox = new CheckboxLabel(this);
+	DeathmatchCheckbox = new CheckboxLabel(this);
+	TeamDeathmatchCheckbox = new CheckboxLabel(this);
+	TeamLabel = new TextLabel(this);
+	TeamEdit = new LineEdit(this);
+
+	TeamEdit->SetMaxLength(3);
+	TeamEdit->SetNumericMode(true);
+
+	// These are intentionally not radio buttons, they just act similarly for clarity in the UI.
+	CoopCheckbox->FuncChanged = [this](bool on) { if (on) { DeathmatchCheckbox->SetChecked(false); TeamDeathmatchCheckbox->SetChecked(false); }};
+	DeathmatchCheckbox->FuncChanged = [this](bool on) { if (on) { CoopCheckbox->SetChecked(false); TeamDeathmatchCheckbox->SetChecked(false); }};
+	TeamDeathmatchCheckbox->FuncChanged = [this](bool on) { if (on) { CoopCheckbox->SetChecked(false); DeathmatchCheckbox->SetChecked(false); }};
+
 	MaxPlayersEdit = new LineEdit(this);
 	PortEdit = new LineEdit(this);
 	MaxPlayersLabel = new TextLabel(this);
 	PortLabel = new TextLabel(this);
 
+	MaxPlayersEdit->SetMaxLength(2);
+	MaxPlayersEdit->SetNumericMode(true);
 	MaxPlayersEdit->SetText("8");
+	PortEdit->SetMaxLength(5);
+	PortEdit->SetNumericMode(true);
+
+	MaxPlayerHintLabel = new TextLabel(this);
+	PortHintLabel = new TextLabel(this);
+	TeamHintLabel = new TextLabel(this);
 }
 
 void HostSubPage::OnHostButtonClicked()
@@ -210,6 +233,27 @@ void HostSubPage::BuildCommand(FString& args)
 	const int port = PortEdit->GetTextInt();
 	if (port > 0)
 		args.AppendFormat(" -port %d", port);
+
+	if (CoopCheckbox->GetChecked())
+	{
+		args.AppendFormat(" -coop");
+	}
+	else if (DeathmatchCheckbox->GetChecked())
+	{
+		args.AppendFormat(" -deathmatch");
+	}
+	else if (TeamDeathmatchCheckbox->GetChecked())
+	{
+		args.AppendFormat(" -deathmatch +teamplay 1");
+		int team = 255;
+		if (!TeamEdit->GetText().empty())
+		{
+			team = TeamEdit->GetTextInt();
+			if (team < 0 || team > 255)
+				team = 255;
+		}
+		args.AppendFormat(" +team %d", team);
+	}
 }
 
 void HostSubPage::UpdateLanguage()
@@ -225,8 +269,18 @@ void HostSubPage::UpdateLanguage()
 	ExtraTicCheckbox->SetText("Double Send Packets");
 	BalanceTicsCheckbox->SetText("Stabilize Connections (recommended)");
 
+	GameModesLabel->SetText("Game Modes:");
+	CoopCheckbox->SetText("Co-op");
+	DeathmatchCheckbox->SetText("Deathmatch");
+	TeamDeathmatchCheckbox->SetText("Team Deathmatch");
+	TeamLabel->SetText("Team:");
+
 	MaxPlayersLabel->SetText("Max Players:");
-	PortLabel->SetText("Custom Port:");
+	PortLabel->SetText("Host Port:");
+
+	MaxPlayerHintLabel->SetText("Max 64");
+	PortHintLabel->SetText("Default 5029");
+	TeamHintLabel->SetText("Max 254");
 }
 
 void HostSubPage::OnGeometryChanged()
@@ -240,14 +294,20 @@ void HostSubPage::OnGeometryChanged()
 	double y = YPadding;
 
 	MaxPlayersLabel->SetFrameGeometry(0.0, y, LabelOfsSize, MaxPlayersLabel->GetPreferredHeight());
-	MaxPlayersEdit->SetFrameGeometry(0.0 + MaxPlayersLabel->GetWidth(), y, 30.0, MaxPlayersLabel->GetPreferredHeight() + 2.0);
+	MaxPlayersEdit->SetFrameGeometry(MaxPlayersLabel->GetWidth(), y, 30.0, MaxPlayersLabel->GetPreferredHeight() + 2.0);
 	y += MaxPlayersLabel->GetPreferredHeight() + YPadding;
 
 	PortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, PortLabel->GetPreferredHeight());
-	PortEdit->SetFrameGeometry(0.0 + PortLabel->GetWidth(), y, 60.0, PortLabel->GetPreferredHeight() + 2.0);
+	PortEdit->SetFrameGeometry(PortLabel->GetWidth(), y, 60.0, PortLabel->GetPreferredHeight() + 2.0);
+
+	const double hintOfs = PortLabel->GetWidth() + PortEdit->GetWidth() + 30.0;
+	MaxPlayerHintLabel->SetFrameGeometry(hintOfs, YPadding, w - hintOfs, MaxPlayerHintLabel->GetPreferredHeight());
+	PortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, PortHintLabel->GetPreferredHeight());
+
 	y += PortLabel->GetPreferredHeight() + YPadding;
 
-	TicDupLabel->SetFrameGeometry(0.0, y, w, TicDupLabel->GetPreferredHeight());
+	const double optionsTop = y;
+	TicDupLabel->SetFrameGeometry(0.0, y, 100.0, TicDupLabel->GetPreferredHeight());
 	y += TicDupLabel->GetPreferredHeight();
 	TicDupList->SetFrameGeometry(0.0, y, 100.0, TicDupLabel->GetPreferredHeight() * (TicDupList->GetItemAmount() + 1));
 	y += TicDupList->GetHeight() + ExtraTicCheckbox->GetPreferredHeight();
@@ -258,16 +318,37 @@ void HostSubPage::OnGeometryChanged()
 	BalanceTicsCheckbox->SetFrameGeometry(0.0, y, w, BalanceTicsCheckbox->GetPreferredHeight());
 	y += BalanceTicsCheckbox->GetPreferredHeight() + YPadding;
 
-	NetModesLabel->SetFrameGeometry(0.0, y, w, NetModesLabel->GetPreferredHeight());
+	const double optionsBottom = y;
+	y = optionsTop;
+
+	constexpr double NetModeXOfs = 110.0;
+	NetModesLabel->SetFrameGeometry(NetModeXOfs, y, w - NetModeXOfs, NetModesLabel->GetPreferredHeight());
 	y += NetModesLabel->GetPreferredHeight();
 
-	AutoNetmodeCheckbox->SetFrameGeometry(0.0, y, w, AutoNetmodeCheckbox->GetPreferredHeight());
+	AutoNetmodeCheckbox->SetFrameGeometry(NetModeXOfs, y, w - NetModeXOfs, AutoNetmodeCheckbox->GetPreferredHeight());
 	y += AutoNetmodeCheckbox->GetPreferredHeight();
 
-	PacketServerCheckbox->SetFrameGeometry(0.0, y, w, PacketServerCheckbox->GetPreferredHeight());
+	PacketServerCheckbox->SetFrameGeometry(NetModeXOfs, y, w - NetModeXOfs, PacketServerCheckbox->GetPreferredHeight());
 	y += PacketServerCheckbox->GetPreferredHeight();
 
-	PeerToPeerCheckbox->SetFrameGeometry(0.0, y, w, PeerToPeerCheckbox->GetPreferredHeight());
+	PeerToPeerCheckbox->SetFrameGeometry(NetModeXOfs, y, w - NetModeXOfs, PeerToPeerCheckbox->GetPreferredHeight());
+
+	y = max<int>(optionsBottom, y) + 5.0;
+	GameModesLabel->SetFrameGeometry(0.0, y, w, GameModesLabel->GetPreferredHeight());
+	y += GameModesLabel->GetPreferredHeight();
+
+	CoopCheckbox->SetFrameGeometry(0.0, y, w, CoopCheckbox->GetPreferredHeight());
+	y += CoopCheckbox->GetPreferredHeight();
+
+	DeathmatchCheckbox->SetFrameGeometry(0.0, y, w, DeathmatchCheckbox->GetPreferredHeight());
+	y += DeathmatchCheckbox->GetPreferredHeight();
+
+	TeamDeathmatchCheckbox->SetFrameGeometry(0.0, y, 140.0, TeamDeathmatchCheckbox->GetPreferredHeight());
+	TeamLabel->SetFrameGeometry(TeamDeathmatchCheckbox->GetWidth() + 5.0, y, 45.0, TeamLabel->GetPreferredHeight());
+	TeamEdit->SetFrameGeometry(TeamDeathmatchCheckbox->GetWidth() + TeamLabel->GetWidth() + 5.0, y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
+	y += TeamLabel->GetPreferredHeight() + 2.0;
+
+	TeamHintLabel->SetFrameGeometry(TeamDeathmatchCheckbox->GetWidth() + TeamLabel->GetWidth() + 5.0, y, w, TeamHintLabel->GetPreferredHeight());
 
 	HostButton->SetFrameGeometry(0.0, h - 30.0, 100.0, 30.0);
 }
@@ -281,6 +362,19 @@ JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	AddressPortEdit = new LineEdit(this);
 	AddressLabel = new TextLabel(this);
 	AddressPortLabel = new TextLabel(this);
+
+	AddressPortEdit->SetMaxLength(5);
+	AddressPortEdit->SetNumericMode(true);
+
+	TeamDeathmatchLabel = new TextLabel(this);
+	TeamLabel = new TextLabel(this);
+	TeamEdit = new LineEdit(this);
+
+	TeamEdit->SetMaxLength(3);
+	TeamEdit->SetNumericMode(true);
+
+	PortHintLabel = new TextLabel(this);
+	TeamHintLabel = new TextLabel(this);
 }
 
 void JoinSubPage::OnJoinButtonClicked()
@@ -296,6 +390,15 @@ void JoinSubPage::BuildCommand(FString& args)
 		addr.AppendFormat(":%d", port);
 
 	args.AppendFormat(" -join %s", addr.GetChars());
+
+	int team = 255;
+	if (!TeamEdit->GetText().empty())
+	{
+		team = TeamEdit->GetTextInt();
+		if (team < 0 || team > 255)
+			team = 255;
+	}
+	args.AppendFormat(" +team %d", team);
 }
 
 void JoinSubPage::UpdateLanguage()
@@ -303,6 +406,12 @@ void JoinSubPage::UpdateLanguage()
 	JoinButton->SetText("Join Game");
 	AddressLabel->SetText("Host IP:");
 	AddressPortLabel->SetText("Host Port:");
+
+	TeamDeathmatchLabel->SetText("Team Deathmatch:");
+	TeamLabel->SetText("Team:");
+
+	PortHintLabel->SetText("Default 5029");
+	TeamHintLabel->SetText("Max 254");
 }
 
 void JoinSubPage::OnGeometryChanged()
@@ -316,11 +425,22 @@ void JoinSubPage::OnGeometryChanged()
 	double y = YPadding;
 
 	AddressLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressLabel->GetPreferredHeight());
-	AddressEdit->SetFrameGeometry(0.0 + AddressLabel->GetWidth(), y, 120.0, AddressLabel->GetPreferredHeight() + 2.0);
+	AddressEdit->SetFrameGeometry(AddressLabel->GetWidth(), y, 120.0, AddressLabel->GetPreferredHeight() + 2.0);
 	y += AddressLabel->GetPreferredHeight() + YPadding;
 
 	AddressPortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressPortLabel->GetPreferredHeight());
-	AddressPortEdit->SetFrameGeometry(0.0 + AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight() + 2.0);
+	AddressPortEdit->SetFrameGeometry(AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight() + 2.0);
+
+	const double hintOfs = AddressPortLabel->GetWidth() + AddressPortEdit->GetWidth() + 30.0;
+	PortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, PortHintLabel->GetPreferredHeight());
+	y += AddressLabel->GetPreferredHeight() + 17.0;
+
+	TeamDeathmatchLabel->SetFrameGeometry(0.0, y, w, TeamDeathmatchLabel->GetPreferredHeight());
+	y += TeamLabel->GetPreferredHeight() + 1.0;
+
+	TeamLabel->SetFrameGeometry(0.0, y, 45.0, TeamLabel->GetPreferredHeight());
+	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
+	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
 
 	JoinButton->SetFrameGeometry(0.0, h - 30.0, 100.0, 30.0);
 }
