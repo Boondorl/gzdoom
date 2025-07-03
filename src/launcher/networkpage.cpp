@@ -30,7 +30,6 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 
 	StartPages->AddTab(HostPage, "Host");
 	StartPages->AddTab(JoinPage, "Join");
-
 	StartPages->SetCurrentWidget(HostPage);
 
 	for (int i = 0; i < numwads; i++)
@@ -74,7 +73,12 @@ void NetworkPage::Save()
 	ParametersEdit->SetText(args.GetChars());
 }
 
-void NetworkPage::StartGame(bool host)
+bool NetworkPage::IsOnHostPage() const
+{
+	return StartPages->GetCurrentWidget() == HostPage;
+}
+
+void NetworkPage::SetHosting(bool host)
 {
 	if (host)
 	{
@@ -86,8 +90,6 @@ void NetworkPage::StartGame(bool host)
 		hosting = false;
 		joining = true;
 	}
-
-	Launcher->Start();
 }
 
 bool NetworkPage::IsStarting() const
@@ -147,9 +149,6 @@ void NetworkPage::UpdateLanguage()
 
 HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 {
-	HostButton = new PushButton(this);
-	HostButton->OnClick = [=]() { OnHostButtonClicked(); };
-
 	NetModesLabel = new TextLabel(this);
 	AutoNetmodeCheckbox = new CheckboxLabel(this);
 	PacketServerCheckbox = new CheckboxLabel(this);
@@ -209,11 +208,10 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	MaxPlayerHintLabel = new TextLabel(this);
 	PortHintLabel = new TextLabel(this);
 	TeamHintLabel = new TextLabel(this);
-}
 
-void HostSubPage::OnHostButtonClicked()
-{
-	MainTab->StartGame(true);
+	MaxPlayerHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
+	PortHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
+	TeamHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
 }
 
 void HostSubPage::BuildCommand(FString& args)
@@ -258,8 +256,6 @@ void HostSubPage::BuildCommand(FString& args)
 
 void HostSubPage::UpdateLanguage()
 {
-	HostButton->SetText("Host Game");
-
 	NetModesLabel->SetText("Networking Mode:");
 	AutoNetmodeCheckbox->SetText("Auto (recommended)");
 	PacketServerCheckbox->SetText("Packet-Server");
@@ -349,15 +345,10 @@ void HostSubPage::OnGeometryChanged()
 	y += TeamLabel->GetPreferredHeight() + 2.0;
 
 	TeamHintLabel->SetFrameGeometry(TeamDeathmatchCheckbox->GetWidth() + TeamLabel->GetWidth() + 5.0, y, w, TeamHintLabel->GetPreferredHeight());
-
-	HostButton->SetFrameGeometry(0.0, h - 30.0, 100.0, 30.0);
 }
 
 JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 {
-	JoinButton = new PushButton(this);
-	JoinButton->OnClick = [=]() { OnJoinButtonClicked(); };
-
 	AddressEdit = new LineEdit(this);
 	AddressPortEdit = new LineEdit(this);
 	AddressLabel = new TextLabel(this);
@@ -373,13 +364,11 @@ JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	TeamEdit->SetMaxLength(3);
 	TeamEdit->SetNumericMode(true);
 
-	PortHintLabel = new TextLabel(this);
+	AddressPortHintLabel = new TextLabel(this);
 	TeamHintLabel = new TextLabel(this);
-}
 
-void JoinSubPage::OnJoinButtonClicked()
-{
-	MainTab->StartGame(false);
+	AddressPortHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
+	TeamHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
 }
 
 void JoinSubPage::BuildCommand(FString& args)
@@ -403,14 +392,13 @@ void JoinSubPage::BuildCommand(FString& args)
 
 void JoinSubPage::UpdateLanguage()
 {
-	JoinButton->SetText("Join Game");
 	AddressLabel->SetText("Host IP:");
 	AddressPortLabel->SetText("Host Port:");
 
 	TeamDeathmatchLabel->SetText("Team Deathmatch:");
 	TeamLabel->SetText("Team:");
 
-	PortHintLabel->SetText("Default 5029");
+	AddressPortHintLabel->SetText("Default 5029");
 	TeamHintLabel->SetText("Max 254");
 }
 
@@ -432,7 +420,7 @@ void JoinSubPage::OnGeometryChanged()
 	AddressPortEdit->SetFrameGeometry(AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight() + 2.0);
 
 	const double hintOfs = AddressPortLabel->GetWidth() + AddressPortEdit->GetWidth() + 30.0;
-	PortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, PortHintLabel->GetPreferredHeight());
+	AddressPortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, AddressPortHintLabel->GetPreferredHeight());
 	y += AddressLabel->GetPreferredHeight() + 17.0;
 
 	TeamDeathmatchLabel->SetFrameGeometry(0.0, y, w, TeamDeathmatchLabel->GetPreferredHeight());
@@ -441,6 +429,4 @@ void JoinSubPage::OnGeometryChanged()
 	TeamLabel->SetFrameGeometry(0.0, y, 45.0, TeamLabel->GetPreferredHeight());
 	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
-
-	JoinButton->SetFrameGeometry(0.0, h - 30.0, 100.0, 30.0);
 }

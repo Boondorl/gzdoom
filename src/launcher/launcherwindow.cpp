@@ -58,8 +58,21 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, in
 	PlayGame->SetFocus();
 }
 
+bool LauncherWindow::IsInMultiplayer() const
+{
+	return Pages->GetCurrentWidget() == Network;
+}
+
+bool LauncherWindow::IsHosting() const
+{
+	return IsInMultiplayer() && Network->IsOnHostPage();
+}
+
 void LauncherWindow::Start()
 {
+	if (IsInMultiplayer())
+		Network->SetHosting(IsHosting());
+
 	Settings->Save();
 	Network->Save();
 

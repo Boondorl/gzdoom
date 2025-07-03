@@ -22,6 +22,8 @@ public:
 
 	void Start();
 	void Exit();
+	bool IsHosting() const;
+	bool IsInMultiplayer() const;
 
 private:
 	void OnClose() override;

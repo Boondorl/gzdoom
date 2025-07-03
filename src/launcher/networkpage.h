@@ -22,12 +22,13 @@ public:
 
 	void UpdateLanguage();
 	void Save();
-	void StartGame(bool host);
+	void SetHosting(bool host);
 
 	bool IsStarting() const;
 	int GetSelectedGame() const;
 	std::string GetExtraArgs() const;
 	void SetExtraArgs(const std::string& args);
+	bool IsOnHostPage() const;
 
 private:
 	void OnGeometryChanged() override;
@@ -59,11 +60,8 @@ public:
 
 private:
 	void OnGeometryChanged() override;
-	void OnHostButtonClicked();
 
 	NetworkPage* MainTab = nullptr;
-
-	PushButton* HostButton = nullptr;
 
 	TextLabel* NetModesLabel = nullptr;
 	CheckboxLabel* AutoNetmodeCheckbox = nullptr;
@@ -101,11 +99,8 @@ public:
 
 private:
 	void OnGeometryChanged() override;
-	void OnJoinButtonClicked();
 
 	NetworkPage* MainTab = nullptr;
-
-	PushButton* JoinButton = nullptr;
 
 	LineEdit* AddressEdit = nullptr;
 	LineEdit* AddressPortEdit = nullptr;
@@ -116,6 +111,6 @@ private:
 	TextLabel* TeamLabel = nullptr;
 	LineEdit* TeamEdit = nullptr;
 
-	TextLabel* PortHintLabel = nullptr;
+	TextLabel* AddressPortHintLabel = nullptr;
 	TextLabel* TeamHintLabel = nullptr;
 };
