@@ -58,6 +58,32 @@ struct WadStuff
 	FString Name;
 };
 
+struct FStartupSelectionInfo
+{
+	// Local game info
+	int DefaultIWAD = 0;
+	FString DefaultArgs = {};
+
+	// Net game info
+	int DefaultNetIWAD = 0;
+	bool bNetStart = false;
+	bool bHosting = false;
+	int DefaultNetPage = 0;
+	FString DefaultNetArgs = {};
+	FString AdditionalNetArgs = {}; // These ones shouldn't be saved.
+	int DefaultNetPlayers = 8;
+	int DefaultNetHostPort = 0;
+	int DefaultNetTicDup = 0;
+	int DefaultNetMode = -1;
+	int DefaultNetGameMode = -1;
+
+	FString DefaultNetAddress = {};
+	int DefaultNetJoinPort = 0;
+
+	FStartupSelectionInfo(int defIWAD, int defNetIWAD);
+	int SaveInfo();
+};
+
 
 extern FString endoomName;
 extern bool batchrun;

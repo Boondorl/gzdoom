@@ -11,6 +11,7 @@ class TextLabel;
 class PushButton;
 class TabWidget;
 struct WadStuff;
+struct FStartupSelectionInfo;
 
 class HostSubPage;
 class JoinSubPage;
@@ -18,18 +19,11 @@ class JoinSubPage;
 class NetworkPage : public Widget
 {
 public:
-	NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defNetIWAD);
-
+	NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info);
 	void UpdateLanguage();
-	void Save();
-	void SetHosting(bool host);
 	void UpdatePlayButton();
-
-	bool IsStarting() const;
-	int GetSelectedGame() const;
-	std::string GetExtraArgs() const;
-	void SetExtraArgs(const std::string& args);
-	bool IsOnHostPage() const;
+	bool IsInHost() const;
+	void SetValues(FStartupSelectionInfo& info) const;
 
 private:
 	void OnGeometryChanged() override;
@@ -47,17 +41,14 @@ private:
 	
 	LineEdit* SaveFileEdit = nullptr;
 	TextLabel* SaveFileLabel = nullptr;
-
-	bool hosting = false, joining = false;
 };
 
 class HostSubPage : public Widget
 {
 public:
-	HostSubPage(NetworkPage* main);
-
+	HostSubPage(NetworkPage* main, FStartupSelectionInfo& info);
 	void UpdateLanguage();
-	void BuildCommand(FString& args);
+	void SetValues(FStartupSelectionInfo& info) const;
 
 private:
 	void OnGeometryChanged() override;
@@ -93,10 +84,9 @@ private:
 class JoinSubPage : public Widget
 {
 public:
-	JoinSubPage(NetworkPage* main);
-
+	JoinSubPage(NetworkPage* main, FStartupSelectionInfo& info);
 	void UpdateLanguage();
-	void BuildCommand(FString& args);
+	void SetValues(FStartupSelectionInfo& info) const;
 
 private:
 	void OnGeometryChanged() override;

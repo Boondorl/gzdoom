@@ -11,19 +11,20 @@ class PlayGamePage;
 class SettingsPage;
 class NetworkPage;
 struct WadStuff;
+struct FStartupSelectionInfo;
 
 class LauncherWindow : public Widget
 {
 public:
-	static int ExecModal(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags, FString * extraArgs = nullptr, FString* netArgs = nullptr);
+	static int ExecModal(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags);
 
-	LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags);
+	LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags);
 	void UpdateLanguage();
 
 	void Start();
 	void Exit();
-	bool IsHosting() const;
 	bool IsInMultiplayer() const;
+	bool IsHosting() const;
 	void UpdatePlayButton();
 
 private:
@@ -38,8 +39,7 @@ private:
 	SettingsPage* Settings = nullptr;
 	NetworkPage* Network = nullptr;
 
-	int* DefaultIWAD = nullptr;
-	int* DefaultNetIWAD = nullptr;
+	FStartupSelectionInfo* Info = nullptr;
 
-	int ExecResult = 0;
+	int ExecResult = -1;
 };

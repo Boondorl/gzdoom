@@ -585,9 +585,6 @@ FString FIWadManager::IWADPathFileSearch(const FString &file)
 	return "";
 }
 
-CVAR(String, extra_args, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
-CVAR(String, extra_netargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
-
 int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char *iwad, const char *zdoom_wad, const char *optional_wad)
 {
 	const char *iwadparm = Args->CheckValue ("-iwad");
@@ -807,40 +804,20 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 				if (autoloadbrightmaps) flags |= 4;
 				if (autoloadwidescreen) flags |= 8;
 
-				FString extraArgs = *extra_args;
-				FString netArgs = *extra_netargs;
-
-				int ret = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, pick, netPick, flags, extraArgs, netArgs);
-				if (ret)
+				FStartupSelectionInfo info = FStartupSelectionInfo(pick, netPick);
+				pick = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, info, flags);
+				if (pick >= 0)
 				{
-					extraArgs.StripLeftRight();
-					netArgs.StripLeftRight();
-
-					extra_args = extraArgs.GetChars();
-					TArray<FString> realNetArgs = netArgs.Split("\\/");
-					if (realNetArgs.Size())
+					if (info.bNetStart)
 					{
-						realNetArgs[0].StripLeftRight();
-						extra_netargs = realNetArgs[0].GetChars();
+						if (!info.DefaultNetArgs.IsEmpty())
+							Args->AppendArgsString(info.DefaultNetArgs);
+						if (!info.AdditionalNetArgs.IsEmpty())
+							Args->AppendArgsString(info.AdditionalNetArgs);
 					}
-					else
+					else if (!info.DefaultArgs.IsEmpty())
 					{
-						extra_netargs = netArgs.GetChars();
-					}
-
-					if (ret < 0)
-					{
-						pick = netPick;
-						for (auto& arg : realNetArgs)
-						{
-							arg.StripLeftRight();
-							if (arg.Len())
-								Args->AppendArgsString(arg);
-						}
-					}
-					else if (extraArgs.Len() > 0)
-					{
-						Args->AppendArgsString(extraArgs);
+						Args->AppendArgsString(info.DefaultArgs);
 					}
 
 					disableautoload = !!(flags & 1);
@@ -849,7 +826,7 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 					autoloadwidescreen = !!(flags & 8);
 
 					// The newly selected IWAD becomes the new default
-					if (ret < 0)
+					if (info.bNetStart)
 						defaultnetiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
 					else
 						defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();

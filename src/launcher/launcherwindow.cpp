@@ -13,40 +13,32 @@
 #include <zwidget/window/window.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
-int LauncherWindow::ExecModal(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags, FString * extraArgs, FString* netArgs)
+int LauncherWindow::ExecModal(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 615.0;
 	double windowHeight = 700.0;
 
-	auto launcher = std::make_unique<LauncherWindow>(wads, numwads, defaultiwad, defNetIWAD, autoloadflags);
+	auto launcher = std::make_unique<LauncherWindow>(wads, numwads, info, autoloadflags);
 	launcher->SetFrameGeometry((screenSize.width - windowWidth) * 0.5, (screenSize.height - windowHeight) * 0.5, windowWidth, windowHeight);
-	if(extraArgs) launcher->PlayGame->SetExtraArgs(extraArgs->GetChars());
-	if (netArgs) launcher->Network->SetExtraArgs(netArgs->GetChars());
 	launcher->Show();
 
 	DisplayWindow::RunLoop();
 
-	if(extraArgs && launcher->ExecResult > 0) *extraArgs = launcher->PlayGame->GetExtraArgs();
-	if (netArgs && launcher->ExecResult < 0) *netArgs = launcher->Network->GetExtraArgs();
-
 	return launcher->ExecResult;
 }
 
-LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, int* defNetIWAD, int* autoloadflags) : Widget(nullptr, WidgetType::Window)
+LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags) : Widget(nullptr, WidgetType::Window), Info(&info)
 {
 	SetWindowTitle(GAMENAME);
-
-	DefaultIWAD = defaultiwad;
-	DefaultNetIWAD = defNetIWAD;
 
 	Banner = new LauncherBanner(this);
 	Pages = new TabWidget(this);
 	Buttonbar = new LauncherButtonbar(this);
 
-	PlayGame = new PlayGamePage(this, wads, numwads, defaultiwad ? *defaultiwad : 0);
+	PlayGame = new PlayGamePage(this, wads, numwads, info);
 	Settings = new SettingsPage(this, autoloadflags);
-	Network = new NetworkPage(this, wads, numwads, defNetIWAD ? *defNetIWAD : 0);
+	Network = new NetworkPage(this, wads, numwads, info);
 
 	Pages->AddTab(PlayGame, "Play");
 	Pages->AddTab(Settings, "Settings");
@@ -70,29 +62,26 @@ bool LauncherWindow::IsInMultiplayer() const
 
 bool LauncherWindow::IsHosting() const
 {
-	return IsInMultiplayer() && Network->IsOnHostPage();
+	return IsInMultiplayer() && Network->IsInHost();
 }
 
 void LauncherWindow::Start()
 {
-	if (IsInMultiplayer())
-		Network->SetHosting(IsHosting());
+	Info->bNetStart = IsInMultiplayer();
 
 	Settings->Save();
-	Network->Save();
+	if (Info->bNetStart)
+		Network->SetValues(*Info);
+	else
+		PlayGame->SetValues(*Info);
 
-	if (DefaultIWAD)
-		*DefaultIWAD = PlayGame->GetSelectedGame();
-	if (DefaultNetIWAD)
-		*DefaultNetIWAD = Network->GetSelectedGame();
-
-	ExecResult = Network->IsStarting() ? -1 : 1;
+	ExecResult = Info->SaveInfo();
 	DisplayWindow::ExitLoop();
 }
 
 void LauncherWindow::Exit()
 {
-	ExecResult = 0;
+	ExecResult = -1;
 	DisplayWindow::ExitLoop();
 }
 

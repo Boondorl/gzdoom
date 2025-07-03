@@ -8,7 +8,7 @@
 #include <zwidget/widgets/listview/listview.h>
 #include <zwidget/widgets/lineedit/lineedit.h>
 
-PlayGamePage::PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defaultiwad) : Widget(nullptr), Launcher(launcher)
+PlayGamePage::PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
 {
 	WelcomeLabel = new TextLabel(this);
 	VersionLabel = new TextLabel(this);
@@ -33,28 +33,22 @@ PlayGamePage::PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads
 		GamesList->AddItem(work.GetChars());
 	}
 
-	if (defaultiwad >= 0 && defaultiwad < numwads)
+	if (info.DefaultIWAD >= 0 && info.DefaultIWAD < numwads)
 	{
-		GamesList->SetSelectedItem(defaultiwad);
-		GamesList->ScrollToItem(defaultiwad);
+		GamesList->SetSelectedItem(info.DefaultIWAD);
+		GamesList->ScrollToItem(info.DefaultIWAD);
 	}
+
+	if (!info.DefaultArgs.IsEmpty())
+		ParametersEdit->SetText(info.DefaultArgs.GetChars());
 
 	GamesList->OnActivated = [=]() { OnGamesListActivated(); };
 }
 
-void PlayGamePage::SetExtraArgs(const std::string& args)
+void PlayGamePage::SetValues(FStartupSelectionInfo& info) const
 {
-	ParametersEdit->SetText(args);
-}
-
-std::string PlayGamePage::GetExtraArgs()
-{
-	return ParametersEdit->GetText();
-}
-
-int PlayGamePage::GetSelectedGame()
-{
-	return GamesList->GetSelectedItem();
+	info.DefaultIWAD = GamesList->GetSelectedItem();
+	info.DefaultArgs = ParametersEdit->GetText();
 }
 
 void PlayGamePage::UpdateLanguage()

@@ -16,7 +16,7 @@
 EXTERN_CVAR(Bool, net_ticbalance)
 EXTERN_CVAR(Bool, net_extratic)
 
-NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defNetIWAD) : Widget(launcher), Launcher(launcher)
+NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(launcher), Launcher(launcher)
 {
 	ParametersEdit = new LineEdit(this);
 	ParametersLabel = new TextLabel(this);
@@ -25,8 +25,8 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 	IWADsList = new ListView(this);
 
 	StartPages = new TabWidget(this);
-	HostPage = new HostSubPage(this);
-	JoinPage = new JoinSubPage(this);
+	HostPage = new HostSubPage(this, info);
+	JoinPage = new JoinSubPage(this, info);
 
 	StartPages->AddTab(HostPage, "Host");
 	StartPages->AddTab(JoinPage, "Join");
@@ -46,51 +46,47 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 		IWADsList->AddItem(work.GetChars());
 	}
 
-	if (defNetIWAD >= 0 && defNetIWAD < numwads)
+	if (info.DefaultNetIWAD >= 0 && info.DefaultNetIWAD < numwads)
 	{
-		IWADsList->SetSelectedItem(defNetIWAD);
-		IWADsList->ScrollToItem(defNetIWAD);
+		IWADsList->SetSelectedItem(info.DefaultNetIWAD);
+		IWADsList->ScrollToItem(info.DefaultNetIWAD);
 	}
 
-	StartPages->SetCurrentWidget(HostPage);
+	if (!info.DefaultNetArgs.IsEmpty())
+		ParametersEdit->SetText(info.DefaultNetArgs.GetChars());
+
+	switch (info.DefaultNetPage)
+	{
+	case 1:
+		StartPages->SetCurrentWidget(JoinPage);
+		break;
+
+	default:
+		StartPages->SetCurrentWidget(HostPage);
+		break;
+	}
 }
 
-void NetworkPage::Save()
+void NetworkPage::SetValues(FStartupSelectionInfo& info) const
 {
-	if (!hosting && !joining)
-		return;
+	info.DefaultNetIWAD = IWADsList->GetSelectedItem();
+	info.DefaultNetArgs = ParametersEdit->GetText();
 
-	FString args = ParametersEdit->GetText();
-	args.AppendFormat("\\/"); // Make sure these don't get saved into the cvar.
-	if (hosting)
-		HostPage->BuildCommand(args);
+	info.bHosting = IsInHost();
+	if (info.bHosting)
+	{
+		info.DefaultNetPage = 0;
+		HostPage->SetValues(info);
+	}
 	else
-		JoinPage->BuildCommand(args);
+	{
+		info.DefaultNetPage = 1;
+		JoinPage->SetValues(info);
+	}
 
 	const auto save = SaveFileEdit->GetText();
 	if (!save.empty())
-		args.AppendFormat(" -loadgame %s", save.c_str());
-
-	ParametersEdit->SetText(args.GetChars());
-}
-
-bool NetworkPage::IsOnHostPage() const
-{
-	return StartPages->GetCurrentIndex() >= 0 ? StartPages->GetCurrentWidget() == HostPage : false;
-}
-
-void NetworkPage::SetHosting(bool host)
-{
-	if (host)
-	{
-		hosting = true;
-		joining = false;
-	}
-	else
-	{
-		hosting = false;
-		joining = true;
-	}
+		info.AdditionalNetArgs.AppendFormat(" -loadgame %s", save.c_str());
 }
 
 void NetworkPage::UpdatePlayButton()
@@ -98,24 +94,9 @@ void NetworkPage::UpdatePlayButton()
 	Launcher->UpdatePlayButton();
 }
 
-bool NetworkPage::IsStarting() const
+bool NetworkPage::IsInHost() const
 {
-	return hosting || joining;
-}
-
-int NetworkPage::GetSelectedGame() const
-{
-	return IWADsList->GetSelectedItem();
-}
-
-std::string NetworkPage::GetExtraArgs() const
-{
-	return ParametersEdit->GetText();
-}
-
-void NetworkPage::SetExtraArgs(const std::string& args)
-{
-	ParametersEdit->SetText(args);
+	return StartPages->GetCurrentIndex() >= 0 ? StartPages->GetCurrentWidget() == HostPage : false;
 }
 
 void NetworkPage::OnGeometryChanged()
@@ -153,7 +134,7 @@ void NetworkPage::UpdateLanguage()
 	JoinPage->UpdateLanguage();
 }
 
-HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
+HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
 {
 	NetModesLabel = new TextLabel(this);
 	AutoNetmodeCheckbox = new CheckboxLabel(this);
@@ -166,7 +147,19 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	AutoNetmodeCheckbox->FuncChanged = [this](bool on) { if (on) { PacketServerCheckbox->SetChecked(false); PeerToPeerCheckbox->SetChecked(false); }};
 	PacketServerCheckbox->FuncChanged = [this](bool on) { if (on) { AutoNetmodeCheckbox->SetChecked(false); PeerToPeerCheckbox->SetChecked(false); }};
 	PeerToPeerCheckbox->FuncChanged = [this](bool on) { if (on) { PacketServerCheckbox->SetChecked(false); AutoNetmodeCheckbox->SetChecked(false); }};
-	AutoNetmodeCheckbox->SetChecked(true);
+	
+	switch (info.DefaultNetMode)
+	{
+	case 0:
+		PeerToPeerCheckbox->SetChecked(true);
+		break;
+	case 1:
+		PacketServerCheckbox->SetChecked(true);
+		break;
+	default:
+		AutoNetmodeCheckbox->SetChecked(true);
+		break;
+	}
 
 	TicDupList = new ListView(this);
 	TicDupLabel = new TextLabel(this);
@@ -181,7 +174,7 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	TicDupList->UpdateItem("Hz", 1, 1);
 	TicDupList->AddItem("11.6");
 	TicDupList->UpdateItem("Hz", 2, 1);
-	TicDupList->SetSelectedItem(0);
+	TicDupList->SetSelectedItem(info.DefaultNetTicDup);
 	ExtraTicCheckbox->SetChecked(net_extratic);
 	BalanceTicsCheckbox->SetChecked(net_ticbalance);
 
@@ -192,13 +185,26 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	TeamLabel = new TextLabel(this);
 	TeamEdit = new LineEdit(this);
 
-	TeamEdit->SetMaxLength(3);
-	TeamEdit->SetNumericMode(true);
-
 	// These are intentionally not radio buttons, they just act similarly for clarity in the UI.
 	CoopCheckbox->FuncChanged = [this](bool on) { if (on) { DeathmatchCheckbox->SetChecked(false); TeamDeathmatchCheckbox->SetChecked(false); }};
 	DeathmatchCheckbox->FuncChanged = [this](bool on) { if (on) { CoopCheckbox->SetChecked(false); TeamDeathmatchCheckbox->SetChecked(false); }};
 	TeamDeathmatchCheckbox->FuncChanged = [this](bool on) { if (on) { CoopCheckbox->SetChecked(false); DeathmatchCheckbox->SetChecked(false); }};
+
+	switch (info.DefaultNetGameMode)
+	{
+	case 0:
+		CoopCheckbox->SetChecked(true);
+		break;
+	case 1:
+		DeathmatchCheckbox->SetChecked(true);
+		break;
+	case 2:
+		TeamDeathmatchCheckbox->SetChecked(true);
+		break;
+	}
+
+	TeamEdit->SetMaxLength(3);
+	TeamEdit->SetNumericMode(true);
 
 	MaxPlayersEdit = new LineEdit(this);
 	PortEdit = new LineEdit(this);
@@ -207,9 +213,11 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 
 	MaxPlayersEdit->SetMaxLength(2);
 	MaxPlayersEdit->SetNumericMode(true);
-	MaxPlayersEdit->SetText("8");
+	MaxPlayersEdit->SetTextInt(info.DefaultNetPlayers);
 	PortEdit->SetMaxLength(5);
 	PortEdit->SetNumericMode(true);
+	if (info.DefaultNetHostPort > 0)
+		PortEdit->SetTextInt(info.DefaultNetHostPort);
 
 	MaxPlayerHintLabel = new TextLabel(this);
 	PortHintLabel = new TextLabel(this);
@@ -220,35 +228,58 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	TeamHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
 }
 
-void HostSubPage::BuildCommand(FString& args)
+void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 {
+	info.AdditionalNetArgs = "";
 	if (PacketServerCheckbox->GetChecked())
-		args.AppendFormat(" -netmode 1");
+	{
+		info.AdditionalNetArgs.AppendFormat(" -netmode 1");
+		info.DefaultNetMode = 1;
+	}
 	else if (PeerToPeerCheckbox->GetChecked())
-		args.AppendFormat(" -netmode 0");
+	{
+		info.AdditionalNetArgs.AppendFormat(" -netmode 0");
+		info.DefaultNetMode = 0;
+	}
+	else
+	{
+		info.DefaultNetMode = -1;
+	}
 
 	net_extratic = ExtraTicCheckbox->GetChecked();
 	net_ticbalance = BalanceTicsCheckbox->GetChecked();
 	const int dup = TicDupList->GetSelectedItem();
 	if (dup > 0)
-		args.AppendFormat(" -dup %d", dup + 1);
+		info.AdditionalNetArgs.AppendFormat(" -dup %d", dup + 1);
+	info.DefaultNetTicDup = dup;
 
-	args.AppendFormat(" -host %d", clamp<int>(MaxPlayersEdit->GetTextInt(), 1, MAXPLAYERS));
+	info.DefaultNetPlayers = clamp<int>(MaxPlayersEdit->GetTextInt(), 1, MAXPLAYERS);
+	info.AdditionalNetArgs.AppendFormat(" -host %d", info.DefaultNetPlayers);
 	const int port = PortEdit->GetTextInt();
 	if (port > 0)
-		args.AppendFormat(" -port %d", port);
+	{
+		info.AdditionalNetArgs.AppendFormat(" -port %d", port);
+		info.DefaultNetHostPort = port;
+	}
+	else
+	{
+		info.DefaultNetHostPort = 0;
+	}
 
 	if (CoopCheckbox->GetChecked())
 	{
-		args.AppendFormat(" -coop");
+		info.AdditionalNetArgs.AppendFormat(" -coop");
+		info.DefaultNetGameMode = 0;
 	}
 	else if (DeathmatchCheckbox->GetChecked())
 	{
-		args.AppendFormat(" -deathmatch");
+		info.AdditionalNetArgs.AppendFormat(" -deathmatch");
+		info.DefaultNetGameMode = 1;
 	}
 	else if (TeamDeathmatchCheckbox->GetChecked())
 	{
-		args.AppendFormat(" -deathmatch +teamplay 1");
+		info.AdditionalNetArgs.AppendFormat(" -deathmatch +teamplay 1");
+		info.DefaultNetGameMode = 2;
 		int team = 255;
 		if (!TeamEdit->GetText().empty())
 		{
@@ -256,7 +287,11 @@ void HostSubPage::BuildCommand(FString& args)
 			if (team < 0 || team > 255)
 				team = 255;
 		}
-		args.AppendFormat(" +team %d", team);
+		info.AdditionalNetArgs.AppendFormat(" +team %d", team);
+	}
+	else
+	{
+		info.DefaultNetGameMode = -1;
 	}
 }
 
@@ -355,15 +390,18 @@ void HostSubPage::OnGeometryChanged()
 	MainTab->UpdatePlayButton();
 }
 
-JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
+JoinSubPage::JoinSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
 {
 	AddressEdit = new LineEdit(this);
 	AddressPortEdit = new LineEdit(this);
 	AddressLabel = new TextLabel(this);
 	AddressPortLabel = new TextLabel(this);
 
+	AddressEdit->SetText(info.DefaultNetAddress.GetChars());
 	AddressPortEdit->SetMaxLength(5);
 	AddressPortEdit->SetNumericMode(true);
+	if (info.DefaultNetJoinPort > 0)
+		AddressPortEdit->SetTextInt(info.DefaultNetJoinPort);
 
 	TeamDeathmatchLabel = new TextLabel(this);
 	TeamLabel = new TextLabel(this);
@@ -379,14 +417,23 @@ JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	TeamHintLabel->SetStyleColor("color", Colorf::fromRgba8(160, 160, 160));
 }
 
-void JoinSubPage::BuildCommand(FString& args)
+void JoinSubPage::SetValues(FStartupSelectionInfo& info) const
 {
 	FString addr = AddressEdit->GetText();
+	info.DefaultNetAddress = addr;
 	const int port = AddressPortEdit->GetTextInt();
 	if (port > 0)
+	{
 		addr.AppendFormat(":%d", port);
+		info.DefaultNetJoinPort = port;
+	}
+	else
+	{
+		info.DefaultNetJoinPort = 0;
+	}
 
-	args.AppendFormat(" -join %s", addr.GetChars());
+	info.AdditionalNetArgs = "";
+	info.AdditionalNetArgs.AppendFormat(" -join %s", addr);
 
 	int team = 255;
 	if (!TeamEdit->GetText().empty())
@@ -395,7 +442,7 @@ void JoinSubPage::BuildCommand(FString& args)
 		if (team < 0 || team > 255)
 			team = 255;
 	}
-	args.AppendFormat(" +team %d", team);
+	info.AdditionalNetArgs.AppendFormat(" +team %d", team);
 }
 
 void JoinSubPage::UpdateLanguage()

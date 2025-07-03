@@ -7,17 +7,14 @@ class TextLabel;
 class ListView;
 class LineEdit;
 struct WadStuff;
+struct FStartupSelectionInfo;
 
 class PlayGamePage : public Widget
 {
 public:
-	PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, int defaultiwad);
+	PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info);
 	void UpdateLanguage();
-
-	void SetExtraArgs(const std::string& args);
-	std::string GetExtraArgs();
-
-	int GetSelectedGame();
+	void SetValues(FStartupSelectionInfo& info) const;
 
 private:
 	void OnGeometryChanged() override;

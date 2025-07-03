@@ -30,10 +30,73 @@ bool			pauseext;
 
 FStartupInfo GameStartupInfo;
 
-CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
-CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
-CVAR(String, defaultnetiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG);
 CVAR(Bool, vid_fps, false, 0)
+CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultnetiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultnetargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetplayers, 8, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnethostport, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetticdup, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetmode, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetgamemode, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultnetaddress, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetjoinport, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetpage, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+
+// These have to be passed by the iwad selector since it has no way of knowing the info that's been loaded in.
+FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : DefaultIWAD(defIWAD), DefaultNetIWAD(defNetIWAD)
+{
+	DefaultArgs = defaultargs;
+
+	DefaultNetArgs = defaultnetargs;
+
+	DefaultNetPage = defaultnetpage;
+	DefaultNetPlayers = defaultnetplayers;
+	DefaultNetHostPort = defaultnethostport;
+	DefaultNetTicDup = defaultnetticdup;
+	DefaultNetMode = defaultnetmode;
+	DefaultNetGameMode = defaultnetgamemode;
+
+	DefaultNetAddress = defaultnetaddress;
+	DefaultNetJoinPort = defaultnetjoinport;
+}
+
+// IWAD selection has to be saved outside of this using the return value.
+int FStartupSelectionInfo::SaveInfo()
+{
+	DefaultArgs.StripLeftRight();
+
+	DefaultNetArgs.StripLeftRight();
+	AdditionalNetArgs.StripLeftRight();
+	DefaultNetAddress.StripLeftRight();
+
+	if (bNetStart)
+	{
+		defaultnetargs = DefaultNetArgs.GetChars();
+		defaultnetpage = DefaultNetPage;
+
+		if (bHosting)
+		{
+			defaultnetplayers = DefaultNetPlayers;
+			defaultnethostport = DefaultNetHostPort;
+			defaultnetticdup = DefaultNetTicDup;
+			defaultnetmode = DefaultNetMode;
+			defaultnetgamemode = DefaultNetGameMode;
+		}
+		else
+		{
+			defaultnetaddress = DefaultNetAddress.GetChars();
+			defaultnetjoinport = DefaultNetJoinPort;
+		}
+
+		return DefaultNetIWAD;
+	}
+
+	defaultargs = DefaultArgs.GetChars();
+	return DefaultIWAD;
+}
 
 EXTERN_CVAR(Bool, ui_generic)
 
