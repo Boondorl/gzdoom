@@ -158,9 +158,14 @@ HostSubPage::HostSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
 	ExtraTicCheckbox = new CheckboxLabel(this);
 	BalanceTicsCheckbox = new CheckboxLabel(this);
 
-	TicDupList->AddItem("35Hz");
-	TicDupList->AddItem("17.5Hz");
-	TicDupList->AddItem("11.66Hz");
+	std::vector<double> widths = { 35.0, 35.0 };
+	TicDupList->SetColumnWidths(widths);
+	TicDupList->AddItem("35.0");
+	TicDupList->UpdateItem("Hz", 0, 1);
+	TicDupList->AddItem("17.5");
+	TicDupList->UpdateItem("Hz", 1, 1);
+	TicDupList->AddItem("11.6");
+	TicDupList->UpdateItem("Hz", 2, 1);
 	TicDupList->SetSelectedItem(0);
 	ExtraTicCheckbox->SetChecked(net_extratic);
 	BalanceTicsCheckbox->SetChecked(net_ticbalance);
@@ -207,7 +212,7 @@ void HostSubPage::UpdateLanguage()
 	PeerToPeerCheckbox->SetText("Peer-to-Peer");
 
 	TicDupLabel->SetText("Packet Ticrate:");
-	ExtraTicCheckbox->SetText("Duplicate Packets");
+	ExtraTicCheckbox->SetText("Double Send Packets");
 	BalanceTicsCheckbox->SetText("Stabilize Connections (recommended)");
 
 	MaxPlayersLabel->SetText("Max Players:");
@@ -234,7 +239,7 @@ void HostSubPage::OnGeometryChanged()
 
 	TicDupLabel->SetFrameGeometry(0.0, y, w, TicDupLabel->GetPreferredHeight());
 	y += TicDupLabel->GetPreferredHeight();
-	TicDupList->SetFrameGeometry(0.0, y, 120.0, TicDupLabel->GetPreferredHeight() * (TicDupList->GetItemAmount() + 1));
+	TicDupList->SetFrameGeometry(0.0, y, 100.0, TicDupLabel->GetPreferredHeight() * (TicDupList->GetItemAmount() + 1));
 	y += TicDupList->GetHeight() + ExtraTicCheckbox->GetPreferredHeight();
 
 	ExtraTicCheckbox->SetFrameGeometry(0.0, y, w, ExtraTicCheckbox->GetPreferredHeight());
