@@ -106,14 +106,14 @@ void NetworkPage::OnGeometryChanged()
 	const double h = GetHeight();
 
 	const double wSize = w * 0.5 - 2.5;
-	double y = h - ParametersLabel->GetPreferredHeight();
+	double y = h - (ParametersLabel->GetPreferredHeight() + 2.0);
 
-	ParametersEdit->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight());
+	ParametersEdit->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight() + 2.0);
 	y -= ParametersLabel->GetPreferredHeight();
 	ParametersLabel->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight());
 
-	y -= SaveFileLabel->GetPreferredHeight() + 5.0;
-	SaveFileEdit->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight());
+	y -= SaveFileLabel->GetPreferredHeight() + 7.0;
+	SaveFileEdit->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight() + 2.0);
 	y -= SaveFileLabel->GetPreferredHeight();
 	SaveFileLabel->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight());
 	y -= 5.0;
@@ -225,11 +225,11 @@ void HostSubPage::OnGeometryChanged()
 	double y = YPadding;
 
 	MaxPlayersLabel->SetFrameGeometry(0.0, y, LabelOfsSize, MaxPlayersLabel->GetPreferredHeight());
-	MaxPlayersEdit->SetFrameGeometry(0.0 + MaxPlayersLabel->GetWidth(), y, 30.0, MaxPlayersLabel->GetPreferredHeight());
+	MaxPlayersEdit->SetFrameGeometry(0.0 + MaxPlayersLabel->GetWidth(), y, 30.0, MaxPlayersLabel->GetPreferredHeight() + 2.0);
 	y += MaxPlayersLabel->GetPreferredHeight() + YPadding;
 
 	PortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, PortLabel->GetPreferredHeight());
-	PortEdit->SetFrameGeometry(0.0 + PortLabel->GetWidth(), y, 60.0, PortLabel->GetPreferredHeight());
+	PortEdit->SetFrameGeometry(0.0 + PortLabel->GetWidth(), y, 60.0, PortLabel->GetPreferredHeight() + 2.0);
 	y += PortLabel->GetPreferredHeight() + YPadding;
 
 	TicDupLabel->SetFrameGeometry(0.0, y, w, TicDupLabel->GetPreferredHeight());
@@ -301,11 +301,11 @@ void JoinSubPage::OnGeometryChanged()
 	double y = YPadding;
 
 	AddressLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressLabel->GetPreferredHeight());
-	AddressEdit->SetFrameGeometry(0.0 + AddressLabel->GetWidth(), y, 120.0, AddressLabel->GetPreferredHeight());
+	AddressEdit->SetFrameGeometry(0.0 + AddressLabel->GetWidth(), y, 120.0, AddressLabel->GetPreferredHeight() + 2.0);
 	y += AddressLabel->GetPreferredHeight() + YPadding;
 
 	AddressPortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressPortLabel->GetPreferredHeight());
-	AddressPortEdit->SetFrameGeometry(0.0 + AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight());
+	AddressPortEdit->SetFrameGeometry(0.0 + AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight() + 2.0);
 
 	JoinButton->SetFrameGeometry(0.0, h - 30.0, 100.0, 30.0);
 }
