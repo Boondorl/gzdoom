@@ -23,6 +23,7 @@ public:
 	void UpdateLanguage();
 	void Save();
 	void SetHosting(bool host);
+	void UpdatePlayButton();
 
 	bool IsStarting() const;
 	int GetSelectedGame() const;

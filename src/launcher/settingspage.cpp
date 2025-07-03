@@ -204,4 +204,6 @@ void SettingsPage::OnGeometryChanged()
 		y += LangLabel->GetPreferredHeight();
 		LangList->SetFrameGeometry(0.0, y, w, std::max(h - y, 0.0));
 	}
+
+	Launcher->UpdatePlayButton();
 }

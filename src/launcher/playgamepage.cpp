@@ -109,4 +109,6 @@ void PlayGamePage::OnGeometryChanged()
 
 	double listViewBottom = y - 10.0;
 	GamesList->SetFrameGeometry(0.0, listViewTop, GetWidth(), std::max(listViewBottom - listViewTop, 0.0));
+
+	Launcher->UpdatePlayButton();
 }

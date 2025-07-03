@@ -24,6 +24,7 @@ public:
 	void Exit();
 	bool IsHosting() const;
 	bool IsInMultiplayer() const;
+	void UpdatePlayButton();
 
 private:
 	void OnClose() override;

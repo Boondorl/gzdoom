@@ -58,9 +58,14 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, int* defaultiwad, in
 	PlayGame->SetFocus();
 }
 
+void LauncherWindow::UpdatePlayButton()
+{
+	Buttonbar->UpdateLanguage();
+}
+
 bool LauncherWindow::IsInMultiplayer() const
 {
-	return Pages->GetCurrentWidget() == Network;
+	return Pages->GetCurrentIndex() >= 0 ? Pages->GetCurrentWidget() == Network : false;
 }
 
 bool LauncherWindow::IsHosting() const

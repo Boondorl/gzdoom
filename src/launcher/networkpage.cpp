@@ -30,7 +30,6 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 
 	StartPages->AddTab(HostPage, "Host");
 	StartPages->AddTab(JoinPage, "Join");
-	StartPages->SetCurrentWidget(HostPage);
 
 	for (int i = 0; i < numwads; i++)
 	{
@@ -52,6 +51,8 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 		IWADsList->SetSelectedItem(defNetIWAD);
 		IWADsList->ScrollToItem(defNetIWAD);
 	}
+
+	StartPages->SetCurrentWidget(HostPage);
 }
 
 void NetworkPage::Save()
@@ -75,7 +76,7 @@ void NetworkPage::Save()
 
 bool NetworkPage::IsOnHostPage() const
 {
-	return StartPages->GetCurrentWidget() == HostPage;
+	return StartPages->GetCurrentIndex() >= 0 ? StartPages->GetCurrentWidget() == HostPage : false;
 }
 
 void NetworkPage::SetHosting(bool host)
@@ -90,6 +91,11 @@ void NetworkPage::SetHosting(bool host)
 		hosting = false;
 		joining = true;
 	}
+}
+
+void NetworkPage::UpdatePlayButton()
+{
+	Launcher->UpdatePlayButton();
 }
 
 bool NetworkPage::IsStarting() const
@@ -345,6 +351,8 @@ void HostSubPage::OnGeometryChanged()
 	y += TeamLabel->GetPreferredHeight() + 2.0;
 
 	TeamHintLabel->SetFrameGeometry(TeamDeathmatchCheckbox->GetWidth() + TeamLabel->GetWidth() + 5.0, y, w, TeamHintLabel->GetPreferredHeight());
+
+	MainTab->UpdatePlayButton();
 }
 
 JoinSubPage::JoinSubPage(NetworkPage* main) : Widget(nullptr), MainTab(main)
@@ -429,4 +437,6 @@ void JoinSubPage::OnGeometryChanged()
 	TeamLabel->SetFrameGeometry(0.0, y, 45.0, TeamLabel->GetPreferredHeight());
 	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
+
+	MainTab->UpdatePlayButton();
 }
