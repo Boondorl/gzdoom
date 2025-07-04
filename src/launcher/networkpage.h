@@ -63,11 +63,11 @@ private:
 	ListView* TicDupList = nullptr;
 	TextLabel* TicDupLabel = nullptr;
 	CheckboxLabel* ExtraTicCheckbox = nullptr;
-	CheckboxLabel* BalanceTicsCheckbox = nullptr;
 
 	TextLabel* GameModesLabel = nullptr;
 	CheckboxLabel* CoopCheckbox = nullptr;
 	CheckboxLabel* DeathmatchCheckbox = nullptr;
+	CheckboxLabel* AltDeathmatchCheckbox = nullptr;
 	CheckboxLabel* TeamDeathmatchCheckbox = nullptr;
 	TextLabel* TeamLabel = nullptr;
 	LineEdit* TeamEdit = nullptr;

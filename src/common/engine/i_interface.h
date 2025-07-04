@@ -78,9 +78,9 @@ struct FStartupSelectionInfo
 	int DefaultNetHostPort = 0;
 	int DefaultNetTicDup = 0;
 	bool DefaultNetExtraTic = false;
-	bool DefaultNetBalanceTics = true;
 	int DefaultNetMode = -1;
 	int DefaultNetGameMode = -1;
+	bool DefaultNetAltDM = false;
 
 	FString DefaultNetAddress = {};
 	int DefaultNetJoinPort = 0;

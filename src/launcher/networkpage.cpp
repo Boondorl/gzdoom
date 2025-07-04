@@ -171,7 +171,6 @@ HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widge
 	TicDupList = new ListView(this);
 	TicDupLabel = new TextLabel(this);
 	ExtraTicCheckbox = new CheckboxLabel(this);
-	BalanceTicsCheckbox = new CheckboxLabel(this);
 
 	std::vector<double> widths = { 30.0, 30.0 };
 	TicDupList->SetColumnWidths(widths);
@@ -183,11 +182,11 @@ HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widge
 	TicDupList->UpdateItem("Hz", 2, 1);
 	TicDupList->SetSelectedItem(info.DefaultNetTicDup);
 	ExtraTicCheckbox->SetChecked(info.DefaultNetExtraTic);
-	BalanceTicsCheckbox->SetChecked(info.DefaultNetBalanceTics);
 
 	GameModesLabel = new TextLabel(this);
 	CoopCheckbox = new CheckboxLabel(this);
 	DeathmatchCheckbox = new CheckboxLabel(this);
+	AltDeathmatchCheckbox = new CheckboxLabel(this);
 	TeamDeathmatchCheckbox = new CheckboxLabel(this);
 	TeamLabel = new TextLabel(this);
 	TeamEdit = new LineEdit(this);
@@ -209,6 +208,7 @@ HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widge
 		TeamDeathmatchCheckbox->SetChecked(true);
 		break;
 	}
+	AltDeathmatchCheckbox->SetChecked(info.DefaultNetAltDM);
 
 	TeamEdit->SetMaxLength(3);
 	TeamEdit->SetNumericMode(true);
@@ -258,10 +258,6 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 	if (info.DefaultNetExtraTic)
 		info.AdditionalNetArgs.AppendFormat(" -extratic");
 
-	info.DefaultNetBalanceTics = BalanceTicsCheckbox->GetChecked();
-	if (!info.DefaultNetBalanceTics)
-		info.AdditionalNetArgs.AppendFormat(" +net_ticbalance 0");
-
 	const int dup = TicDupList->GetSelectedItem();
 	if (dup > 0)
 		info.AdditionalNetArgs.AppendFormat(" -dup %d", dup + 1);
@@ -280,6 +276,7 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 		info.DefaultNetHostPort = 0;
 	}
 
+	info.DefaultNetAltDM = AltDeathmatchCheckbox->GetChecked();
 	if (CoopCheckbox->GetChecked())
 	{
 		info.AdditionalNetArgs.AppendFormat(" -coop");
@@ -287,7 +284,11 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 	}
 	else if (DeathmatchCheckbox->GetChecked())
 	{
-		info.AdditionalNetArgs.AppendFormat(" -deathmatch");
+		if (AltDeathmatchCheckbox->GetChecked())
+			info.AdditionalNetArgs.AppendFormat(" -altdeath");
+		else
+			info.AdditionalNetArgs.AppendFormat(" -deathmatch");
+
 		info.DefaultNetGameMode = 1;
 	}
 	else if (TeamDeathmatchCheckbox->GetChecked())
@@ -319,11 +320,11 @@ void HostSubPage::UpdateLanguage()
 
 	TicDupLabel->SetText("Packet Ticrate:");
 	ExtraTicCheckbox->SetText("Double Send Packets");
-	BalanceTicsCheckbox->SetText("Stabilize Connections (recommended)");
 
 	GameModesLabel->SetText("Game Modes:");
 	CoopCheckbox->SetText("Co-op");
 	DeathmatchCheckbox->SetText("Deathmatch");
+	AltDeathmatchCheckbox->SetText("Alternate Rules");
 	TeamDeathmatchCheckbox->SetText("Team Deathmatch");
 	TeamLabel->SetText("Team:");
 
@@ -367,9 +368,6 @@ void HostSubPage::OnGeometryChanged()
 	ExtraTicCheckbox->SetFrameGeometry(0.0, y, w, ExtraTicCheckbox->GetPreferredHeight());
 	y += ExtraTicCheckbox->GetPreferredHeight();
 
-	BalanceTicsCheckbox->SetFrameGeometry(0.0, y, w, BalanceTicsCheckbox->GetPreferredHeight());
-	y += BalanceTicsCheckbox->GetPreferredHeight() + YPadding;
-
 	const double optionsBottom = y;
 	y = optionsTop;
 
@@ -392,7 +390,8 @@ void HostSubPage::OnGeometryChanged()
 	CoopCheckbox->SetFrameGeometry(0.0, y, w, CoopCheckbox->GetPreferredHeight());
 	y += CoopCheckbox->GetPreferredHeight();
 
-	DeathmatchCheckbox->SetFrameGeometry(0.0, y, w, DeathmatchCheckbox->GetPreferredHeight());
+	DeathmatchCheckbox->SetFrameGeometry(0.0, y, 140.0, DeathmatchCheckbox->GetPreferredHeight());
+	AltDeathmatchCheckbox->SetFrameGeometry(150.0, y, w, AltDeathmatchCheckbox->GetPreferredHeight());
 	y += DeathmatchCheckbox->GetPreferredHeight();
 
 	TeamDeathmatchCheckbox->SetFrameGeometry(0.0, y, w, TeamDeathmatchCheckbox->GetPreferredHeight());

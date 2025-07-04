@@ -42,13 +42,13 @@ CVAR(Int, defaultnethostport, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetticdup, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetmode, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetgamemode, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, defaultnetaltdm, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetaddress, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetjoinport, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetpage, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnethostteam, 255, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetjointeam, 255, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, defaultnetextratic, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-CVAR(Bool, defaultnetbalancetics, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetsavefile, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 // These have to be passed by the iwad selector since it has no way of knowing the info that's been loaded in.
@@ -66,9 +66,9 @@ FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : Defa
 	DefaultNetTicDup = defaultnetticdup;
 	DefaultNetMode = defaultnetmode;
 	DefaultNetGameMode = defaultnetgamemode;
+	DefaultNetAltDM = defaultnetaltdm;
 	DefaultNetHostTeam = defaultnethostteam;
 	DefaultNetExtraTic = defaultnetextratic;
-	DefaultNetBalanceTics = defaultnetbalancetics;
 
 	DefaultNetAddress = defaultnetaddress;
 	DefaultNetJoinPort = defaultnetjoinport;
@@ -103,9 +103,9 @@ int FStartupSelectionInfo::SaveInfo()
 			defaultnetticdup = DefaultNetTicDup;
 			defaultnetmode = DefaultNetMode;
 			defaultnetgamemode = DefaultNetGameMode;
+			defaultnetaltdm = DefaultNetAltDM;
 			defaultnethostteam = DefaultNetHostTeam;
 			defaultnetextratic = DefaultNetExtraTic;
-			defaultnetbalancetics = DefaultNetBalanceTics;
 		}
 		else
 		{
