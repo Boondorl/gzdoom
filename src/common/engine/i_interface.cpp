@@ -32,6 +32,7 @@ FStartupInfo GameStartupInfo;
 
 CVAR(Bool, vid_fps, false, 0)
 CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, saveargs, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, savenetfile, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, savenetargs, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -56,6 +57,7 @@ CVAR(String, defaultnetsavefile, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : DefaultIWAD(defIWAD), DefaultNetIWAD(defNetIWAD)
 {
 	DefaultArgs = defaultargs;
+	bSaveArgs = saveargs;
 
 	DefaultNetArgs = defaultnetargs;
 	DefaultNetPage = defaultnetpage;
@@ -117,7 +119,8 @@ int FStartupSelectionInfo::SaveInfo()
 		return DefaultNetIWAD;
 	}
 
-	defaultargs = DefaultArgs.GetChars();
+	saveargs = bSaveArgs;
+	defaultargs = saveargs ? DefaultArgs.GetChars() : "";
 	return DefaultIWAD;
 }
 

@@ -63,6 +63,7 @@ struct FStartupSelectionInfo
 	// Local game info
 	int DefaultIWAD = 0;
 	FString DefaultArgs = {};
+	bool bSaveArgs = true;
 
 	// Net game info
 	int DefaultNetIWAD = 0;

@@ -6,6 +6,7 @@ class LauncherWindow;
 class TextLabel;
 class ListView;
 class LineEdit;
+class CheckboxLabel;
 struct WadStuff;
 struct FStartupSelectionInfo;
 
@@ -29,4 +30,5 @@ private:
 	TextLabel* ParametersLabel = nullptr;
 	ListView* GamesList = nullptr;
 	LineEdit* ParametersEdit = nullptr;
+	CheckboxLabel* SaveArgsCheckbox = nullptr;
 };

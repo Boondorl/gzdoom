@@ -141,7 +141,7 @@ void NetworkPage::UpdateLanguage()
 	ParametersLabel->SetText(GStrings.GetString("PICKER_ADDPARM"));
 	SaveFileLabel->SetText("Load Save File:");
 	SaveFileCheckbox->SetText("Remember Save File");
-	SaveArgsCheckbox->SetText("Rememer Parameters");
+	SaveArgsCheckbox->SetText("Remember Parameters");
 
 	StartPages->SetTabText(HostPage, "Host");
 	StartPages->SetTabText(JoinPage, "Join");
