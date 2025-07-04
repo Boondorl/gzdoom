@@ -13,6 +13,7 @@
 #include <zwidget/widgets/pushbutton/pushbutton.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
+constexpr double EditHeight = 24.0;
 
 NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
 {
@@ -124,15 +125,15 @@ void NetworkPage::OnGeometryChanged()
 	y -= SaveFileCheckbox->GetPreferredHeight();
 	SaveFileCheckbox->SetFrameGeometry(0.0, y, wSize, SaveFileCheckbox->GetPreferredHeight());
 
-	y -= ParametersLabel->GetPreferredHeight() + 4.0;
-	ParametersEdit->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight() + 2.0);
+	y -= EditHeight + 2.0;
+	ParametersEdit->SetFrameGeometry(0.0, y, wSize, EditHeight);
 	y -= ParametersLabel->GetPreferredHeight();
 	ParametersLabel->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight());
 
-	y -= SaveFileLabel->GetPreferredHeight() + 4.0;
-	SaveFileEdit->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight() + 2.0);
+	y -= EditHeight + 2.0;
+	SaveFileEdit->SetFrameGeometry(0.0, y, wSize, EditHeight);
 	y -= SaveFileLabel->GetPreferredHeight();
-	SaveFileLabel->SetFrameGeometry(0.0, y, 110.0, SaveFileLabel->GetPreferredHeight());
+	SaveFileLabel->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight());
 	y -= 5.0;
 
 	IWADsList->SetFrameGeometry(0.0, 0.0, wSize, y);
@@ -359,28 +360,27 @@ void HostSubPage::OnGeometryChanged()
 	const double w = GetWidth();
 	const double h = GetHeight();
 
-	constexpr double YPadding = 5.0;
 	constexpr double LabelOfsSize = 90.0;
 
-	double y = YPadding;
+	double y = 0.0;
 
 	MaxPlayersLabel->SetFrameGeometry(0.0, y, LabelOfsSize, MaxPlayersLabel->GetPreferredHeight());
-	MaxPlayersEdit->SetFrameGeometry(MaxPlayersLabel->GetWidth(), y, 30.0, MaxPlayersLabel->GetPreferredHeight() + 2.0);
-	y += MaxPlayersLabel->GetPreferredHeight() + 4.0;
+	MaxPlayersEdit->SetFrameGeometry(MaxPlayersLabel->GetWidth(), y, 30.0, EditHeight);
+	y += EditHeight + 2.0;
 
 	PortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, PortLabel->GetPreferredHeight());
-	PortEdit->SetFrameGeometry(PortLabel->GetWidth(), y, 60.0, PortLabel->GetPreferredHeight() + 2.0);
+	PortEdit->SetFrameGeometry(PortLabel->GetWidth(), y, 60.0, EditHeight);
 
 	const double hintOfs = PortLabel->GetWidth() + PortEdit->GetWidth() + 30.0;
-	MaxPlayerHintLabel->SetFrameGeometry(hintOfs, YPadding, w - hintOfs, MaxPlayerHintLabel->GetPreferredHeight());
+	MaxPlayerHintLabel->SetFrameGeometry(hintOfs, 0.0, w - hintOfs, MaxPlayerHintLabel->GetPreferredHeight());
 	PortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, PortHintLabel->GetPreferredHeight());
 
-	y += PortLabel->GetPreferredHeight() + 2.0 + YPadding;
+	y += EditHeight + 7.0;
 
 	const double optionsTop = y;
 	TicDupLabel->SetFrameGeometry(0.0, y, 100.0, TicDupLabel->GetPreferredHeight());
 	y += TicDupLabel->GetPreferredHeight();
-	TicDupList->SetFrameGeometry(0.0, y, 100.0, TicDupLabel->GetPreferredHeight() * (TicDupList->GetItemAmount() + 1));
+	TicDupList->SetFrameGeometry(0.0, y, 100.0, (TicDupList->GetItemAmount() + 1) * 20.0);
 	y += TicDupList->GetHeight() + ExtraTicCheckbox->GetPreferredHeight() + 2.0;
 
 	ExtraTicCheckbox->SetFrameGeometry(0.0, y, w, ExtraTicCheckbox->GetPreferredHeight());
@@ -400,8 +400,9 @@ void HostSubPage::OnGeometryChanged()
 	y += PacketServerCheckbox->GetPreferredHeight();
 
 	PeerToPeerCheckbox->SetFrameGeometry(NetModeXOfs, y, w - NetModeXOfs, PeerToPeerCheckbox->GetPreferredHeight());
+	y += PeerToPeerCheckbox->GetPreferredHeight();
 
-	y = max<int>(optionsBottom, y) + YPadding;
+	y = max<int>(optionsBottom, y) + 10.0;
 	GameModesLabel->SetFrameGeometry(0.0, y, w, GameModesLabel->GetPreferredHeight());
 	y += GameModesLabel->GetPreferredHeight();
 
@@ -415,9 +416,9 @@ void HostSubPage::OnGeometryChanged()
 	y += TeamDeathmatchCheckbox->GetPreferredHeight() + 2.0;
 
 	TeamLabel->SetFrameGeometry(14.0, y, 45.0, TeamLabel->GetPreferredHeight());
-	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth() + 19.0, y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
+	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth() + 19.0, y, 45.0, EditHeight);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
-	y += TeamLabel->GetPreferredHeight() + 4.0;
+	y += EditHeight + 2.0;
 
 	AltDeathmatchCheckbox->SetFrameGeometry(0.0, y, w, AltDeathmatchCheckbox->GetPreferredHeight());
 
@@ -498,27 +499,26 @@ void JoinSubPage::OnGeometryChanged()
 	const double w = GetWidth();
 	const double h = GetHeight();
 
-	constexpr double YPadding = 5.0;
 	constexpr double LabelOfsSize = 70.0;
 
-	double y = YPadding;
+	double y = 0.0;
 
 	AddressLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressLabel->GetPreferredHeight());
-	AddressEdit->SetFrameGeometry(AddressLabel->GetWidth(), y, 120.0, AddressLabel->GetPreferredHeight() + 2.0);
-	y += AddressLabel->GetPreferredHeight() + 4.0;
+	AddressEdit->SetFrameGeometry(AddressLabel->GetWidth(), y, 120.0, EditHeight);
+	y += EditHeight + 2.0;
 
 	AddressPortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressPortLabel->GetPreferredHeight());
-	AddressPortEdit->SetFrameGeometry(AddressPortLabel->GetWidth(), y, 60.0, AddressPortLabel->GetPreferredHeight() + 2.0);
+	AddressPortEdit->SetFrameGeometry(AddressPortLabel->GetWidth(), y, 60.0, EditHeight);
 
 	const double hintOfs = AddressPortLabel->GetWidth() + AddressPortEdit->GetWidth() + 30.0;
 	AddressPortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, AddressPortHintLabel->GetPreferredHeight());
-	y += AddressLabel->GetPreferredHeight() + 2.0 + YPadding;
+	y += EditHeight + 12.0;
 
 	TeamDeathmatchLabel->SetFrameGeometry(0.0, y, w, TeamDeathmatchLabel->GetPreferredHeight());
-	y += TeamLabel->GetPreferredHeight() + 2.0;
+	y += TeamDeathmatchLabel->GetPreferredHeight();
 
 	TeamLabel->SetFrameGeometry(0.0, y, 45.0, TeamLabel->GetPreferredHeight());
-	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
+	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, EditHeight);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
 
 	MainTab->UpdatePlayButton();
