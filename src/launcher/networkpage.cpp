@@ -471,7 +471,7 @@ void JoinSubPage::SetValues(FStartupSelectionInfo& info) const
 	}
 
 	info.AdditionalNetArgs = "";
-	info.AdditionalNetArgs.AppendFormat(" -join %s", addr);
+	info.AdditionalNetArgs.AppendFormat(" -join %s", addr.GetChars());
 
 	int team = 255;
 	if (!TeamEdit->GetText().empty())
