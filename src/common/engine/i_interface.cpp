@@ -33,6 +33,7 @@ FStartupInfo GameStartupInfo;
 CVAR(Bool, vid_fps, false, 0)
 CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, savenetfile, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, savenetargs, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -60,6 +61,7 @@ FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : Defa
 	DefaultNetPage = defaultnetpage;
 	DefaultNetSaveFile = defaultnetsavefile;
 	bSaveNetFile = savenetfile;
+	bSaveNetArgs = savenetargs;
 
 	DefaultNetPlayers = defaultnetplayers;
 	DefaultNetHostPort = defaultnethostport;
@@ -85,16 +87,14 @@ int FStartupSelectionInfo::SaveInfo()
 	DefaultNetAddress.StripLeftRight();
 	DefaultNetSaveFile.StripLeftRight();
 
-	savenetfile = bSaveNetFile;
-	if (!savenetfile)
-		defaultnetsavefile = "";
-
 	if (bNetStart)
 	{
-		defaultnetargs = DefaultNetArgs.GetChars();
+		savenetfile = bSaveNetFile;
+		savenetargs = bSaveNetArgs;
+
 		defaultnetpage = DefaultNetPage;
-		if (savenetfile)
-			defaultnetsavefile = DefaultNetSaveFile.GetChars();
+		defaultnetsavefile = savenetfile ? DefaultNetSaveFile.GetChars() : "";
+		defaultnetargs = savenetargs ? DefaultNetArgs.GetChars() : "";
 
 		if (bHosting)
 		{

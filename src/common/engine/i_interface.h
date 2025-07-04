@@ -69,6 +69,7 @@ struct FStartupSelectionInfo
 	bool bNetStart = false;
 	bool bHosting = false;
 	bool bSaveNetFile = false;
+	bool bSaveNetArgs = true;
 	int DefaultNetPage = 0;
 	FString DefaultNetArgs = {};
 	FString AdditionalNetArgs = {}; // These ones shouldn't be saved.

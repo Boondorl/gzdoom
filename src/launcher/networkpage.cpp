@@ -21,11 +21,16 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 	SaveFileEdit = new LineEdit(this);
 	SaveFileLabel = new TextLabel(this);
 	SaveFileCheckbox = new CheckboxLabel(this);
+	SaveArgsCheckbox = new CheckboxLabel(this);
 	IWADsList = new ListView(this);
 
 	SaveFileCheckbox->SetChecked(info.bSaveNetFile);
 	if (!info.DefaultNetSaveFile.IsEmpty())
 		SaveFileEdit->SetText(info.DefaultNetSaveFile.GetChars());
+
+	SaveArgsCheckbox->SetChecked(info.bSaveNetArgs);
+	if (!info.DefaultNetArgs.IsEmpty())
+		ParametersEdit->SetText(info.DefaultNetArgs.GetChars());
 
 	StartPages = new TabWidget(this);
 	HostPage = new HostSubPage(this, info);
@@ -55,15 +60,11 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 		IWADsList->ScrollToItem(info.DefaultNetIWAD);
 	}
 
-	if (!info.DefaultNetArgs.IsEmpty())
-		ParametersEdit->SetText(info.DefaultNetArgs.GetChars());
-
 	switch (info.DefaultNetPage)
 	{
 	case 1:
 		StartPages->SetCurrentWidget(JoinPage);
 		break;
-
 	default:
 		StartPages->SetCurrentWidget(HostPage);
 		break;
@@ -88,6 +89,7 @@ void NetworkPage::SetValues(FStartupSelectionInfo& info) const
 	}
 
 	info.bSaveNetFile = SaveFileCheckbox->GetChecked();
+	info.bSaveNetArgs = SaveArgsCheckbox->GetChecked();
 	const auto save = SaveFileEdit->GetText();
 	if (!save.empty())
 		info.AdditionalNetArgs.AppendFormat(" -loadgame %s", save.c_str());
@@ -110,17 +112,22 @@ void NetworkPage::OnGeometryChanged()
 	const double h = GetHeight();
 
 	const double wSize = w * 0.45 - 2.5;
-	double y = h - (ParametersLabel->GetPreferredHeight() + 2.0);
 
+	double y = h - SaveArgsCheckbox->GetPreferredHeight();
+	SaveArgsCheckbox->SetFrameGeometry(0.0, y, wSize, SaveArgsCheckbox->GetPreferredHeight());
+
+	y -= SaveFileCheckbox->GetPreferredHeight();
+	SaveFileCheckbox->SetFrameGeometry(0.0, y, wSize, SaveFileCheckbox->GetPreferredHeight());
+
+	y -= ParametersLabel->GetPreferredHeight() + 4.0;
 	ParametersEdit->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight() + 2.0);
 	y -= ParametersLabel->GetPreferredHeight();
 	ParametersLabel->SetFrameGeometry(0.0, y, wSize, ParametersLabel->GetPreferredHeight());
 
-	y -= SaveFileLabel->GetPreferredHeight() + 7.0;
+	y -= SaveFileLabel->GetPreferredHeight() + 4.0;
 	SaveFileEdit->SetFrameGeometry(0.0, y, wSize, SaveFileLabel->GetPreferredHeight() + 2.0);
 	y -= SaveFileLabel->GetPreferredHeight();
 	SaveFileLabel->SetFrameGeometry(0.0, y, 110.0, SaveFileLabel->GetPreferredHeight());
-	SaveFileCheckbox->SetFrameGeometry(115.0, y, wSize - 115.0, SaveFileCheckbox->GetPreferredHeight());
 	y -= 5.0;
 
 	IWADsList->SetFrameGeometry(0.0, 0.0, wSize, y);
@@ -133,7 +140,8 @@ void NetworkPage::UpdateLanguage()
 {
 	ParametersLabel->SetText(GStrings.GetString("PICKER_ADDPARM"));
 	SaveFileLabel->SetText("Load Save File:");
-	SaveFileCheckbox->SetText("Remember");
+	SaveFileCheckbox->SetText("Remember Save File");
+	SaveArgsCheckbox->SetText("Rememer Parameters");
 
 	StartPages->SetTabText(HostPage, "Host");
 	StartPages->SetTabText(JoinPage, "Join");
@@ -324,7 +332,7 @@ void HostSubPage::UpdateLanguage()
 	PeerToPeerCheckbox->SetText("Peer-to-Peer");
 
 	TicDupLabel->SetText("Packet Ticrate:");
-	ExtraTicCheckbox->SetText("Double Send Packets");
+	ExtraTicCheckbox->SetText("Send Backup Packets");
 
 	GameModesLabel->SetText("Game Modes:");
 	CoopCheckbox->SetText("Co-op");
