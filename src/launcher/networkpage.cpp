@@ -13,9 +13,6 @@
 #include <zwidget/widgets/pushbutton/pushbutton.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
-EXTERN_CVAR(Bool, net_ticbalance)
-EXTERN_CVAR(Bool, net_extratic)
-EXTERN_CVAR(Bool, savenetfile)
 
 NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(launcher), Launcher(launcher)
 {
@@ -26,7 +23,7 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 	SaveFileCheckbox = new CheckboxLabel(this);
 	IWADsList = new ListView(this);
 
-	SaveFileCheckbox->SetChecked(savenetfile);
+	SaveFileCheckbox->SetChecked(info.bSaveNetFile);
 	if (!info.DefaultNetSaveFile.IsEmpty())
 		SaveFileEdit->SetText(info.DefaultNetSaveFile.GetChars());
 
@@ -90,7 +87,7 @@ void NetworkPage::SetValues(FStartupSelectionInfo& info) const
 		JoinPage->SetValues(info);
 	}
 
-	savenetfile = SaveFileCheckbox->GetChecked();
+	info.bSaveNetFile = SaveFileCheckbox->GetChecked();
 	const auto save = SaveFileEdit->GetText();
 	if (!save.empty())
 		info.AdditionalNetArgs.AppendFormat(" -loadgame %s", save.c_str());
@@ -185,8 +182,8 @@ HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widge
 	TicDupList->AddItem("11.6");
 	TicDupList->UpdateItem("Hz", 2, 1);
 	TicDupList->SetSelectedItem(info.DefaultNetTicDup);
-	ExtraTicCheckbox->SetChecked(net_extratic);
-	BalanceTicsCheckbox->SetChecked(net_ticbalance);
+	ExtraTicCheckbox->SetChecked(info.DefaultNetExtraTic);
+	BalanceTicsCheckbox->SetChecked(info.DefaultNetBalanceTics);
 
 	GameModesLabel = new TextLabel(this);
 	CoopCheckbox = new CheckboxLabel(this);
@@ -257,8 +254,14 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 		info.DefaultNetMode = -1;
 	}
 
-	net_extratic = ExtraTicCheckbox->GetChecked();
-	net_ticbalance = BalanceTicsCheckbox->GetChecked();
+	info.DefaultNetExtraTic = ExtraTicCheckbox->GetChecked();
+	if (info.DefaultNetExtraTic)
+		info.AdditionalNetArgs.AppendFormat(" -extratic");
+
+	info.DefaultNetBalanceTics = BalanceTicsCheckbox->GetChecked();
+	if (!info.DefaultNetBalanceTics)
+		info.AdditionalNetArgs.AppendFormat(" +net_ticbalance 0");
+
 	const int dup = TicDupList->GetSelectedItem();
 	if (dup > 0)
 		info.AdditionalNetArgs.AppendFormat(" -dup %d", dup + 1);

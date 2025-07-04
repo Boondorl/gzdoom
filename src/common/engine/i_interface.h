@@ -68,6 +68,7 @@ struct FStartupSelectionInfo
 	int DefaultNetIWAD = 0;
 	bool bNetStart = false;
 	bool bHosting = false;
+	bool bSaveNetFile = false;
 	int DefaultNetPage = 0;
 	FString DefaultNetArgs = {};
 	FString AdditionalNetArgs = {}; // These ones shouldn't be saved.
@@ -76,6 +77,8 @@ struct FStartupSelectionInfo
 	int DefaultNetPlayers = 8;
 	int DefaultNetHostPort = 0;
 	int DefaultNetTicDup = 0;
+	bool DefaultNetExtraTic = false;
+	bool DefaultNetBalanceTics = true;
 	int DefaultNetMode = -1;
 	int DefaultNetGameMode = -1;
 
