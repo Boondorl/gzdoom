@@ -32,6 +32,7 @@ FStartupInfo GameStartupInfo;
 
 CVAR(Bool, vid_fps, false, 0)
 CVAR(Bool, queryiwad, QUERYIWADDEFAULT, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Bool, savenetfile, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultargs, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetiwad, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
@@ -44,6 +45,9 @@ CVAR(Int, defaultnetgamemode, -1, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetaddress, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetjoinport, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Int, defaultnetpage, 0, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnethostteam, 255, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(Int, defaultnetjointeam, 255, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CVAR(String, defaultnetsavefile, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
 // These have to be passed by the iwad selector since it has no way of knowing the info that's been loaded in.
 FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : DefaultIWAD(defIWAD), DefaultNetIWAD(defNetIWAD)
@@ -51,16 +55,19 @@ FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : Defa
 	DefaultArgs = defaultargs;
 
 	DefaultNetArgs = defaultnetargs;
-
 	DefaultNetPage = defaultnetpage;
+	DefaultNetSaveFile = defaultnetsavefile;
+
 	DefaultNetPlayers = defaultnetplayers;
 	DefaultNetHostPort = defaultnethostport;
 	DefaultNetTicDup = defaultnetticdup;
 	DefaultNetMode = defaultnetmode;
 	DefaultNetGameMode = defaultnetgamemode;
+	DefaultNetHostTeam = defaultnethostteam;
 
 	DefaultNetAddress = defaultnetaddress;
 	DefaultNetJoinPort = defaultnetjoinport;
+	DefaultNetJoinTeam = defaultnetjointeam;
 }
 
 // IWAD selection has to be saved outside of this using the return value.
@@ -71,11 +78,17 @@ int FStartupSelectionInfo::SaveInfo()
 	DefaultNetArgs.StripLeftRight();
 	AdditionalNetArgs.StripLeftRight();
 	DefaultNetAddress.StripLeftRight();
+	DefaultNetSaveFile.StripLeftRight();
+
+	if (!savenetfile)
+		defaultnetsavefile = "";
 
 	if (bNetStart)
 	{
 		defaultnetargs = DefaultNetArgs.GetChars();
 		defaultnetpage = DefaultNetPage;
+		if (savenetfile)
+			defaultnetsavefile = DefaultNetSaveFile.GetChars();
 
 		if (bHosting)
 		{
@@ -84,11 +97,13 @@ int FStartupSelectionInfo::SaveInfo()
 			defaultnetticdup = DefaultNetTicDup;
 			defaultnetmode = DefaultNetMode;
 			defaultnetgamemode = DefaultNetGameMode;
+			defaultnethostteam = DefaultNetHostTeam;
 		}
 		else
 		{
 			defaultnetaddress = DefaultNetAddress.GetChars();
 			defaultnetjoinport = DefaultNetJoinPort;
+			defaultnetjointeam = DefaultNetJoinTeam;
 		}
 
 		return DefaultNetIWAD;

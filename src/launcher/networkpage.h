@@ -41,6 +41,7 @@ private:
 	
 	LineEdit* SaveFileEdit = nullptr;
 	TextLabel* SaveFileLabel = nullptr;
+	CheckboxLabel* SaveFileCheckbox = nullptr;
 };
 
 class HostSubPage : public Widget

@@ -71,6 +71,8 @@ struct FStartupSelectionInfo
 	int DefaultNetPage = 0;
 	FString DefaultNetArgs = {};
 	FString AdditionalNetArgs = {}; // These ones shouldn't be saved.
+	FString DefaultNetSaveFile = {};
+	int DefaultNetHostTeam = 255;
 	int DefaultNetPlayers = 8;
 	int DefaultNetHostPort = 0;
 	int DefaultNetTicDup = 0;
@@ -79,6 +81,7 @@ struct FStartupSelectionInfo
 
 	FString DefaultNetAddress = {};
 	int DefaultNetJoinPort = 0;
+	int DefaultNetJoinTeam = 255;
 
 	FStartupSelectionInfo(int defIWAD, int defNetIWAD);
 	int SaveInfo();
