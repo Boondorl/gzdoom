@@ -122,17 +122,17 @@ void I_ShowFatalError(const char *message)
 }
 
 
-int I_PickIWad(WadStuff* const wads, const int numwads, const bool showwin, const int defaultiwad, int&, FString&)
+int I_PickIWad(const bool showwin, const FStartupSelectionInfo& info)
 {
 	if (!showwin)
 	{
-		return defaultiwad;
+		return info.DefaultIWAD;
 	}
 
 	I_SetMainWindowVisible(false);
 
 	extern int I_PickIWad_Cocoa(WadStuff*, int, bool, int);
-	const int result = I_PickIWad_Cocoa(wads, numwads, showwin, defaultiwad);
+	const int result = I_PickIWad_Cocoa(&(*info.Wads)[0], (int)info.Wads->Size(), showwin, info.DefaultIWAD);
 
 	I_SetMainWindowVisible(true);
 
