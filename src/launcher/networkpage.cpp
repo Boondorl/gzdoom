@@ -265,7 +265,7 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 
 	info.DefaultNetPlayers = clamp<int>(MaxPlayersEdit->GetTextInt(), 1, MAXPLAYERS);
 	info.AdditionalNetArgs.AppendFormat(" -host %d", info.DefaultNetPlayers);
-	const int port = PortEdit->GetTextInt();
+	const int port = clamp<int>(PortEdit->GetTextInt(), 0, UINT16_MAX);
 	if (port > 0)
 	{
 		info.AdditionalNetArgs.AppendFormat(" -port %d", port);
@@ -293,8 +293,13 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 	}
 	else if (TeamDeathmatchCheckbox->GetChecked())
 	{
-		info.AdditionalNetArgs.AppendFormat(" -deathmatch +teamplay 1");
+		if (AltDeathmatchCheckbox->GetChecked())
+			info.AdditionalNetArgs.AppendFormat(" -altdeath");
+		else
+			info.AdditionalNetArgs.AppendFormat(" -deathmatch");
+		info.AdditionalNetArgs.AppendFormat(" +teamplay 1");
 		info.DefaultNetGameMode = 2;
+
 		int team = 255;
 		if (!TeamEdit->GetText().empty())
 		{
@@ -324,7 +329,7 @@ void HostSubPage::UpdateLanguage()
 	GameModesLabel->SetText("Game Modes:");
 	CoopCheckbox->SetText("Co-op");
 	DeathmatchCheckbox->SetText("Deathmatch");
-	AltDeathmatchCheckbox->SetText("Alternate Rules");
+	AltDeathmatchCheckbox->SetText("Use Alternate Deathmatch Rules");
 	TeamDeathmatchCheckbox->SetText("Team Deathmatch");
 	TeamLabel->SetText("Team:");
 
@@ -390,8 +395,7 @@ void HostSubPage::OnGeometryChanged()
 	CoopCheckbox->SetFrameGeometry(0.0, y, w, CoopCheckbox->GetPreferredHeight());
 	y += CoopCheckbox->GetPreferredHeight();
 
-	DeathmatchCheckbox->SetFrameGeometry(0.0, y, 140.0, DeathmatchCheckbox->GetPreferredHeight());
-	AltDeathmatchCheckbox->SetFrameGeometry(150.0, y, w, AltDeathmatchCheckbox->GetPreferredHeight());
+	DeathmatchCheckbox->SetFrameGeometry(0.0, y, w, DeathmatchCheckbox->GetPreferredHeight());
 	y += DeathmatchCheckbox->GetPreferredHeight();
 
 	TeamDeathmatchCheckbox->SetFrameGeometry(0.0, y, w, TeamDeathmatchCheckbox->GetPreferredHeight());
@@ -400,6 +404,9 @@ void HostSubPage::OnGeometryChanged()
 	TeamLabel->SetFrameGeometry(14.0, y, 45.0, TeamLabel->GetPreferredHeight());
 	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth() + 19.0, y, 45.0, TeamLabel->GetPreferredHeight() + 2.0);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
+	y += TeamLabel->GetPreferredHeight() + 4.0;
+
+	AltDeathmatchCheckbox->SetFrameGeometry(0.0, y, w, AltDeathmatchCheckbox->GetPreferredHeight());
 
 	MainTab->UpdatePlayButton();
 }
@@ -436,7 +443,7 @@ void JoinSubPage::SetValues(FStartupSelectionInfo& info) const
 {
 	FString addr = AddressEdit->GetText();
 	info.DefaultNetAddress = addr;
-	const int port = AddressPortEdit->GetTextInt();
+	const int port = clamp<int>(AddressPortEdit->GetTextInt(), 0, UINT16_MAX);
 	if (port > 0)
 	{
 		addr.AppendFormat(":%d", port);
