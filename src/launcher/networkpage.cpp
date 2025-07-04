@@ -14,7 +14,7 @@
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
 
-NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(launcher), Launcher(launcher)
+NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
 {
 	ParametersEdit = new LineEdit(this);
 	ParametersLabel = new TextLabel(this);
@@ -36,9 +36,6 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 	HostPage = new HostSubPage(this, info);
 	JoinPage = new JoinSubPage(this, info);
 
-	StartPages->AddTab(HostPage, "Host");
-	StartPages->AddTab(JoinPage, "Join");
-
 	for (int i = 0; i < numwads; i++)
 	{
 		const char* filepart = strrchr(wads[i].Path.GetChars(), '/');
@@ -59,6 +56,14 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 		IWADsList->SetSelectedItem(info.DefaultNetIWAD);
 		IWADsList->ScrollToItem(info.DefaultNetIWAD);
 	}
+}
+
+// This has to be done after the main page is parented, otherwise it won't have the correct
+// info to pull from.
+void NetworkPage::InitializeTabs(const FStartupSelectionInfo& info)
+{
+	StartPages->AddTab(HostPage, "Host");
+	StartPages->AddTab(JoinPage, "Join");
 
 	switch (info.DefaultNetPage)
 	{

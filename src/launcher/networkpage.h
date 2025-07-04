@@ -24,6 +24,7 @@ public:
 	void UpdatePlayButton();
 	bool IsInHost() const;
 	void SetValues(FStartupSelectionInfo& info) const;
+	void InitializeTabs(const FStartupSelectionInfo& info);
 
 private:
 	void OnGeometryChanged() override;

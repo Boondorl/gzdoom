@@ -44,6 +44,8 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInf
 	Pages->AddTab(Settings, "Settings");
 	Pages->AddTab(Network, "Multiplayer");
 
+	Network->InitializeTabs(info);
+
 	UpdateLanguage();
 
 	Pages->SetCurrentWidget(PlayGame);
