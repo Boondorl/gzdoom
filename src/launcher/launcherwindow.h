@@ -16,9 +16,9 @@ struct FStartupSelectionInfo;
 class LauncherWindow : public Widget
 {
 public:
-	static int ExecModal(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags);
+	static int ExecModal(FStartupSelectionInfo& info);
 
-	LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags);
+	LauncherWindow(FStartupSelectionInfo& info);
 	void UpdateLanguage();
 
 	void Start();

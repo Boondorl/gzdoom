@@ -13,13 +13,13 @@
 #include <zwidget/window/window.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
-int LauncherWindow::ExecModal(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags)
+int LauncherWindow::ExecModal(FStartupSelectionInfo& info)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 615.0;
 	double windowHeight = 700.0;
 
-	auto launcher = std::make_unique<LauncherWindow>(wads, numwads, info, autoloadflags);
+	auto launcher = std::make_unique<LauncherWindow>(info);
 	launcher->SetFrameGeometry((screenSize.width - windowWidth) * 0.5, (screenSize.height - windowHeight) * 0.5, windowWidth, windowHeight);
 	launcher->Show();
 
@@ -28,7 +28,7 @@ int LauncherWindow::ExecModal(WadStuff* wads, int numwads, FStartupSelectionInfo
 	return launcher->ExecResult;
 }
 
-LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInfo& info, int* autoloadflags) : Widget(nullptr, WidgetType::Window), Info(&info)
+LauncherWindow::LauncherWindow(FStartupSelectionInfo& info) : Widget(nullptr, WidgetType::Window), Info(&info)
 {
 	SetWindowTitle(GAMENAME);
 
@@ -36,9 +36,9 @@ LauncherWindow::LauncherWindow(WadStuff* wads, int numwads, FStartupSelectionInf
 	Pages = new TabWidget(this);
 	Buttonbar = new LauncherButtonbar(this);
 
-	PlayGame = new PlayGamePage(this, wads, numwads, info);
-	Settings = new SettingsPage(this, autoloadflags);
-	Network = new NetworkPage(this, wads, numwads, info);
+	PlayGame = new PlayGamePage(this, info);
+	Settings = new SettingsPage(this, info);
+	Network = new NetworkPage(this, info);
 
 	Pages->AddTab(PlayGame, "Play");
 	Pages->AddTab(Settings, "Settings");
@@ -71,7 +71,7 @@ void LauncherWindow::Start()
 {
 	Info->bNetStart = IsInMultiplayer();
 
-	Settings->Save();
+	Settings->SetValues(*Info);
 	if (Info->bNetStart)
 		Network->SetValues(*Info);
 	else

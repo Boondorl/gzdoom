@@ -753,91 +753,42 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 					  "iwads to the list beneath [IWADSearch.Directories]");
 #endif
 	}
-	int pick = 0, netPick = 0;
+	int pick = 0;
 
 	// Present the IWAD selection box.
 	bool alwaysshow = (queryiwad && !Args->CheckParm("-iwad") && !foundprio);
 
-	if (alwaysshow || picks.Size() > 1)
+	if (!havepicked && (alwaysshow || picks.Size() > 1))
 	{
-		// Locate the user's prefered IWAD, if it was found.
-		if (defaultiwad[0] != '\0')
+		TArray<WadStuff> wads;
+		for (auto & found : picks)
 		{
-			for (unsigned i = 0; i < picks.Size(); ++i)
-			{
-				FString &basename = mIWadInfos[picks[i].mInfoIndex].Name;
-				if (basename.CompareNoCase(defaultiwad) == 0)
-				{
-					pick = i;
-					break;
-				}
-			}
+			WadStuff stuff;
+			stuff.Name = mIWadInfos[found.mInfoIndex].Name;
+			stuff.Path = ExtractFileBase(found.mFullPath.GetChars());
+			wads.Push(stuff);
 		}
-		if (defaultnetiwad[0] != '\0')
+
+		int flags = 0;
+		if (disableautoload) flags |= 1;
+		if (autoloadlights) flags |= 2;
+		if (autoloadbrightmaps) flags |= 4;
+		if (autoloadwidescreen) flags |= 8;
+
+		FStartupSelectionInfo info = FStartupSelectionInfo(wads, *Args, flags);
+		pick = I_PickIWad(queryiwad, info);
+		if (pick >= 0)
 		{
-			for (unsigned i = 0; i < picks.Size(); ++i)
-			{
-				FString& basename = mIWadInfos[picks[i].mInfoIndex].Name;
-				if (basename.CompareNoCase(defaultnetiwad) == 0)
-				{
-					netPick = i;
-					break;
-				}
-			}
+			disableautoload = !!(info.DefaultStartFlags & 1);
+			autoloadlights = !!(info.DefaultStartFlags & 2);
+			autoloadbrightmaps = !!(info.DefaultStartFlags & 4);
+			autoloadwidescreen = !!(info.DefaultStartFlags & 8);
 		}
-		if (alwaysshow || picks.Size() > 1)
+		else
 		{
-			if (!havepicked)
-			{
-				TArray<WadStuff> wads;
-				for (auto & found : picks)
-				{
-					WadStuff stuff;
-					stuff.Name = mIWadInfos[found.mInfoIndex].Name;
-					stuff.Path = ExtractFileBase(found.mFullPath.GetChars());
-					wads.Push(stuff);
-				}
-				int flags = 0;;
-
-				if (disableautoload) flags |= 1;
-				if (autoloadlights) flags |= 2;
-				if (autoloadbrightmaps) flags |= 4;
-				if (autoloadwidescreen) flags |= 8;
-
-				FStartupSelectionInfo info = FStartupSelectionInfo(pick, netPick);
-				pick = I_PickIWad(&wads[0], (int)wads.Size(), queryiwad, info, flags);
-				if (pick >= 0)
-				{
-					if (info.bNetStart)
-					{
-						if (!info.DefaultNetArgs.IsEmpty())
-							Args->AppendArgsString(info.DefaultNetArgs);
-						if (!info.AdditionalNetArgs.IsEmpty())
-							Args->AppendArgsString(info.AdditionalNetArgs);
-					}
-					else if (!info.DefaultArgs.IsEmpty())
-					{
-						Args->AppendArgsString(info.DefaultArgs);
-					}
-
-					disableautoload = !!(flags & 1);
-					autoloadlights = !!(flags & 2);
-					autoloadbrightmaps = !!(flags & 4);
-					autoloadwidescreen = !!(flags & 8);
-
-					// The newly selected IWAD becomes the new default
-					if (info.bNetStart)
-						defaultnetiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
-					else
-						defaultiwad = mIWadInfos[picks[pick].mInfoIndex].Name.GetChars();
-				}
-				else
-				{
-					return -1;
-				}
-				havepicked = true;
-			}
+			return -1;
 		}
+		havepicked = true;
 	}
 
 	// zdoom.pk3 must always be the first file loaded and the IWAD second.

@@ -10,6 +10,7 @@ class FGameTexture;
 class FTextureID;
 enum EUpscaleFlags : int;
 class FConfigFile;
+class FArgs;
 struct FTranslationID;
 
 struct SystemCallbacks
@@ -60,10 +61,20 @@ struct WadStuff
 
 struct FStartupSelectionInfo
 {
+	const TArray<WadStuff>* Wads = nullptr;
+	FArgs* Args = nullptr;
+
 	// Local game info
 	int DefaultIWAD = 0;
 	FString DefaultArgs = {};
 	bool bSaveArgs = true;
+
+	// Settings
+	int DefaultStartFlags = 0;
+	bool DefaultQueryIWAD = true;
+	FString DefaultLanguage = "auto";
+	int DefaultBackend = 1;
+	bool DefaultFullscreen = true;
 
 	// Net game info
 	int DefaultNetIWAD = 0;
@@ -88,7 +99,8 @@ struct FStartupSelectionInfo
 	int DefaultNetJoinPort = 0;
 	int DefaultNetJoinTeam = 255;
 
-	FStartupSelectionInfo(int defIWAD, int defNetIWAD);
+	FStartupSelectionInfo() = delete;
+	FStartupSelectionInfo(const TArray<WadStuff>& wads, FArgs& args, int startFlags);
 	int SaveInfo();
 };
 

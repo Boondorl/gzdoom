@@ -5,6 +5,7 @@
 #include "c_cvars.h"
 #include "gstrings.h"
 #include "version.h"
+#include "m_argv.h"
 
 static_assert(sizeof(void*) == 8,
 	"Only LP64/LLP64 builds are officially supported. "
@@ -53,12 +54,50 @@ CVAR(Int, defaultnetjointeam, 255, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(Bool, defaultnetextratic, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 CVAR(String, defaultnetsavefile, "", CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 
-// These have to be passed by the iwad selector since it has no way of knowing the info that's been loaded in.
-FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : DefaultIWAD(defIWAD), DefaultNetIWAD(defNetIWAD)
+EXTERN_CVAR(Bool, ui_generic)
+EXTERN_CVAR(Int, vid_preferbackend)
+EXTERN_CVAR(Bool, vid_fullscreen)
+
+CUSTOM_CVAR(String, language, "auto", CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
 {
+	GStrings.UpdateLanguage(self);
+	UpdateGenericUI(ui_generic);
+	if (sysCallbacks.LanguageChanged) sysCallbacks.LanguageChanged(self);
+}
+
+// Some of this info has to be passed and managed from the front end since it's game-engine specific.
+FStartupSelectionInfo::FStartupSelectionInfo(const TArray<WadStuff>& wads, FArgs& args, int startFlags) : Wads(&wads), Args(&args), DefaultStartFlags(startFlags)
+{
+	DefaultQueryIWAD = queryiwad;
+	DefaultLanguage = language;
+	DefaultBackend = vid_preferbackend;
+	DefaultFullscreen = vid_fullscreen;
+
+	if (defaultiwad[0] != '\0')
+	{
+		for (int i = 0; i < wads.Size(); ++i)
+		{
+			if (!wads[i].Name.CompareNoCase(defaultiwad))
+			{
+				DefaultIWAD = i;
+				break;
+			}
+		}
+	}
 	DefaultArgs = defaultargs;
 	bSaveArgs = saveargs;
 
+	if (defaultnetiwad[0] != '\0')
+	{
+		for (int i = 0; i < wads.Size(); ++i)
+		{
+			if (!wads[i].Name.CompareNoCase(defaultnetiwad))
+			{
+				DefaultNetIWAD = i;
+				break;
+			}
+		}
+	}
 	DefaultNetArgs = defaultnetargs;
 	DefaultNetPage = defaultnetpage;
 	DefaultNetSaveFile = defaultnetsavefile;
@@ -79,9 +118,11 @@ FStartupSelectionInfo::FStartupSelectionInfo(int defIWAD, int defNetIWAD) : Defa
 	DefaultNetJoinTeam = defaultnetjointeam;
 }
 
-// IWAD selection has to be saved outside of this using the return value.
+// Return whatever IWAD the user selected.
 int FStartupSelectionInfo::SaveInfo()
 {
+	DefaultLanguage.StripLeftRight();
+
 	DefaultArgs.StripLeftRight();
 
 	DefaultNetArgs.StripLeftRight();
@@ -89,11 +130,18 @@ int FStartupSelectionInfo::SaveInfo()
 	DefaultNetAddress.StripLeftRight();
 	DefaultNetSaveFile.StripLeftRight();
 
+	queryiwad = DefaultQueryIWAD;
+	language = DefaultLanguage.GetChars();
+	vid_fullscreen = DefaultFullscreen;
+	if (DefaultBackend != vid_preferbackend)
+		vid_preferbackend = DefaultBackend;
+
 	if (bNetStart)
 	{
 		savenetfile = bSaveNetFile;
 		savenetargs = bSaveNetArgs;
 
+		defaultnetiwad = (*Wads)[DefaultNetIWAD].Name.GetChars();
 		defaultnetpage = DefaultNetPage;
 		defaultnetsavefile = savenetfile ? DefaultNetSaveFile.GetChars() : "";
 		defaultnetargs = savenetargs ? DefaultNetArgs.GetChars() : "";
@@ -116,20 +164,21 @@ int FStartupSelectionInfo::SaveInfo()
 			defaultnetjointeam = DefaultNetJoinTeam;
 		}
 
+		if (!DefaultNetArgs.IsEmpty())
+			Args->AppendArgsString(DefaultNetArgs);
+		if (!AdditionalNetArgs.IsEmpty())
+			Args->AppendArgsString(AdditionalNetArgs);
+
 		return DefaultNetIWAD;
 	}
 
+	defaultiwad = (*Wads)[DefaultIWAD].Name.GetChars();
 	saveargs = bSaveArgs;
 	defaultargs = saveargs ? DefaultArgs.GetChars() : "";
+
+	if (!DefaultArgs.IsEmpty())
+		Args->AppendArgsString(DefaultArgs);
+
 	return DefaultIWAD;
-}
-
-EXTERN_CVAR(Bool, ui_generic)
-
-CUSTOM_CVAR(String, language, "auto", CVAR_ARCHIVE | CVAR_NOINITCALL | CVAR_GLOBALCONFIG)
-{
-	GStrings.UpdateLanguage(self);
-	UpdateGenericUI(ui_generic);
-	if (sysCallbacks.LanguageChanged) sysCallbacks.LanguageChanged(self);
 }
 

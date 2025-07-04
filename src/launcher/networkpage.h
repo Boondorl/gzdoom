@@ -19,7 +19,7 @@ class JoinSubPage;
 class NetworkPage : public Widget
 {
 public:
-	NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info);
+	NetworkPage(LauncherWindow* launcher, const FStartupSelectionInfo& info);
 	void UpdateLanguage();
 	void UpdatePlayButton();
 	bool IsInHost() const;
@@ -49,7 +49,7 @@ private:
 class HostSubPage : public Widget
 {
 public:
-	HostSubPage(NetworkPage* main, FStartupSelectionInfo& info);
+	HostSubPage(NetworkPage* main, const FStartupSelectionInfo& info);
 	void UpdateLanguage();
 	void SetValues(FStartupSelectionInfo& info) const;
 
@@ -87,7 +87,7 @@ private:
 class JoinSubPage : public Widget
 {
 public:
-	JoinSubPage(NetworkPage* main, FStartupSelectionInfo& info);
+	JoinSubPage(NetworkPage* main, const FStartupSelectionInfo& info);
 	void UpdateLanguage();
 	void SetValues(FStartupSelectionInfo& info) const;
 

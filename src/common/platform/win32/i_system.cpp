@@ -358,7 +358,7 @@ static void SetQueryIWad(HWND dialog)
 //
 //==========================================================================
 
-int I_PickIWad(WadStuff *wads, int numwads, bool showwin, FStartupSelectionInfo& info, int& autoloadflags)
+int I_PickIWad(bool showwin, FStartupSelectionInfo& info)
 {
 	int vkey;
 	if (stricmp(queryiwad_key, "shift") == 0)
@@ -375,7 +375,7 @@ int I_PickIWad(WadStuff *wads, int numwads, bool showwin, FStartupSelectionInfo&
 	}
 	if (showwin || (vkey != 0 && GetAsyncKeyState(vkey)))
 	{
-		return LauncherWindow::ExecModal(wads, numwads, info, &autoloadflags);
+		return LauncherWindow::ExecModal(info);
 	}
 	return info.DefaultIWAD;
 }

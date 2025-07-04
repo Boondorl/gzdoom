@@ -15,7 +15,7 @@
 
 constexpr double EditHeight = 24.0;
 
-NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
+NetworkPage::NetworkPage(LauncherWindow* launcher, const FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
 {
 	ParametersEdit = new LineEdit(this);
 	ParametersLabel = new TextLabel(this);
@@ -37,22 +37,24 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, WadStuff* wads, int numwads, 
 	HostPage = new HostSubPage(this, info);
 	JoinPage = new JoinSubPage(this, info);
 
-	for (int i = 0; i < numwads; i++)
+	for (const auto& wad : *info.Wads)
 	{
-		const char* filepart = strrchr(wads[i].Path.GetChars(), '/');
+		const char* filepart = strrchr(wad.Path.GetChars(), '/');
 		if (filepart == nullptr)
-			filepart = wads[i].Path.GetChars();
+			filepart = wad.Path.GetChars();
 		else
-			filepart++;
+			++filepart;
 
 		FString work;
-		if (*filepart) work.Format("%s (%s)", wads[i].Name.GetChars(), filepart);
-		else work = wads[i].Name.GetChars();
+		if (*filepart)
+			work.Format("%s (%s)", wad.Name.GetChars(), filepart);
+		else
+			work = wad.Name.GetChars();
 
 		IWADsList->AddItem(work.GetChars());
 	}
 
-	if (info.DefaultNetIWAD >= 0 && info.DefaultNetIWAD < numwads)
+	if (info.DefaultNetIWAD >= 0 && info.DefaultNetIWAD < info.Wads->Size())
 	{
 		IWADsList->SetSelectedItem(info.DefaultNetIWAD);
 		IWADsList->ScrollToItem(info.DefaultNetIWAD);
@@ -155,7 +157,7 @@ void NetworkPage::UpdateLanguage()
 	JoinPage->UpdateLanguage();
 }
 
-HostSubPage::HostSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
+HostSubPage::HostSubPage(NetworkPage* main, const FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
 {
 	NetModesLabel = new TextLabel(this);
 	AutoNetmodeCheckbox = new CheckboxLabel(this);
@@ -345,14 +347,14 @@ void HostSubPage::UpdateLanguage()
 	DeathmatchCheckbox->SetText("Deathmatch");
 	AltDeathmatchCheckbox->SetText("Use Alternate Deathmatch Rules");
 	TeamDeathmatchCheckbox->SetText("Team Deathmatch");
-	TeamLabel->SetText("Team:");
+	TeamLabel->SetText("Team #:");
 
 	MaxPlayersLabel->SetText("Max Players:");
 	PortLabel->SetText("Host Port:");
 
 	MaxPlayerHintLabel->SetText("Max 64");
 	PortHintLabel->SetText("Default 5029");
-	TeamHintLabel->SetText("Max 255");
+	TeamHintLabel->SetText("255 = Random");
 }
 
 void HostSubPage::OnGeometryChanged()
@@ -361,6 +363,7 @@ void HostSubPage::OnGeometryChanged()
 	const double h = GetHeight();
 
 	constexpr double LabelOfsSize = 90.0;
+	constexpr double hintOfs = 170.0;
 
 	double y = 0.0;
 
@@ -371,7 +374,6 @@ void HostSubPage::OnGeometryChanged()
 	PortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, PortLabel->GetPreferredHeight());
 	PortEdit->SetFrameGeometry(PortLabel->GetWidth(), y, 60.0, EditHeight);
 
-	const double hintOfs = PortLabel->GetWidth() + PortEdit->GetWidth() + 30.0;
 	MaxPlayerHintLabel->SetFrameGeometry(hintOfs, 0.0, w - hintOfs, MaxPlayerHintLabel->GetPreferredHeight());
 	PortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, PortHintLabel->GetPreferredHeight());
 
@@ -415,8 +417,8 @@ void HostSubPage::OnGeometryChanged()
 	TeamDeathmatchCheckbox->SetFrameGeometry(0.0, y, w, TeamDeathmatchCheckbox->GetPreferredHeight());
 	y += TeamDeathmatchCheckbox->GetPreferredHeight() + 2.0;
 
-	TeamLabel->SetFrameGeometry(14.0, y, 45.0, TeamLabel->GetPreferredHeight());
-	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth() + 19.0, y, 45.0, EditHeight);
+	TeamLabel->SetFrameGeometry(14.0, y, LabelOfsSize - 14.0, TeamLabel->GetPreferredHeight());
+	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth() + 14.0, y, 45.0, EditHeight);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
 	y += EditHeight + 2.0;
 
@@ -425,7 +427,7 @@ void HostSubPage::OnGeometryChanged()
 	MainTab->UpdatePlayButton();
 }
 
-JoinSubPage::JoinSubPage(NetworkPage* main, FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
+JoinSubPage::JoinSubPage(NetworkPage* main, const FStartupSelectionInfo& info) : Widget(nullptr), MainTab(main)
 {
 	AddressEdit = new LineEdit(this);
 	AddressPortEdit = new LineEdit(this);
@@ -488,10 +490,10 @@ void JoinSubPage::UpdateLanguage()
 	AddressPortLabel->SetText("Host Port:");
 
 	TeamDeathmatchLabel->SetText("Team Deathmatch:");
-	TeamLabel->SetText("Team:");
+	TeamLabel->SetText("Team #:");
 
 	AddressPortHintLabel->SetText("Default 5029");
-	TeamHintLabel->SetText("Max 255");
+	TeamHintLabel->SetText("255 = Random");
 }
 
 void JoinSubPage::OnGeometryChanged()
@@ -499,7 +501,8 @@ void JoinSubPage::OnGeometryChanged()
 	const double w = GetWidth();
 	const double h = GetHeight();
 
-	constexpr double LabelOfsSize = 70.0;
+	constexpr double LabelOfsSize = 90.0;
+	constexpr double hintOfs = 170.0;
 
 	double y = 0.0;
 
@@ -510,14 +513,13 @@ void JoinSubPage::OnGeometryChanged()
 	AddressPortLabel->SetFrameGeometry(0.0, y, LabelOfsSize, AddressPortLabel->GetPreferredHeight());
 	AddressPortEdit->SetFrameGeometry(AddressPortLabel->GetWidth(), y, 60.0, EditHeight);
 
-	const double hintOfs = AddressPortLabel->GetWidth() + AddressPortEdit->GetWidth() + 30.0;
 	AddressPortHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, AddressPortHintLabel->GetPreferredHeight());
 	y += EditHeight + 12.0;
 
 	TeamDeathmatchLabel->SetFrameGeometry(0.0, y, w, TeamDeathmatchLabel->GetPreferredHeight());
 	y += TeamDeathmatchLabel->GetPreferredHeight();
 
-	TeamLabel->SetFrameGeometry(0.0, y, 45.0, TeamLabel->GetPreferredHeight());
+	TeamLabel->SetFrameGeometry(0.0, y, LabelOfsSize, TeamLabel->GetPreferredHeight());
 	TeamEdit->SetFrameGeometry(TeamLabel->GetWidth(), y, 45.0, EditHeight);
 	TeamHintLabel->SetFrameGeometry(hintOfs, y, w - hintOfs, TeamHintLabel->GetPreferredHeight());
 

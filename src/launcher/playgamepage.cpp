@@ -9,7 +9,7 @@
 #include <zwidget/widgets/lineedit/lineedit.h>
 #include <zwidget/widgets/checkboxlabel/checkboxlabel.h>
 
-PlayGamePage::PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
+PlayGamePage::PlayGamePage(LauncherWindow* launcher, const FStartupSelectionInfo& info) : Widget(nullptr), Launcher(launcher)
 {
 	WelcomeLabel = new TextLabel(this);
 	VersionLabel = new TextLabel(this);
@@ -24,22 +24,24 @@ PlayGamePage::PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads
 	if (!info.DefaultArgs.IsEmpty())
 		ParametersEdit->SetText(info.DefaultArgs.GetChars());
 
-	for (int i = 0; i < numwads; i++)
+	for (const auto& wad : *info.Wads)
 	{
-		const char* filepart = strrchr(wads[i].Path.GetChars(), '/');
-		if (filepart == NULL)
-			filepart = wads[i].Path.GetChars();
+		const char* filepart = strrchr(wad.Path.GetChars(), '/');
+		if (filepart == nullptr)
+			filepart = wad.Path.GetChars();
 		else
-			filepart++;
+			++filepart;
 
 		FString work;
-		if (*filepart) work.Format("%s (%s)", wads[i].Name.GetChars(), filepart);
-		else work = wads[i].Name.GetChars();
+		if (*filepart)
+			work.Format("%s (%s)", wad.Name.GetChars(), filepart);
+		else
+			work = wad.Name.GetChars();
 
 		GamesList->AddItem(work.GetChars());
 	}
 
-	if (info.DefaultIWAD >= 0 && info.DefaultIWAD < numwads)
+	if (info.DefaultIWAD >= 0 && info.DefaultIWAD < info.Wads->Size())
 	{
 		GamesList->SetSelectedItem(info.DefaultIWAD);
 		GamesList->ScrollToItem(info.DefaultIWAD);

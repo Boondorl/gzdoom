@@ -13,7 +13,7 @@ struct FStartupSelectionInfo;
 class PlayGamePage : public Widget
 {
 public:
-	PlayGamePage(LauncherWindow* launcher, WadStuff* wads, int numwads, FStartupSelectionInfo& info);
+	PlayGamePage(LauncherWindow* launcher, const FStartupSelectionInfo& info);
 	void UpdateLanguage();
 	void SetValues(FStartupSelectionInfo& info) const;
 
