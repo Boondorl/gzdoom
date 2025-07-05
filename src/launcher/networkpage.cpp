@@ -59,6 +59,8 @@ NetworkPage::NetworkPage(LauncherWindow* launcher, const FStartupSelectionInfo& 
 		IWADsList->SetSelectedItem(info.DefaultNetIWAD);
 		IWADsList->ScrollToItem(info.DefaultNetIWAD);
 	}
+
+	IWADsList->OnActivated = [=]() { OnIWADsListActivated(); };
 }
 
 // This has to be done after the main page is parented, otherwise it won't have the correct
@@ -77,6 +79,16 @@ void NetworkPage::InitializeTabs(const FStartupSelectionInfo& info)
 		StartPages->SetCurrentWidget(HostPage);
 		break;
 	}
+}
+
+void NetworkPage::OnIWADsListActivated()
+{
+	Launcher->Start();
+}
+
+void NetworkPage::OnSetFocus()
+{
+	IWADsList->SetFocus();
 }
 
 void NetworkPage::SetValues(FStartupSelectionInfo& info) const

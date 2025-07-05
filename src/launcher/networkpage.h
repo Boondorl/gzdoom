@@ -28,6 +28,8 @@ public:
 
 private:
 	void OnGeometryChanged() override;
+	void OnSetFocus() override;
+	void OnIWADsListActivated();
 
 	LauncherWindow* Launcher = nullptr;
 
