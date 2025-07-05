@@ -776,9 +776,9 @@ int FIWadManager::IdentifyVersion (std::vector<std::string>&wadfiles, const char
 		if (autoloadwidescreen) flags |= 8;
 
 		FStartupSelectionInfo info = FStartupSelectionInfo(wads, *Args, flags);
-		pick = I_PickIWad(queryiwad, info);
-		if (pick >= 0)
+		if (I_PickIWad(queryiwad, info))
 		{
+			pick = info.SaveInfo();
 			disableautoload = !!(info.DefaultStartFlags & 1);
 			autoloadlights = !!(info.DefaultStartFlags & 2);
 			autoloadbrightmaps = !!(info.DefaultStartFlags & 4);

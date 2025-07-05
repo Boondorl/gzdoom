@@ -13,7 +13,7 @@
 #include <zwidget/window/window.h>
 #include <zwidget/widgets/tabwidget/tabwidget.h>
 
-int LauncherWindow::ExecModal(FStartupSelectionInfo& info)
+bool LauncherWindow::ExecModal(FStartupSelectionInfo& info)
 {
 	Size screenSize = GetScreenSize();
 	double windowWidth = 615.0;
@@ -77,13 +77,13 @@ void LauncherWindow::Start()
 	else
 		PlayGame->SetValues(*Info);
 
-	ExecResult = Info->SaveInfo();
+	ExecResult = true;
 	DisplayWindow::ExitLoop();
 }
 
 void LauncherWindow::Exit()
 {
-	ExecResult = -1;
+	ExecResult = false;
 	DisplayWindow::ExitLoop();
 }
 

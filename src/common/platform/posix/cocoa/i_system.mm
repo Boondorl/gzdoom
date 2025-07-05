@@ -123,11 +123,11 @@ void I_ShowFatalError(const char *message)
 }
 
 
-int I_PickIWad(bool showwin, FStartupSelectionInfo& info)
+bool I_PickIWad(bool showwin, FStartupSelectionInfo& info)
 {
 	if (!showwin)
 	{
-		return info.DefaultIWAD;
+		return true;
 	}
 
 	I_SetMainWindowVisible(false);
@@ -137,7 +137,13 @@ int I_PickIWad(bool showwin, FStartupSelectionInfo& info)
 
 	I_SetMainWindowVisible(true);
 
-	return result;
+	if (result >= 0)
+	{
+		info.DefaultIWAD = result;
+		return true;
+	}
+
+	return false;
 }
 
 

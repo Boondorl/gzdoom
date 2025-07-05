@@ -16,7 +16,7 @@ struct FStartupSelectionInfo;
 class LauncherWindow : public Widget
 {
 public:
-	static int ExecModal(FStartupSelectionInfo& info);
+	static bool ExecModal(FStartupSelectionInfo& info);
 
 	LauncherWindow(FStartupSelectionInfo& info);
 	void UpdateLanguage();
@@ -41,5 +41,5 @@ private:
 
 	FStartupSelectionInfo* Info = nullptr;
 
-	int ExecResult = -1;
+	bool ExecResult = false;
 };
