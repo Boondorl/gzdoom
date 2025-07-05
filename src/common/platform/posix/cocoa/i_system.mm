@@ -123,7 +123,7 @@ void I_ShowFatalError(const char *message)
 }
 
 
-int I_PickIWad(const bool showwin, const FStartupSelectionInfo& info)
+int I_PickIWad(bool showwin, FStartupSelectionInfo& info)
 {
 	if (!showwin)
 	{
