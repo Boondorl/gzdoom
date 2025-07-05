@@ -19,9 +19,9 @@ void LauncherButtonbar::UpdateLanguage()
 	if (!launcher->IsInMultiplayer())
 		PlayButton->SetText(GStrings.GetString("PICKER_PLAY"));
 	else if (launcher->IsHosting())
-		PlayButton->SetText("Host Game");
+		PlayButton->SetText(GStrings.GetString("PICKER_PLAYHOST"));
 	else
-		PlayButton->SetText("Join Game");
+		PlayButton->SetText(GStrings.GetString("PICKER_PLAYJOIN"));
 
 	ExitButton->SetText(GStrings.GetString("PICKER_EXIT"));
 }

@@ -67,7 +67,7 @@ void PlayGamePage::UpdateLanguage()
 	FString versionText = GStrings.GetString("PICKER_VERSION");
 	versionText.Substitute("%s", GetVersionString());
 	VersionLabel->SetText(versionText.GetChars());
-	SaveArgsCheckbox->SetText("Remember Parameters");
+	SaveArgsCheckbox->SetText(GStrings.GetString("PICKER_REMPARM"));
 }
 
 void PlayGamePage::OnGamesListActivated()

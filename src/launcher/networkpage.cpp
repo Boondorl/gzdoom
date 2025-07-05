@@ -159,12 +159,12 @@ void NetworkPage::OnGeometryChanged()
 void NetworkPage::UpdateLanguage()
 {
 	ParametersLabel->SetText(GStrings.GetString("PICKER_ADDPARM"));
-	SaveFileLabel->SetText("Load Save File:");
-	SaveFileCheckbox->SetText("Remember Save File");
-	SaveArgsCheckbox->SetText("Remember Parameters");
+	SaveFileLabel->SetText(GStrings.GetString("PICKER_LOADSAVE"));
+	SaveFileCheckbox->SetText(GStrings.GetString("PICKER_REMSAVE"));
+	SaveArgsCheckbox->SetText(GStrings.GetString("PICKER_REMPARM"));
 
-	StartPages->SetTabText(HostPage, "Host");
-	StartPages->SetTabText(JoinPage, "Join");
+	StartPages->SetTabText(HostPage, GStrings.GetString("PICKER_HOST"));
+	StartPages->SetTabText(JoinPage, GStrings.GetString("PICKER_JOIN"));
 	HostPage->UpdateLanguage();
 	JoinPage->UpdateLanguage();
 }
@@ -346,27 +346,27 @@ void HostSubPage::SetValues(FStartupSelectionInfo& info) const
 
 void HostSubPage::UpdateLanguage()
 {
-	NetModesLabel->SetText("Networking Mode:");
-	AutoNetmodeCheckbox->SetText("Auto (recommended)");
-	PacketServerCheckbox->SetText("Packet-Server");
-	PeerToPeerCheckbox->SetText("Peer-to-Peer");
+	NetModesLabel->SetText(GStrings.GetString("PICKER_NETMODE"));
+	AutoNetmodeCheckbox->SetText(GStrings.GetString("PICKER_NETAUTO"));
+	PacketServerCheckbox->SetText(GStrings.GetString("PICKER_NETSERVER"));
+	PeerToPeerCheckbox->SetText(GStrings.GetString("PICKER_NETPEER"));
 
-	TicDupLabel->SetText("Packet Ticrate:");
-	ExtraTicCheckbox->SetText("Send Backup Packets");
+	TicDupLabel->SetText(GStrings.GetString("PICKER_NETRATE"));
+	ExtraTicCheckbox->SetText(GStrings.GetString("PICKER_NETBACKUP"));
 
-	GameModesLabel->SetText("Game Modes:");
-	CoopCheckbox->SetText("Co-op");
-	DeathmatchCheckbox->SetText("Deathmatch");
-	AltDeathmatchCheckbox->SetText("Use Alternate Deathmatch Rules");
-	TeamDeathmatchCheckbox->SetText("Team Deathmatch");
-	TeamLabel->SetText("Team #:");
+	GameModesLabel->SetText(GStrings.GetString("PICKER_GAMEMODE"));
+	CoopCheckbox->SetText(GStrings.GetString("PICKER_COOP"));
+	DeathmatchCheckbox->SetText(GStrings.GetString("PICKER_DM"));
+	AltDeathmatchCheckbox->SetText(GStrings.GetString("PICKER_ALTDM"));
+	TeamDeathmatchCheckbox->SetText(GStrings.GetString("PICKER_TDM"));
+	TeamLabel->SetText(GStrings.GetString("PICKER_TEAM"));
 
-	MaxPlayersLabel->SetText("Max Players:");
-	PortLabel->SetText("Host Port:");
+	MaxPlayersLabel->SetText(GStrings.GetString("PICKER_PLAYERS"));
+	PortLabel->SetText(GStrings.GetString("PICKER_PORT"));
 
-	MaxPlayerHintLabel->SetText("Max 64");
-	PortHintLabel->SetText("Default 5029");
-	TeamHintLabel->SetText("255 = Random");
+	MaxPlayerHintLabel->SetText(GStrings.GetString("PICKER_PLAYERHINT"));
+	PortHintLabel->SetText(GStrings.GetString("PICKER_PORTHINT"));
+	TeamHintLabel->SetText(GStrings.GetString("PICKER_TEAMHINT"));
 }
 
 void HostSubPage::OnGeometryChanged()
@@ -498,14 +498,14 @@ void JoinSubPage::SetValues(FStartupSelectionInfo& info) const
 
 void JoinSubPage::UpdateLanguage()
 {
-	AddressLabel->SetText("Host IP:");
-	AddressPortLabel->SetText("Host Port:");
+	AddressLabel->SetText(GStrings.GetString("PICKER_IP"));
+	AddressPortLabel->SetText(GStrings.GetString("PICKER_PORT"));
 
-	TeamDeathmatchLabel->SetText("Team Deathmatch:");
-	TeamLabel->SetText("Team #:");
+	TeamDeathmatchLabel->SetText(GStrings.GetString("PICKER_TDMLABEL"));
+	TeamLabel->SetText(GStrings.GetString("PICKER_TEAM"));
 
-	AddressPortHintLabel->SetText("Default 5029");
-	TeamHintLabel->SetText("255 = Random");
+	AddressPortHintLabel->SetText(GStrings.GetString("PICKER_PORTHINT"));
+	TeamHintLabel->SetText(GStrings.GetString("PICKER_TEAMHINT"));
 }
 
 void JoinSubPage::OnGeometryChanged()
