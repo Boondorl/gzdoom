@@ -1616,10 +1616,10 @@ void FLevelLocals::UnlinkActorFromLevel(AActor& mo)
 {
 	mo.UnlinkFromWorld(nullptr);
 	mo.UnlinkBehaviorsFromLevel();
-	mo.DeleteAttachedLights();
 	const int tid = mo.tid;
 	mo.SetTID(0);
 	mo.tid = tid; // Restore the TID for later relinking.
+	mo.DeleteAttachedLights();
 }
 
 void FLevelLocals::StartTravel()
@@ -1640,38 +1640,50 @@ void FLevelLocals::StartTravel()
 	// (which will clean up anything it owns as well).
 	auto it = GetThinkerIterator<DThinker>(NAME_None, STAT_TRAVELLING);
 	DThinker* th = nullptr;
-	while ((th = it.Next()) != nullptr)
+	unsigned count = 0u;
+	do
 	{
-		auto mo = dyn_cast<AActor>(th);
-		if (mo != nullptr)
+		count = 0u;
+		it.Reinit();
+
+		while ((th = it.Next()) != nullptr)
 		{
-			if (mo->player != nullptr)
+			// Already processed this Thinker.
+			if (th->ObjectFlags & OF_Travelling)
+				continue;
+
+			++count;
+			auto mo = dyn_cast<AActor>(th);
+			if (mo != nullptr)
 			{
-				// No voodoo dolls allowed.
-				if (mo->player->mo != mo)
+				if (mo->player != nullptr)
 				{
-					mo->ChangeStatNum(STAT_PLAYER);
-					continue;
+					// No voodoo dolls allowed.
+					if (mo->player->mo != mo)
+					{
+						mo->ChangeStatNum(STAT_PLAYER);
+						continue;
+					}
+
+					if (mo->player->Bot != nullptr)
+						mo->player->Bot->ChangeStatNum(STAT_TRAVELLING);
 				}
 
-				if (mo->player->Bot != nullptr)
-					mo->player->Bot->ChangeStatNum(STAT_TRAVELLING);
+				if (!mo->IsKindOf(NAME_Inventory) || mo->PointerVar<AActor>(NAME_Owner) == nullptr)
+				{
+					for (AActor* inv = mo->Inventory; inv != nullptr; inv = inv->Inventory)
+						inv->ChangeStatNum(STAT_TRAVELLING);
+				}
+
+				if (!(mo->flags & MF_UNMORPHED) && mo->alternative != nullptr)
+					mo->alternative->ChangeStatNum(STAT_TRAVELLING);
 			}
 
-			if (!mo->IsKindOf(NAME_Inventory) || mo->PointerVar<AActor>(NAME_Owner) == nullptr)
-			{
-				for (AActor* inv = mo->Inventory; inv != nullptr; inv = inv->Inventory)
-					inv->ChangeStatNum(STAT_TRAVELLING);
-			}
-
-			if (!(mo->flags & MF_UNMORPHED) && mo->alternative != nullptr)
-				mo->alternative->ChangeStatNum(STAT_TRAVELLING);
+			th->ObjectFlags |= OF_Travelling;
+			IFOVERRIDENVIRTUALPTRNAME(th, NAME_Thinker, PreTravelled)
+				VMCallVoid<DThinker*>(func, th);
 		}
-
-		th->ObjectFlags |= OF_Travelling;
-		IFOVERRIDENVIRTUALPTRNAME(th, NAME_Thinker, PreTravelled)
-			VMCallVoid<DThinker*>(func, th);
-	}
+	} while (count);
 
 	// Now that the list is complete, unlink everything. We want to do this after the
 	// callback so someone can't attempt to relink things.
@@ -1710,6 +1722,7 @@ void FLevelLocals::LinkActorToLevel(AActor& mo)
 	const int tid = mo.tid;
 	mo.tid = 0;	// Allow the Actor to be linked back into the hashmap.
 	mo.SetTID(tid);
+	mo.SetDynamicLights();
 }
 
 int FLevelLocals::FinishTravel()
@@ -1722,8 +1735,10 @@ int FLevelLocals::FinishTravel()
 	DThinker* th = nullptr;
 	while ((th = it.Next()) != nullptr)
 	{
-		toCallBack.Push(th);
+		assert(th->ObjectFlags & OF_Travelling);
 
+		toCallBack.Push(th);
+		
 		th->ObjectFlags &= ~OF_Travelling;
 		auto mo = dyn_cast<AActor>(th);
 		if (mo == nullptr)

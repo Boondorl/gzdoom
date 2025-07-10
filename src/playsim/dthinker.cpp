@@ -889,7 +889,7 @@ static void ChangeStatNum(DThinker *thinker, int statnum)
 	// the list.
 	if (thinker->ObjectFlags & OF_Travelling)
 	{
-		Printf("Travelling Thinkers cannot have their statnum changed\n");
+		Printf(TEXTCOLOR_RED "Travelling Thinkers cannot have their statnum changed\n");
 		return;
 	}
 
@@ -897,7 +897,7 @@ static void ChangeStatNum(DThinker *thinker, int statnum)
 	// transition between levels.
 	if (statnum == STAT_STATIC && thinker->IsKindOf(NAME_Actor))
 	{
-		Printf("Actors cannot be added to STAT_STATIC\n");
+		Printf(TEXTCOLOR_RED "Actors cannot be added to STAT_STATIC\n");
 		return;
 	}
 
@@ -906,24 +906,24 @@ static void ChangeStatNum(DThinker *thinker, int statnum)
 		// Don't let things be moved out of the list, only into it.
 		if (statnum != STAT_TRAVELLING)
 		{
-			Printf("Thinkers can only be moved into STAT_TRAVELLING while changing levels\n");
+			Printf(TEXTCOLOR_RED "Thinkers can only be moved into STAT_TRAVELLING while changing levels\n");
 			return;
 		}
 		// These should be handled by the owning Actor, otherwise they'll lose them and become useless anyway.
 		if (thinker->IsKindOf(NAME_Inventory) && thinker->PointerVar<AActor>(NAME_Owner) != nullptr)
 		{
-			Printf("Owned Inventory items must travel with their owner on level change\n");
+			Printf(TEXTCOLOR_RED "Owned Inventory items must travel with their owner on level change\n");
 			return;
 		}
 		if (thinker->IsKindOf(NAME_Bot))
 		{
-			Printf("Bot Thinkers must travel with their owner on level change\n");
+			Printf(TEXTCOLOR_RED "Bot Thinkers must travel with their owner on level change\n");
 			return;
 		}
 		auto mo = dyn_cast<AActor>(thinker);
 		if (mo != nullptr && (mo->flags & MF_UNMORPHED))
 		{
-			Printf("Unmorphed Actors must travel with their owner on level change\n");
+			Printf(TEXTCOLOR_RED "Unmorphed Actors must travel with their owner on level change\n");
 			return;
 		}
 		// These need to be locked down since they have native fields that won't be cleared
@@ -931,13 +931,13 @@ static void ChangeStatNum(DThinker *thinker, int statnum)
 		auto cls = thinker->GetClass()->NativeClass();
 		if (cls->TypeName != NAME_Thinker && cls->TypeName != NAME_Actor)
 		{
-			Printf("Native thinkers cannot travel\n");
+			Printf(TEXTCOLOR_RED "Native thinkers cannot travel\n");
 			return;
 		}
 	}
 	else if (statnum == STAT_TRAVELLING)
 	{
-		Printf("Thinkers cannot be added to STAT_TRAVELLING while the game isn't changing levels\n");
+		Printf(TEXTCOLOR_RED "Thinkers cannot be added to STAT_TRAVELLING while the game isn't changing levels\n");
 		return;
 	}
 
