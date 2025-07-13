@@ -34,366 +34,241 @@
 
 #include "i_protocol.h"
 #include "engineerrors.h"
-#include "cmdlib.h"
+#include "i_net.h"
 
-// Unchecked stream functions.
-// Use the checked versions instead unless you're checking the stream size yourself!
+TMap<uint8_t, std::unique_ptr<NetPacket>(*)()> NetPacketFactory = {};
 
-char* UncheckedReadString(uint8_t** stream)
+bool NetPacket::Read(const TArrayView<const uint8_t>& stream, size_t& read)
 {
-	char* string = *((char**)stream);
+	read = 0u;
+	ReadStream r = { stream };
+	uint8_t type = 0u;
+	if (!r.SerializeUInt8(type) || type != NetCommand)
+		return false;
 
-	*stream += strlen(string) + 1;
-	return copystring(string);
+	uint8_t argC = 0u;
+	if (!r.SerializeUInt8(argC) || argC != ArgCount)
+		return false;
+
+	size_t parsedArgs = 0u;
+	if (!Serialize(r, parsedArgs) || parsedArgs != ArgCount)
+		return false;
+
+	read = r.GetReadBytes();
+	return true;
 }
 
-const char* UncheckedReadStringConst(uint8_t** stream)
+bool NetPacket::Write(const TArrayView<uint8_t>& stream, size_t& written)
 {
-	const char* string = *((const char**)stream);
-	*stream += strlen(string) + 1;
-	return string;
+	written = 0u;
+	if (!ShouldWrite())
+		return true;
+
+	WriteStream w = { stream };
+	if (!w.SerializeUInt8(NetCommand))
+		return false;
+	if (!w.SerializeUInt8(ArgCount))
+		return false;
+
+	size_t parsedArgs = 0u;
+	if (!Serialize(w, parsedArgs) || parsedArgs != ArgCount)
+		return false;
+
+	written = w.GetWrittenBytes();
+	return true;
 }
 
-uint8_t UncheckedReadInt8(uint8_t** stream)
+size_t NetPacket::GetSize()
 {
-	uint8_t v = **stream;
-	*stream += 1;
-	return v;
+	if (!ShouldWrite())
+		return 0u;
+
+	MeasureStream m = {};
+	if (!m.SerializeUInt8(NetCommand))
+		return 0u;
+	if (!m.SerializeUInt8(ArgCount))
+		return 0u;
+
+	size_t parsedArgs = 0u;
+	if (!Serialize(m, parsedArgs) || parsedArgs != ArgCount)
+		return 0u;
+
+	return m.GetTotalBytes();
 }
 
-int16_t UncheckedReadInt16(uint8_t** stream)
+std::unique_ptr<NetPacket> CreatePacket(uint8_t type)
 {
-	int16_t v = (((*stream)[0]) << 8) | (((*stream)[1]));
-	*stream += 2;
-	return v;
+	auto packet = NetPacketFactory.CheckKey(type);
+	if (packet == nullptr)
+		I_Error("Unknown net command %u", type);
+
+	auto p = (*packet)();
+	if (p == nullptr)
+		I_Error("Failed to create packet type %u", type);
+
+	return p;
 }
 
-int32_t UncheckedReadInt32(uint8_t** stream)
+void ReadPacket(NetPacket& packet, TArrayView<const uint8_t>& stream, int pNum)
 {
-	int32_t v = (((*stream)[0]) << 24) | (((*stream)[1]) << 16) | (((*stream)[2]) << 8) | (((*stream)[3]));
-	*stream += 4;
-	return v;
-}
+	size_t bytes = 0u;
+	if (!packet.Read({ stream.Data(), stream.Size() }, bytes))
+		I_Error("Failed to read net command %u", packet.NetCommand);
 
-int64_t UncheckedReadInt64(uint8_t** stream)
-{
-	int64_t v = (int64_t((*stream)[0]) << 56) | (int64_t((*stream)[1]) << 48) | (int64_t((*stream)[2]) << 40) | (int64_t((*stream)[3]) << 32)
-		| (int64_t((*stream)[4]) << 24) | (int64_t((*stream)[5]) << 16) | (int64_t((*stream)[6]) << 8) | (int64_t((*stream)[7]));
-	*stream += 8;
-	return v;
-}
-
-float UncheckedReadFloat(uint8_t** stream)
-{
-	union
-	{
-		int32_t i;
-		float f;
-	} fakeint;
-	fakeint.i = UncheckedReadInt32(stream);
-	return fakeint.f;
-}
-
-double UncheckedReadDouble(uint8_t** stream)
-{
-	union
-	{
-		int64_t i;
-		double f;
-	} fakeint;
-	fakeint.i = UncheckedReadInt64(stream);
-	return fakeint.f;
-}
-
-void UncheckedWriteString(const char* string, uint8_t** stream)
-{
-	char* p = *((char**)stream);
-
-	while (*string) {
-		*p++ = *string++;
-	}
-
-	*p++ = 0;
-	*stream = (uint8_t*)p;
-}
-
-void UncheckedWriteInt8(uint8_t v, uint8_t** stream)
-{
-	**stream = v;
-	*stream += 1;
-}
-
-void UncheckedWriteInt16(int16_t v, uint8_t** stream)
-{
-	(*stream)[0] = v >> 8;
-	(*stream)[1] = v & 255;
-	*stream += 2;
-}
-
-void UncheckedWriteInt32(int32_t v, uint8_t** stream)
-{
-	(*stream)[0] = v >> 24;
-	(*stream)[1] = (v >> 16) & 255;
-	(*stream)[2] = (v >> 8) & 255;
-	(*stream)[3] = v & 255;
-	*stream += 4;
-}
-
-void UncheckedWriteInt64(int64_t v, uint8_t** stream)
-{
-	(*stream)[0] = v >> 56;
-	(*stream)[1] = (v >> 48) & 255;
-	(*stream)[2] = (v >> 40) & 255;
-	(*stream)[3] = (v >> 32) & 255;
-	(*stream)[4] = (v >> 24) & 255;
-	(*stream)[5] = (v >> 16) & 255;
-	(*stream)[6] = (v >> 8) & 255;
-	(*stream)[7] = v & 255;
-	*stream += 8;
-}
-
-void UncheckedWriteFloat(float v, uint8_t** stream)
-{
-	union
-	{
-		int32_t i;
-		float f;
-	} fakeint;
-	fakeint.f = v;
-	UncheckedWriteInt32(fakeint.i, stream);
-}
-
-void UncheckedWriteDouble(double v, uint8_t** stream)
-{
-	union
-	{
-		int64_t i;
-		double f;
-	} fakeint;
-	fakeint.f = v;
-	UncheckedWriteInt64(fakeint.i, stream);
-}
-
-void AdvanceStream(TArrayView<uint8_t>& stream, size_t bytes)
-{
 	assert(bytes <= stream.Size());
-	stream = TArrayView(stream.Data() + bytes, stream.Size() - bytes);
+	stream = { stream.Data() + bytes, stream.Size() - bytes };
+
+	if (pNum >= 0 && pNum < MaxClients && !packet.Execute(pNum))
+		I_Error("Failed to execute net command %u", packet.NetCommand);
 }
 
-// Checked stream functions
-
-char* ReadString(TArrayView<uint8_t>& stream)
+void WritePacket(NetPacket& packet, TArrayView<uint8_t>& stream)
 {
-	char* string = (char*)stream.Data();
-	size_t len = strnlen(string, stream.Size());
-	if (len == stream.Size())
+	size_t bytes = 0u;
+	if (!packet.Write(stream, bytes))
+		I_Error("Failed to write net command %u", packet.NetCommand);
+
+	assert(bytes <= stream.Size());
+	stream = { stream.Data() + bytes, stream.Size() - bytes };
+}
+
+void SkipPacket(NetPacket& packet, TArrayView<const uint8_t>& stream)
+{
+	const size_t bytes = packet.GetSize();
+	if (bytes > stream.Size())
+		I_Error("Malformed net command %u", packet.NetCommand);
+
+	stream = { stream.Data() + bytes, stream.Size() - bytes };
+}
+
+// Common packet types for easier defining.
+
+class EmptyPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		return true;
 	}
-	AdvanceStream(stream, len + 1);
-	return copystring(string);
-}
-
-const char* ReadStringConst(TArrayView<uint8_t>& stream)
+};
+class Int8Packet : public NetPacket
 {
-	const char* string = (const char*)stream.Data();
-	size_t len = strnlen(string, stream.Size());
-	if (len == stream.Size())
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int8_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_INT8(Value);
+		return true;
 	}
-	AdvanceStream(stream, len + 1);
-	return string;
-}
-
-void ReadBytes(TArrayView<uint8_t>& dst, TArrayView<uint8_t>& stream)
+};
+class UInt8Packet : public NetPacket
 {
-	if (dst.Size() > stream.Size())
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint8_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_UINT8(Value);
+		return true;
 	}
-	if (dst.Size())
+};
+class Int16Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int16_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		memcpy(dst.Data(), stream.Data(), dst.Size());
-		AdvanceStream(stream, dst.Size());
+		SERIALIZE_INT16(Value);
+		return true;
 	}
-}
-
-uint8_t ReadInt8(TArrayView<uint8_t>& stream)
+};
+class UInt16Packet : public NetPacket
 {
-	if (stream.Size() < 1)
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint16_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_UINT16(Value);
+		return true;
 	}
-	uint8_t v = stream[0];
-	AdvanceStream(stream, 1);
-	return v;
-}
-
-int16_t ReadInt16(TArrayView<uint8_t>& stream)
+};
+class Int32Packet : public NetPacket
 {
-	if (stream.Size() < 2)
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int32_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_INT32(Value);
+		return true;
 	}
-	int16_t v = ((stream[0]) << 8) | stream[1];
-	AdvanceStream(stream, 2);
-	return v;
-}
-
-int32_t ReadInt32(TArrayView<uint8_t>& stream)
+};
+class UInt32Packet : public NetPacket
 {
-	if (stream.Size() < 4)
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint32_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_UINT32(Value);
+		return true;
 	}
-	int32_t v = (stream[0] << 24) | (stream[1] << 16) | (stream[2] << 8) | stream[3];
-	AdvanceStream(stream, 4);
-	return v;
-}
-
-int64_t ReadInt64(TArrayView<uint8_t>& stream)
+};
+class Int64Packet : public NetPacket
 {
-	if (stream.Size() < 8)
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int64_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to read past end of stream");
+		SERIALIZE_INT64(Value);
+		return true;
 	}
-	int64_t v = (int64_t(stream[0]) << 56) | (int64_t(stream[1]) << 48) | (int64_t(stream[2]) << 40) | (int64_t(stream[3]) << 32)
-		| (int64_t(stream[4]) << 24) | (int64_t(stream[5]) << 16) | (int64_t(stream[6]) << 8) | int64_t(stream[7]);
-	AdvanceStream(stream, 8);
-	return v;
-}
-
-float ReadFloat(TArrayView<uint8_t>& stream)
+};
+class UInt64Packet : public NetPacket
 {
-	union
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint64_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		int32_t i;
-		float f;
-	} fakeint;
-	fakeint.i = ReadInt32(stream);
-	return fakeint.f;
-}
-
-double ReadDouble(TArrayView<uint8_t>& stream)
-{
-	union
-	{
-		int64_t i;
-		double f;
-	} fakeint;
-	fakeint.i = ReadInt64(stream);
-	return fakeint.f;
-}
-
-void WriteString(const char* string, TArrayView<uint8_t>& stream)
-{
-	char* p = (char*)stream.Data();
-	unsigned int remaining = stream.Size();
-
-	while (*string) {
-		if (remaining-- == 0)
-		{
-			I_Error("Attempted to write past end of stream");
-		}
-		*p++ = *string++;
+		SERIALIZE_UINT64(Value);
+		return true;
 	}
-
-	if (remaining == 0)
+};
+class FloatPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	float Value = 0.0f;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to write past end of stream");
+		SERIALIZE_FLOAT(Value);
+		return true;
 	}
-	*p++ = 0;
-	AdvanceStream(stream, p - (char*)stream.Data());
-}
-
-void WriteBytes(const TArrayView<uint8_t>& source, TArrayView<uint8_t>& stream)
+};
+class DoublePacket : public NetPacket
 {
-	if (source.Size() > stream.Size())
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	double Value = 0.0;
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		I_Error("Attempted to write past end of stream");
+		SERIALIZE_DOUBLE(Value);
+		return true;
 	}
-	if (source.Size())
+};
+class StringPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	FString Value = {};
+	DEFINE_NETPACKET_SERIALIZER()
 	{
-		memcpy(stream.Data(), source.Data(), source.Size());
-		AdvanceStream(stream, source.Size());
+		SERIALIZE_STRING(Value);
+		return true;
 	}
-}
-
-void WriteFString(FString& string, TArrayView<uint8_t>& stream)
-{
-	WriteBytes(string.GetTArrayView(), stream);
-}
-
-void WriteInt8(uint8_t v, TArrayView<uint8_t>& stream)
-{
-	if (stream.Size() < 1)
-	{
-		I_Error("Attempted to write past end of stream");
-	}
-	stream[0] = v;
-	AdvanceStream(stream, 1);
-}
-
-void WriteInt16(int16_t v, TArrayView<uint8_t>& stream)
-{
-	if (stream.Size() < 2)
-	{
-		I_Error("Attempted to write past end of stream");
-	}
-	stream[0] = v >> 8;
-	stream[1] = v & 255;
-	AdvanceStream(stream, 2);
-}
-
-void WriteInt32(int32_t v, TArrayView<uint8_t>& stream)
-{
-	if (stream.Size() < 4)
-	{
-		I_Error("Attempted to write past end of stream");
-	}
-	stream[0] = v >> 24;
-	stream[1] = (v >> 16) & 255;
-	stream[2] = (v >> 8) & 255;
-	stream[3] = v & 255;
-	AdvanceStream(stream, 4);
-}
-
-void WriteInt64(int64_t v, TArrayView<uint8_t>& stream)
-{
-	if (stream.Size() < 8)
-	{
-		I_Error("Attempted to write past end of stream");
-	}
-	stream[0] = v >> 56;
-	stream[1] = (v >> 48) & 255;
-	stream[2] = (v >> 40) & 255;
-	stream[3] = (v >> 32) & 255;
-	stream[4] = (v >> 24) & 255;
-	stream[5] = (v >> 16) & 255;
-	stream[6] = (v >> 8) & 255;
-	stream[7] = v & 255;
-	AdvanceStream(stream, 8);
-}
-
-void WriteFloat(float v, TArrayView<uint8_t>& stream)
-{
-	union
-	{
-		int32_t i;
-		float f;
-	} fakeint;
-	fakeint.f = v;
-	WriteInt32(fakeint.i, stream);
-}
-
-void WriteDouble(double v, TArrayView<uint8_t>& stream)
-{
-	union
-	{
-		int64_t i;
-		double f;
-	} fakeint;
-	fakeint.f = v;
-	WriteInt64(fakeint.i, stream);
-}
+};

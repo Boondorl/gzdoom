@@ -14,6 +14,7 @@ enum ENetConstants
 	STABILITYTICS = 17,
 	LOCALCMDTICS = (BACKUPTICS * MAXTICDUP),
 	MAX_MSGLEN = 14000,
+	MAX_EVENTLEN = 2048, // Let's put this at something more reasonable.
 };
 
 enum ENetCommand

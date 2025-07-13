@@ -271,7 +271,7 @@ public:
 	bool DoCompleted(FString nextlevel, wbstartstruct_t &wminfo);
 	void StartTravel();
 	int FinishTravel();
-	void ChangeLevel(const char *levelname, int position, int flags, int nextSkill = -1);
+	void ChangeLevel(const FString& levelname, int position, int flags, int nextSkill = -1);
 	const char *GetSecretExitMap();
 	void ExitLevel(int position, bool keepFacing);
 	void SecretExitLevel(int position);

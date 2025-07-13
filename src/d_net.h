@@ -31,6 +31,7 @@
 #include "doomtype.h"
 #include "doomdef.h"
 #include "d_protocol.h"
+#include "d_netpackets.h"
 #include "i_net.h"
 #include <queue>
 
@@ -57,19 +58,63 @@ enum EClientFlags
 	CF_MISSING = CF_MISSING_CON | CF_MISSING_SEQ,
 };
 
-class FDynamicBuffer
+// The following are implemented by cht_DoCheat in m_cheat.cpp
+enum ECheatCommand : uint8_t
 {
-public:
-	FDynamicBuffer();
-	~FDynamicBuffer();
-
-	void SetData(const uint8_t* data, int len);
-	uint8_t* GetData(int* len = nullptr);
-	TArrayView<uint8_t> GetTArrayView();
-
-private:
-	uint8_t* m_Data;
-	int m_Len, m_BufferLen;
+	CHT_GOD,
+	CHT_NOCLIP,
+	CHT_NOTARGET,
+	CHT_CHAINSAW,
+	CHT_IDKFA,
+	CHT_IDFA,
+	CHT_BEHOLDV,
+	CHT_BEHOLDS,
+	CHT_BEHOLDI,
+	CHT_BEHOLDR,
+	CHT_BEHOLDA,
+	CHT_BEHOLDL,
+	CHT_PUMPUPI,
+	CHT_PUMPUPM,
+	CHT_PUMPUPT,
+	CHT_PUMPUPH,
+	CHT_PUMPUPP,
+	CHT_PUMPUPS,
+	CHT_IDDQD,			// Same as CHT_GOD, but sets health
+	CHT_MASSACRE,
+	CHT_CHASECAM,
+	CHT_FLY,
+	CHT_MORPH,
+	CHT_POWER,
+	CHT_HEALTH,
+	CHT_KEYS,
+	CHT_TAKEWEAPS,
+	CHT_NOWUDIE,
+	CHT_ALLARTI,
+	CHT_PUZZLE,
+	CHT_MDK,			// Kill actor player is aiming at
+	CHT_ANUBIS,
+	CHT_NOVELOCITY,
+	CHT_DONNYTRUMP,
+	CHT_LEGO,
+	CHT_RESSURECT,		// [GRB]
+	CHT_CLEARFROZENPROPS,
+	CHT_FREEZE,
+	CHT_GIMMIEA,
+	CHT_GIMMIEB,
+	CHT_GIMMIEC,
+	CHT_GIMMIED,
+	CHT_GIMMIEE,
+	CHT_GIMMIEF,
+	CHT_GIMMIEG,
+	CHT_GIMMIEH,
+	CHT_GIMMIEI,
+	CHT_GIMMIEJ,
+	CHT_GIMMIEZ,
+	CHT_BUDDHA,
+	CHT_NOCLIP2,
+	CHT_BUDDHA2,
+	CHT_GOD2,
+	CHT_MASSACRE2
 };
 
 // New packet structure:
@@ -97,8 +142,14 @@ struct FClientNetState
 {
 	// Networked client data.
 	struct FNetTic {
-		FDynamicBuffer	Data;
+		TArray<uint8_t>	Data;
 		usercmd_t		Command;
+		void AddData(const TArrayView<const uint8_t>& data)
+		{
+			Data.Clear();
+			for (size_t i = 0u; i < data.Size(); ++i)
+				Data.Push(data[i]);
+		}
 	} Tics[BACKUPTICS] = {};
 
 	// Local information about client.
@@ -141,17 +192,11 @@ void TryRunTics (void);
 // [RH] Functions for making and using special "ticcmds"
 void Net_NewClientTic();
 void Net_Initialize();
-void Net_WriteInt8(uint8_t);
-void Net_WriteInt16(int16_t);
-void Net_WriteInt32(int32_t);
-void Net_WriteInt64(int64_t);
-void Net_WriteFloat(float);
-void Net_WriteDouble(double);
-void Net_WriteString(const char *);
-void Net_WriteBytes(const uint8_t *, int len);
+void Net_WritePacket(NetPacket& packet);
+EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
 
-void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player);
-void Net_SkipCommand(int cmd, TArrayView<uint8_t>& stream);
+void Net_SkipCommands(TArrayView<const uint8_t>& stream);
+void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream);
 
 bool Net_CheckCutsceneReady();
 void Net_AdvanceCutscene();

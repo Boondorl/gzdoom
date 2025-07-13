@@ -1256,7 +1256,7 @@ void G_Ticker ()
 		usercmd_t *cmd = &players[client].cmd;
 		usercmd_t* nextCmd = &ClientStates[client].Tics[curTic % BACKUPTICS].Command;
 
-		RunPlayerCommands(client, curTic);
+		RunPlayerEventData(client, curTic);
 		if (demorecording)
 			G_WriteDemoTiccmd(nextCmd, client, curTic);
 
@@ -2484,9 +2484,8 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 
 void G_ReadDemoTiccmd (usercmd_t *cmd, int player)
 {
-	int id = DEM_BAD;
-
-	while (id != DEM_USERCMD && id != DEM_EMPTYUSERCMD)
+	EDemoCommand type = DEM_INVALID;
+	while (type != DEM_USERCMD && type != DEM_EMPTYUSERCMD)
 	{
 		if (!demorecording && demo_p.Data() >= zdembodyend)
 		{
@@ -2495,9 +2494,9 @@ void G_ReadDemoTiccmd (usercmd_t *cmd, int player)
 			break;
 		}
 
-		id = ReadInt8 (demo_p);
+		type = GetPacketType({ demo_p.Data(), demo_p.Size() });
 
-		switch (id)
+		switch (type)
 		{
 		case DEM_STOP:
 			// end of demo stream
@@ -2512,18 +2511,8 @@ void G_ReadDemoTiccmd (usercmd_t *cmd, int player)
 			// leave cmd->ucmd unchanged
 			break;
 
-		case DEM_DROPPLAYER:
-			{
-				uint8_t i = ReadInt8 (demo_p);
-				if (i < MAXPLAYERS)
-				{
-					playeringame[i] = false;
-				}
-			}
-			break;
-
 		default:
-			Net_DoCommand (id, demo_p, player);
+			ReadPacket(*CreatePacket(type), demo_p, player);
 			break;
 		}
 	}

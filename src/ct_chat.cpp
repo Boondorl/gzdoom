@@ -46,6 +46,7 @@
 #include "d_buttons.h"
 #include "v_draw.h"
 #include "r_utility.h"
+#include "d_netpackets.h"
 
 enum
 {
@@ -404,15 +405,14 @@ static void ShoveChatStr (const char *str, uint8_t who)
 		who |= 2;
 	}
 
-	Net_WriteInt8 (DEM_SAY);
-	Net_WriteInt8 (who);
-
-	if (chat_substitution && DoSubstitution (substBuff, str))
+	if (chat_substitution && DoSubstitution(substBuff, str))
 	{
 		str = substBuff.GetChars();
 	}
 
-	Net_WriteString(CleanseString(const_cast<char*>(MakeUTF8(str))));
+	str = CleanseString(const_cast<char*>(MakeUTF8(str)));
+	auto p = SayPacket(who, str);
+	Net_WritePacket(p);
 
 }
 

@@ -322,12 +322,9 @@ bool FCajunMaster::SpawnBot (const char *name, int color)
 void FCajunMaster::TryAddBot (FLevelLocals *Level, TArrayView<uint8_t>& stream, int player)
 {
 	int botshift = ReadInt8 (stream);
-	char *info = ReadString (stream);
+	FString info = ReadString (stream);
 	botskill_t skill;
-	skill.aiming = ReadInt8 (stream);
-	skill.perfection = ReadInt8 (stream);
-	skill.reaction = ReadInt8 (stream);
-	skill.isp = ReadInt8 (stream);
+	ReadType<botskill_t>(skill, stream);
 
 	botinfo_t *thebot = NULL;
 
@@ -342,7 +339,8 @@ void FCajunMaster::TryAddBot (FLevelLocals *Level, TArrayView<uint8_t>& stream, 
 		}
 	}
 
-	if (DoAddBot (Level, TArrayView((uint8_t*)info, strlen(info)+1), skill))
+	// BOON TODO: Is this safe? Ask about this pronto
+	if (DoAddBot (Level, TArrayView((uint8_t*)info.GetChars(), info.Len() + 1), skill))
 	{
 		//Increment this.
 		botnum++;
@@ -359,8 +357,6 @@ void FCajunMaster::TryAddBot (FLevelLocals *Level, TArrayView<uint8_t>& stream, 
 			thebot->inuse = BOTINUSE_No;
 		}
 	}
-
-	delete[] info;
 }
 
 bool FCajunMaster::DoAddBot (FLevelLocals *Level, TArrayView<uint8_t> info, botskill_t skill)

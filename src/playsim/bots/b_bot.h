@@ -53,10 +53,10 @@ struct FCheckPosition;
 
 struct botskill_t
 {
-	int aiming;
-	int perfection;
-	int reaction;   //How fast the bot will fire after seeing the player.
-	int isp;        //Instincts of Self Preservation. Personality
+	uint8_t aiming;
+	uint8_t perfection;
+	uint8_t reaction;   //How fast the bot will fire after seeing the player.
+	uint8_t isp;        //Instincts of Self Preservation. Personality
 };
 
 enum

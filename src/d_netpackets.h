@@ -1,0 +1,112 @@
+//-----------------------------------------------------------------------------
+//
+// Copyright 1993-1996 id Software
+// Copyright 1999-2016 Randy Heit
+// Copyright 2002-2016 Christoph Oelckers
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program.  If not, see http://www.gnu.org/licenses/
+//
+//-----------------------------------------------------------------------------
+//
+// DESCRIPTION:
+//		Packets for demo commands.
+//
+//-----------------------------------------------------------------------------
+
+
+#ifndef __D_NETPACKET__
+#define __D_NETPACKET__
+
+#include "i_protocol.h"
+
+class SayPacket;
+
+#define xx(cmd, packet) DEM_##cmd
+
+enum EDemoCommand : uint8_t
+{
+	DEM_INVALID,	//  0 Intentionally has no packet
+	DEM_USERCMD,		//  1 Player inputs
+	DEM_EMPTYUSERCMD,	//  2 Equivalent to [DEM_USERCMD, 0]
+	DEM_MUSICCHANGE,	//  4 String: music name
+	DEM_STOP,			//  7 End of demo
+	DEM_UINFCHANGED,	//  8 User info changed
+	DEM_SINFCHANGED,	//  9 Server/Host info changed
+	DEM_GENERICCHEAT,	// 10 Int8: cheat
+	DEM_GIVECHEAT,		// 11 String: item to give, Int32: quantity
+	DEM_SAY,			// 12 Int8: who to talk to, String: message
+	DEM_CHANGEMAP,		// 14 String: name of map
+	DEM_SUICIDE,		// 15 
+	DEM_ADDBOT,			// 16 Int8: botshift, String: userinfo for bot, Type: botskill_t
+	DEM_KILLBOTS,		// 17 
+	DEM_INVUSEALL,		// 18 
+	DEM_INVUSE,			// 19 Int32: ID of item
+	DEM_PAUSE,			// 20 
+	DEM_SAVEGAME,		// 21 String: filename, String: description
+	DEM_SUMMON,			// 26 String: thing to fabricate
+	DEM_FOV,			// 27 Float: new FOV for all players
+	DEM_MYFOV,			// 28 Float: new FOV for this player
+	DEM_CHANGEMAP2,		// 29 Int8: position in new map, String: map name
+	DEM_RUNSCRIPT,		// 32 Int16: Script#, Int8: # of args; each arg is an Int32
+	DEM_SINFCHANGEDXOR,	// 33 Like DEM_SINFCHANGED, but data is a byte indicating how to set a bit
+	DEM_INVDROP,		// 34 Int32: ID of item Int32: amount
+	DEM_WARPCHEAT,		// 35 Int16: x position, Int16: y position, Int16: z position
+	DEM_CENTERVIEW,		// 36 
+	DEM_SUMMONFRIEND,	// 37 String: thing to fabricate
+	DEM_SPRAY,			// 38 String: decal name
+	DEM_CROUCH,			// 39 
+	DEM_RUNSCRIPT2,		// 40 Same as DEM_RUNSCRIPT, but always executes
+	DEM_CHECKAUTOSAVE,	// 41 
+	DEM_DOAUTOSAVE,		// 42 
+	DEM_MORPHEX,		// 43 String: the class to morph to
+	DEM_SUMMONFOE,		// 44 String: thing to fabricate
+	DEM_TAKECHEAT,		// 47 String: item class, Int32: quantity
+	DEM_ADDCONTROLLER,	// 48 Int8: player
+	DEM_DELCONTROLLER,	// 49 Int8: player
+	DEM_KILLCLASSCHEAT,	// 50 String: class to kill
+	DEM_SUMMON2,		// 52 String: thing to fabricate, Int16: angle offset, Int16: tid, Int8: special, 5xInt32: args
+	DEM_SUMMONFRIEND2,	// 53 String: thing to fabricate, Int16: angle offset, Int16: tid, Int8: special, 5xInt32: args
+	DEM_SUMMONFOE2,		// 54 String: thing to fabricate, Int16: angle offset, Int16: tid, Int8: special, 5xInt32: args
+	DEM_ADDSLOTDEFAULT,	// 55 Int8: slot
+	DEM_ADDSLOT,		// 56 Int8: slot
+	DEM_SETSLOT,		// 57 Int8: slot, Int8: weapons
+	DEM_SUMMONMBF,		// 58 String: thing to fabricate
+	DEM_CONVREPLY,		// 59 Int16: dialogue node, Int8: reply number
+	DEM_CONVCLOSE,		// 60
+	DEM_CONVNULL,		// 61
+	DEM_RUNSPECIAL,		// 62 Int16: special, Int8: Arg count, Int32s: Args
+	DEM_SETPITCHLIMIT,	// 63 Int8: up limit, Int8: down limit (in degrees)
+	DEM_RUNNAMEDSCRIPT,	// 65 String: script name, Int8: Arg count + Always flag; each arg is an Int32
+	DEM_REVERTCAMERA,	// 66 
+	DEM_SETSLOTPNUM,	// 67 Int8: player number, the rest is the same as DEM_SETSLOT
+	DEM_REMOVE,			// 68 String: class to remove
+	DEM_FINISHGAME,		// 69 
+	DEM_NETEVENT,		// 70 String: event name, Int8: Arg count; each arg is an Int32, Int8: manual
+	DEM_MDK,			// 71 String: damage type
+	DEM_SETINV,			// 72 String: item name, Int32: amount, Int8: allow beyond max
+	DEM_ENDSCREENJOB,	// 73 
+	DEM_ZSC_CMD,		// 74 String: command, Int16: Byte size of command
+	DEM_CHANGESKILL,	// 75 Int32: Skill
+	DEM_KICK,			// 76 Int8: Player number
+	DEM_READIED,		// 77 
+
+	DEM_NUM_COMMANDS
+};
+
+#undef xx
+
+EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
+void InitializeDoomPackets();
+
+#endif // __D_NETPACKET__

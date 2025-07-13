@@ -70,8 +70,8 @@
 #include "s_music.h"
 #include "screenjob.h"
 #include "d_main.h"
-#include "i_interface.h"
 #include "savegamemanager.h"
+#include "d_netpackets.h"
 
 void P_RunClientsideLogic();
 
@@ -214,69 +214,25 @@ CUSTOM_CVAR(Int, cl_debugprediction, 0, CVAR_CHEAT)
 // Used to write out all network events that occured leading up to the next tick.
 static struct NetEventData
 {
-	struct FStream {
-		uint8_t* Stream;
-		size_t Used = 0;
-
-		FStream()
-		{
-			Grow(256);
-		}
-
-		~FStream()
-		{
-			if (Stream != nullptr)
-				M_Free(Stream);
-		}
-
-		void Grow(size_t size)
-		{
-			Stream = (uint8_t*)M_Realloc(Stream, size);
-		}
-	} Streams[BACKUPTICS];
-
 private:
-	size_t CurrentSize = 0;
-	size_t MaxSize = 256;
+	bool bInitialized = false;
 	int CurrentClientTic = 0;
-
-	// Make more room for special Command.
-	void GetMoreBytes(size_t newSize)
-	{
-		MaxSize = max<size_t>(MaxSize * 2, newSize + 30);
-
-		DPrintf(DMSG_NOTIFY, "Expanding special size to %zu\n", MaxSize);
-
-		for (auto& stream : Streams)
-			stream.Grow(MaxSize);
-
-		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream + CurrentSize;
-	}
-
-	void AddBytes(size_t bytes)
-	{
-		if (CurrentSize + bytes >= MaxSize)
-			GetMoreBytes(CurrentSize + bytes);
-
-		CurrentSize += bytes;
-	}
+	size_t CurrentStream = 0u;
+	TArray<uint8_t> Streams[BACKUPTICS] = {}; // Make this dynamic since otherwise it would eat a ton of memory.
+	uint8_t WriteBuffer[MAX_EVENTLEN] = {};
 
 public:
-	uint8_t* CurrentStream = nullptr;
-
 	// Boot up does some faux network events so we need to wait until after
 	// everything is initialized to actually set up the network stream.
 	void InitializeEventData()
 	{
-		CurrentStream = Streams[0].Stream;
-		CurrentSize = 0;
+		bInitialized = true;
 	}
 
 	void ResetStream()
 	{
 		CurrentClientTic = ClientTic / TicDup;
-		CurrentStream = Streams[CurrentClientTic % BACKUPTICS].Stream;
-		CurrentSize = 0;
+		CurrentStream = CurrentClientTic % BACKUPTICS;
 	}
 
 	void NewClientTic()
@@ -284,82 +240,29 @@ public:
 		const int tic = ClientTic / TicDup;
 		if (CurrentClientTic == tic)
 			return;
-
-		Streams[CurrentClientTic % BACKUPTICS].Used = CurrentSize;
 		
 		CurrentClientTic = tic;
-		CurrentStream = Streams[tic % BACKUPTICS].Stream;
-		CurrentSize = 0;
+		CurrentStream = tic % BACKUPTICS;
+		Streams[CurrentStream].Clear();
 	}
 
-	NetEventData& operator<<(uint8_t it)
+	void AddData(const TArrayView<const uint8_t>& data)
 	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(1);
-			UncheckedWriteInt8(it, &CurrentStream);
-		}
-		return *this;
+		if (!bInitialized)
+			return;
+
+		for (size_t i = 0u; i < data.Size(); ++i)
+			Streams[CurrentStream].Push(data[i]);
 	}
 
-	NetEventData& operator<<(int16_t it)
+	TArrayView<uint8_t> GetWriteBuffer()
 	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(2);
-			UncheckedWriteInt16(it, &CurrentStream);
-		}
-		return *this;
+		return { WriteBuffer, std::size(WriteBuffer) };
 	}
 
-	NetEventData& operator<<(int32_t it)
+	TArrayView<const uint8_t> GetCurrentStreamData() const
 	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(4);
-			UncheckedWriteInt32(it, &CurrentStream);
-		}
-		return *this;
-	}
-
-	NetEventData& operator<<(int64_t it)
-	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(8);
-			UncheckedWriteInt64(it, &CurrentStream);
-		}
-		return *this;
-	}
-
-	NetEventData& operator<<(float it)
-	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(4);
-			UncheckedWriteFloat(it, &CurrentStream);
-		}
-		return *this;
-	}
-
-	NetEventData& operator<<(double it)
-	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(8);
-			UncheckedWriteDouble(it, &CurrentStream);
-		}
-		return *this;
-	}
-
-	NetEventData& operator<<(const char *it)
-	{
-		if (CurrentStream != nullptr)
-		{
-			AddBytes(strlen(it) + 1);
-			UncheckedWriteString(it, &CurrentStream);
-		}
-		return *this;
+		return { Streams[CurrentStream].Data(), Streams[CurrentStream].Size() };
 	}
 } NetEvents;
 
@@ -384,7 +287,7 @@ void Net_ClearBuffers()
 		state.Flags = 0;
 
 		for (int j = 0; j < BACKUPTICS; ++j)
-			state.Tics[j].Data.SetData(nullptr, 0);
+			state.Tics[j].Data.Clear();
 	}
 
 	NetBufferLength = 0u;
@@ -505,7 +408,7 @@ void Net_AdvanceCutscene()
 	CutsceneReady = 0u;
 	CutsceneCountdown = 0;
 	if (consoleplayer == Net_Arbitrator)
-		Net_WriteInt8(DEM_ENDSCREENJOB);
+		Net_WritePacket(*CreatePacket(DEM_ENDSCREENJOB));
 }
 
 void Net_ResetCommands(bool midTic)
@@ -1824,7 +1727,7 @@ const char* Net_GetClientName(int client, unsigned int charLimit = 0u)
 void Net_SetUserInfo(int client, TArrayView<uint8_t>& stream)
 {
 	auto str = D_GetUserInfoStrings(client, true);
-	WriteFString(str, stream);
+	WriteString(str, stream);
 }
 
 void Net_ReadUserInfo(int client, TArrayView<uint8_t>& stream)
@@ -1834,7 +1737,7 @@ void Net_ReadUserInfo(int client, TArrayView<uint8_t>& stream)
 
 void Net_SetGameInfo(TArrayView<uint8_t>& stream)
 {
-	WriteFString(startmap, stream);
+	WriteString(startmap, stream);
 	WriteInt32(rngseed, stream);
 	C_WriteCVars(stream, CVAR_SERVERINFO, true);
 
@@ -1852,7 +1755,7 @@ void Net_SetGameInfo(TArrayView<uint8_t>& stream)
 
 void Net_ReadGameInfo(TArrayView<uint8_t>& stream)
 {
-	startmap = ReadStringConst(stream);
+	startmap = ReadString(stream);
 	rngseed = ReadInt32(stream);
 	C_ReadCVars(stream);
 
@@ -2292,98 +2195,16 @@ void Net_Initialize()
 	NetEvents.InitializeEventData();
 }
 
-void Net_WriteInt8(uint8_t it)
+void Net_WritePacket(NetPacket& p)
 {
-	NetEvents << it;
-}
+	auto buffer = NetEvents.GetWriteBuffer();
+	const size_t size = p.GetSize();
+	if (size > buffer.Size())
+		I_Error("Net event buffer overflow");
 
-void Net_WriteInt16(int16_t it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteInt32(int32_t it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteInt64(int64_t it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteFloat(float it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteDouble(double it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteString(const char *it)
-{
-	NetEvents << it;
-}
-
-void Net_WriteBytes(const uint8_t *block, int len)
-{
-	while (len--)
-		NetEvents << *block++;
-}
-
-//==========================================================================
-//
-// Dynamic buffer interface
-//
-//==========================================================================
-
-FDynamicBuffer::FDynamicBuffer()
-{
-	m_Data = nullptr;
-	m_Len = m_BufferLen = 0;
-}
-
-FDynamicBuffer::~FDynamicBuffer()
-{
-	if (m_Data != nullptr)
-	{
-		M_Free(m_Data);
-		m_Data = nullptr;
-	}
-	m_Len = m_BufferLen = 0;
-}
-
-void FDynamicBuffer::SetData(const uint8_t *data, int len)
-{
-	if (len > m_BufferLen)
-	{
-		m_BufferLen = (len + 255) & ~255;
-		m_Data = (uint8_t *)M_Realloc(m_Data, m_BufferLen);
-	}
-
-	if (data != nullptr)
-	{
-		m_Len = len;
-		memcpy(m_Data, data, len);
-	}
-	else 
-	{
-		m_Len = 0;
-	}
-}
-
-uint8_t *FDynamicBuffer::GetData(int *len)
-{
-	if (len != nullptr)
-		*len = m_Len;
-	return m_Len ? m_Data : nullptr;
-}
-
-TArrayView<uint8_t> FDynamicBuffer::GetTArrayView()
-{
-	return TArrayView(m_Data, m_Len);
+	auto stream = buffer;
+	WritePacket(p, stream);
+	NetEvents.AddData({ buffer.Data(), size });
 }
 
 static int RemoveClass(FLevelLocals *Level, const PClass *cls)
@@ -2421,108 +2242,39 @@ static int RemoveClass(FLevelLocals *Level, const PClass *cls)
 // [RH] Execute a special "ticcmd". The type byte should
 //		have already been read, and the stream is positioned
 //		at the beginning of the command's actual data.
-void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
+
+void Net_SkipCommands(TArrayView<const uint8_t>& stream)
 {
-	uint8_t pos = 0;
-	const char* s = nullptr;
-	int i = 0;
+	EDemoCommand cmd;
+	while ((cmd = GetPacketType(stream)) != DEM_USERCMD && cmd != DEM_EMPTYUSERCMD)
+		SkipPacket(*CreatePacket(cmd), stream);
+}
 
-	switch (cmd)
+void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
+{
+	EDemoCommand cmd;
+	while ((cmd = GetPacketType(stream)) != DEM_USERCMD && cmd != DEM_EMPTYUSERCMD)
 	{
-	case DEM_SAY:
+		ReadPacket(*CreatePacket(cmd), stream, player);
+
+		// Boon TODO: Delete all of this (thank god)
+
+		switch (cmd)
 		{
-			const char *name = players[player].userinfo.GetName();
-			uint8_t who = ReadInt8(stream);
+		case DEM_CENTERPRINT:
+			C_MidPrint(nullptr, ReadString(stream).GetChars());
+			break;
 
-			s = ReadStringConst(stream);
-			// If chat is disabled, there's nothing else to do here since the stream has been advanced.
-			if (cl_showchat == CHAT_DISABLED || (MutedClients & ((uint64_t)1u << player)))
-				break;
+		case DEM_UINFCHANGED:
+			D_ReadUserInfoStrings(player, stream, true);
+			break;
 
-			constexpr int MSG_TEAM = 1;
-			constexpr int MSG_BOLD = 2;
-			if (!(who & MSG_TEAM))
-			{
-				if (cl_showchat < CHAT_GLOBAL)
-					break;
+		case DEM_SINFCHANGED:
+		case DEM_SINFCHANGEDXOR:
+			D_DoServerInfoChange(stream, cmd == DEM_SINFCHANGEDXOR);
+			break;
 
-				// Said to everyone
-				if (deathmatch && teamplay)
-					Printf(PRINT_CHAT, "(All) ");
-				if ((who & MSG_BOLD) && !cl_noboldchat)
-					Printf(PRINT_CHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, player, s);
-				else
-					Printf(PRINT_CHAT, "%s [%d]" TEXTCOLOR_CHAT ": %s" TEXTCOLOR_CHAT "\n", name, player, s);
-
-				if (!cl_nochatsound)
-					S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
-			}
-			else if (!deathmatch || players[player].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
-			{
-				if (cl_showchat < CHAT_TEAM_ONLY)
-					break;
-
-				// Said only to members of the player's team
-				if (deathmatch && teamplay)
-					Printf(PRINT_TEAMCHAT, "(Team) ");
-				if ((who & MSG_BOLD) && !cl_noboldchat)
-					Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, player, s);
-				else
-					Printf(PRINT_TEAMCHAT, "%s [%d]" TEXTCOLOR_TEAMCHAT ": %s" TEXTCOLOR_TEAMCHAT "\n", name, player, s);
-
-				if (!cl_nochatsound)
-					S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
-			}
-		}
-		break;
-
-	case DEM_MUSICCHANGE:
-		S_ChangeMusic(ReadStringConst(stream));
-		break;
-
-	case DEM_PRINT:
-		Printf("%s", ReadStringConst(stream));
-		break;
-
-	case DEM_CENTERPRINT:
-		C_MidPrint(nullptr, ReadStringConst(stream));
-		break;
-
-	case DEM_UINFCHANGED:
-		D_ReadUserInfoStrings(player, stream, true);
-		break;
-
-	case DEM_SINFCHANGED:
-		D_DoServerInfoChange(stream, false);
-		break;
-
-	case DEM_SINFCHANGEDXOR:
-		D_DoServerInfoChange(stream, true);
-		break;
-
-	case DEM_GIVECHEAT:
-		s = ReadStringConst(stream);
-		cht_Give(&players[player], s, ReadInt32(stream));
-		if (player != consoleplayer)
-		{
-			FString message = GStrings.GetString("TXT_X_CHEATS");
-			message.Substitute("%s", players[player].userinfo.GetName());
-			Printf("%s: give %s\n", message.GetChars(), s);
-		}
-		break;
-
-	case DEM_TAKECHEAT:
-		s = ReadStringConst(stream);
-		cht_Take(&players[player], s, ReadInt32(stream));
-		break;
-
-	case DEM_SETINV:
-		s = ReadStringConst(stream);
-		i = ReadInt32(stream);
-		cht_SetInv(&players[player], s, i, !!ReadInt8(stream));
-		break;
-
-	case DEM_WARPCHEAT:
+		case DEM_WARPCHEAT:
 		{
 			int x = ReadInt16(stream);
 			int y = ReadInt16(stream);
@@ -2531,60 +2283,60 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_GENERICCHEAT:
-		cht_DoCheat(&players[player], ReadInt8(stream));
-		break;
+		case DEM_GENERICCHEAT:
+			cht_DoCheat(&players[player], ReadInt8(stream));
+			break;
 
-	case DEM_CHANGEMAP2:
-		pos = ReadInt8(stream);
-		[[fallthrough]];
-	case DEM_CHANGEMAP:
-		// Change to another map without disconnecting other players
-		s = ReadStringConst(stream);
-		// Using LEVEL_NOINTERMISSION tends to throw the game out of sync.
-		// That was a long time ago. Maybe it works now?
-		primaryLevel->flags |= LEVEL_CHANGEMAPCHEAT;
-		primaryLevel->ChangeLevel(s, pos, 0);
-		break;
+		case DEM_CHANGEMAP2:
+			pos = ReadInt8(stream);
+			[[fallthrough]];
+		case DEM_CHANGEMAP:
+			// Change to another map without disconnecting other players
+			s = ReadString(stream);
+			// Using LEVEL_NOINTERMISSION tends to throw the game out of sync.
+			// That was a long time ago. Maybe it works now?
+			primaryLevel->flags |= LEVEL_CHANGEMAPCHEAT;
+			primaryLevel->ChangeLevel(s, pos, 0);
+			break;
 
-	case DEM_SUICIDE:
-		cht_Suicide(&players[player]);
-		break;
+		case DEM_SUICIDE:
+			cht_Suicide(&players[player]);
+			break;
 
-	case DEM_ADDBOT:
-		primaryLevel->BotInfo.TryAddBot(primaryLevel, stream, player);
-		break;
+		case DEM_ADDBOT:
+			primaryLevel->BotInfo.TryAddBot(primaryLevel, stream, player);
+			break;
 
-	case DEM_KILLBOTS:
-		primaryLevel->BotInfo.RemoveAllBots(primaryLevel, true);
-		Printf ("Removed all bots\n");
-		break;
+		case DEM_KILLBOTS:
+			primaryLevel->BotInfo.RemoveAllBots(primaryLevel, true);
+			Printf("Removed all bots\n");
+			break;
 
-	case DEM_CENTERVIEW:
-		players[player].centering = true;
-		break;
+		case DEM_CENTERVIEW:
+			players[player].centering = true;
+			break;
 
-	case DEM_INVUSEALL:
-		if (gamestate == GS_LEVEL && !paused
-			&& players[player].playerstate != PST_DEAD)
-		{
-			AActor *item = players[player].mo->Inventory;
-			auto pitype = PClass::FindActor(NAME_PuzzleItem);
-			while (item != nullptr)
+		case DEM_INVUSEALL:
+			if (gamestate == GS_LEVEL && !paused
+				&& players[player].playerstate != PST_DEAD)
 			{
-				AActor *next = item->Inventory;
-				IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
+				AActor* item = players[player].mo->Inventory;
+				auto pitype = PClass::FindActor(NAME_PuzzleItem);
+				while (item != nullptr)
 				{
-					VMValue param[] = { item, players[player].mo };
-					VMCall(func, param, 2, nullptr, 0);
+					AActor* next = item->Inventory;
+					IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
+					{
+						VMValue param[] = { item, players[player].mo };
+						VMCall(func, param, 2, nullptr, 0);
+					}
+					item = next;
 				}
-				item = next;
 			}
-		}
-		break;
+			break;
 
-	case DEM_INVUSE:
-	case DEM_INVDROP:
+		case DEM_INVUSE:
+		case DEM_INVDROP:
 		{
 			uint32_t which = ReadInt32(stream);
 			int amt = -1;
@@ -2609,20 +2361,20 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_SUMMON:
-	case DEM_SUMMONFRIEND:
-	case DEM_SUMMONFOE:
-	case DEM_SUMMONMBF:
-	case DEM_SUMMON2:
-	case DEM_SUMMONFRIEND2:
-	case DEM_SUMMONFOE2:
+		case DEM_SUMMON:
+		case DEM_SUMMONFRIEND:
+		case DEM_SUMMONFOE:
+		case DEM_SUMMONMBF:
+		case DEM_SUMMON2:
+		case DEM_SUMMONFRIEND2:
+		case DEM_SUMMONFOE2:
 		{
 			int angle = 0;
 			int16_t tid = 0;
 			uint8_t special = 0;
 			int args[5];
 
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			if (cmd >= DEM_SUMMON2 && cmd <= DEM_SUMMONFOE2)
 			{
 				angle = ReadInt16(stream);
@@ -2700,37 +2452,35 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_SPRAY:
-		s = ReadStringConst(stream);
-		SprayDecal(players[player].mo, s);
-		break;
+		case DEM_SPRAY:
+			s = ReadString(stream);
+			SprayDecal(players[player].mo, s.GetChars());
+			break;
 
-	case DEM_MDK:
-		s = ReadStringConst(stream);
-		cht_DoMDK(&players[player], s);
-		break;
+		case DEM_MDK:
+			s = ReadString(stream);
+			cht_DoMDK(&players[player], s);
+			break;
 
-	case DEM_PAUSE:
-		if (gamestate == GS_LEVEL)
-		{
-			if (paused)
+		case DEM_PAUSE:
+			if (gamestate == GS_LEVEL)
 			{
-				paused = 0;
-				S_ResumeSound(false);
+				if (paused)
+				{
+					paused = 0;
+					S_ResumeSound(false);
+				}
+				else
+				{
+					paused = player + 1;
+					S_PauseSound(false, false);
+				}
 			}
-			else
-			{
-				paused = player + 1;
-				S_PauseSound(false, false);
-			}
-		}
-		break;
+			break;
 
-	case DEM_SAVEGAME:
-		if (gamestate == GS_LEVEL)
-		{
-			savegamefile = ReadStringConst(stream);
-			savedescription = ReadStringConst(stream);
+		case DEM_SAVEGAME:
+			savegamefile = ReadString(stream);
+			savedescription = ReadString(stream);
 			if (player != consoleplayer)
 			{
 				// Paths sent over the network will be valid for the system that sent
@@ -2738,26 +2488,26 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 				FString basename = ExtractFileBase(savegamefile.GetChars(), true);
 				savegamefile = G_BuildSaveName(basename.GetChars());
 			}
-		}
-		gameaction = ga_savegame;
-		break;
+			gameaction = ga_savegame;
+			break;
 
-	case DEM_CHECKAUTOSAVE:
-		// Do not autosave in multiplayer games or when dead.
-		// For demo playback, DEM_DOAUTOSAVE already exists in the demo if the
-		// autosave happened. And if it doesn't, we must not generate it.
-		if (!netgame && !demoplayback && disableautosave < 2 && autosavecount
-			&& players[player].playerstate == PST_LIVE)
-		{
-			Net_WriteInt8(DEM_DOAUTOSAVE);
-		}
-		break;
+			// Boon TODO: Get rid of this, what the fuck???
+		case DEM_CHECKAUTOSAVE:
+			// Do not autosave in multiplayer games or when dead.
+			// For demo playback, DEM_DOAUTOSAVE already exists in the demo if the
+			// autosave happened. And if it doesn't, we must not generate it.
+			if (!netgame && !demoplayback && disableautosave < 2 && autosavecount
+				&& players[player].playerstate == PST_LIVE)
+			{
+				Net_WriteInt8(DEM_DOAUTOSAVE);
+			}
+			break;
 
-	case DEM_DOAUTOSAVE:
-		gameaction = ga_autosave;
-		break;
+		case DEM_DOAUTOSAVE:
+			gameaction = ga_autosave;
+			break;
 
-	case DEM_FOV:
+		case DEM_FOV:
 		{
 			float newfov = ReadFloat(stream);
 			if (newfov != players[player].DesiredFOV)
@@ -2772,12 +2522,12 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_MYFOV:
-		players[player].DesiredFOV = ReadFloat(stream);
-		break;
+		case DEM_MYFOV:
+			players[player].DesiredFOV = ReadFloat(stream);
+			break;
 
-	case DEM_RUNSCRIPT:
-	case DEM_RUNSCRIPT2:
+		case DEM_RUNSCRIPT:
+		case DEM_RUNSCRIPT2:
 		{
 			int snum = ReadInt16(stream);
 			int argn = ReadInt8(stream);
@@ -2785,15 +2535,15 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_RUNNAMEDSCRIPT:
+		case DEM_RUNNAMEDSCRIPT:
 		{
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			int argn = ReadInt8(stream);
 			RunScript(stream, players[player].mo, -FName(s).GetIndex(), argn & 127, (argn & 128) ? ACS_ALWAYS : 0);
 		}
 		break;
 
-	case DEM_RUNSPECIAL:
+		case DEM_RUNSPECIAL:
 		{
 			int snum = ReadInt16(stream);
 			int argn = ReadInt8(stream);
@@ -2811,25 +2561,25 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_CROUCH:
-		if (gamestate == GS_LEVEL && players[player].mo != nullptr
-			&& players[player].playerstate == PST_LIVE && !(players[player].oldbuttons & BT_JUMP)
-			&& !P_IsPlayerTotallyFrozen(&players[player]))
-		{
-			players[player].crouching = players[player].crouchdir < 0 ? 1 : -1;
-		}
-		break;
+		case DEM_CROUCH:
+			if (gamestate == GS_LEVEL && players[player].mo != nullptr
+				&& players[player].playerstate == PST_LIVE && !(players[player].oldbuttons & BT_JUMP)
+				&& !P_IsPlayerTotallyFrozen(&players[player]))
+			{
+				players[player].crouching = players[player].crouchdir < 0 ? 1 : -1;
+			}
+			break;
 
-	case DEM_MORPHEX:
+		case DEM_MORPHEX:
 		{
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			FString msg = cht_Morph(players + player, PClass::FindActor(s), false);
 			if (player == consoleplayer)
 				Printf("%s\n", msg[0] != '\0' ? msg.GetChars() : "Morph failed.");
 		}
 		break;
 
-	case DEM_ADDCONTROLLER:
+		case DEM_ADDCONTROLLER:
 		{
 			uint8_t playernum = ReadInt8(stream);
 			players[playernum].settings_controller = true;
@@ -2840,7 +2590,7 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_DELCONTROLLER:
+		case DEM_DELCONTROLLER:
 		{
 			uint8_t playernum = ReadInt8(stream);
 			players[playernum].settings_controller = false;
@@ -2851,57 +2601,57 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_KILLCLASSCHEAT:
+		case DEM_KILLCLASSCHEAT:
 		{
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			int killcount = 0;
-			PClassActor *cls = PClass::FindActor(s);
+			PClassActor* cls = PClass::FindActor(s);
 
 			if (cls != nullptr)
 			{
 				killcount = primaryLevel->Massacre(false, cls->TypeName);
-				PClassActor *cls_rep = cls->GetReplacement(primaryLevel);
+				PClassActor* cls_rep = cls->GetReplacement(primaryLevel);
 				if (cls != cls_rep)
 					killcount += primaryLevel->Massacre(false, cls_rep->TypeName);
 
-				Printf("Killed %d monsters of type %s.\n", killcount, s);
+				Printf("Killed %d monsters of type %s.\n", killcount, s.GetChars());
 			}
 			else
 			{
-				Printf("%s is not an actor class.\n", s);
+				Printf("%s is not an actor class.\n", s.GetChars());
 			}
 		}
 		break;
 
-	case DEM_REMOVE:
+		case DEM_REMOVE:
 		{
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			int removecount = 0;
-			PClassActor *cls = PClass::FindActor(s);
+			PClassActor* cls = PClass::FindActor(s);
 			if (cls != nullptr && cls->IsDescendantOf(RUNTIME_CLASS(AActor)))
 			{
 				removecount = RemoveClass(primaryLevel, cls);
-				const PClass *cls_rep = cls->GetReplacement(primaryLevel);
+				const PClass* cls_rep = cls->GetReplacement(primaryLevel);
 				if (cls != cls_rep)
 					removecount += RemoveClass(primaryLevel, cls_rep);
 
-				Printf("Removed %d actors of type %s.\n", removecount, s);
+				Printf("Removed %d actors of type %s.\n", removecount, s.GetChars());
 			}
 			else
 			{
-				Printf("%s is not an actor class.\n", s);
+				Printf("%s is not an actor class.\n", s.GetChars());
 			}
 		}
 		break;
 
-	case DEM_CONVREPLY:
-	case DEM_CONVCLOSE:
-	case DEM_CONVNULL:
-		P_ConversationCommand(cmd, player, stream);
-		break;
+		case DEM_CONVREPLY:
+		case DEM_CONVCLOSE:
+		case DEM_CONVNULL:
+			P_ConversationCommand(cmd, player, stream);
+			break;
 
-	case DEM_SETSLOT:
-	case DEM_SETSLOTPNUM:
+		case DEM_SETSLOT:
+		case DEM_SETSLOTPNUM:
 		{
 			int pnum = player;
 			if (cmd == DEM_SETSLOTPNUM)
@@ -2914,45 +2664,45 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 
 			for (i = 0; i < count; ++i)
 			{
-				PClassActor *wpn = Net_ReadWeapon(stream);
+				PClassActor* wpn = Net_ReadWeapon(stream);
 				players[pnum].weapons.AddSlot(slot, wpn, pnum == consoleplayer);
 			}
 		}
 		break;
 
-	case DEM_ADDSLOT:
+		case DEM_ADDSLOT:
 		{
 			int slot = ReadInt8(stream);
-			PClassActor *wpn = Net_ReadWeapon(stream);
+			PClassActor* wpn = Net_ReadWeapon(stream);
 			players[player].weapons.AddSlot(slot, wpn, player == consoleplayer);
 		}
 		break;
 
-	case DEM_ADDSLOTDEFAULT:
+		case DEM_ADDSLOTDEFAULT:
 		{
 			int slot = ReadInt8(stream);
-			PClassActor *wpn = Net_ReadWeapon(stream);
+			PClassActor* wpn = Net_ReadWeapon(stream);
 			players[player].weapons.AddSlotDefault(slot, wpn, player == consoleplayer);
 		}
 		break;
 
-	case DEM_SETPITCHLIMIT:
-		players[player].MinPitch = DAngle::fromDeg(-ReadInt8(stream));		// up
-		players[player].MaxPitch = DAngle::fromDeg(ReadInt8(stream));		// down
-		break;
+		case DEM_SETPITCHLIMIT:
+			players[player].MinPitch = DAngle::fromDeg(-ReadInt8(stream));		// up
+			players[player].MaxPitch = DAngle::fromDeg(ReadInt8(stream));		// down
+			break;
 
-	case DEM_REVERTCAMERA:
-		players[player].camera = players[player].mo;
-		break;
+		case DEM_REVERTCAMERA:
+			players[player].camera = players[player].mo;
+			break;
 
-	case DEM_FINISHGAME:
-		// Simulate an end-of-game action
-		primaryLevel->ChangeLevel(nullptr, 0, 0);
-		break;
+		case DEM_FINISHGAME:
+			// Simulate an end-of-game action
+			primaryLevel->ChangeLevel(nullptr, 0, 0);
+			break;
 
-	case DEM_NETEVENT:
+		case DEM_NETEVENT:
 		{
-			s = ReadStringConst(stream);
+			s = ReadString(stream);
 			int argn = ReadInt8(stream);
 			int arg[3] = { 0, 0, 0 };
 			for (int i = 0; i < 3; i++)
@@ -2962,37 +2712,19 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 		}
 		break;
 
-	case DEM_ENDSCREENJOB:
-		EndScreenJob();
-		break;
+		case DEM_ENDSCREENJOB:
+			EndScreenJob();
+			break;
 
-	case DEM_READIED:
-		Net_PlayerReadiedUp(player);
-		break;
+		case DEM_READIED:
+			Net_PlayerReadiedUp(player);
+			break;
 
-	case DEM_ZSC_CMD:
-		{
-			FName cmd = ReadStringConst(stream);
-			unsigned int size = ReadInt16(stream);
+		case DEM_CHANGESKILL:
+			NextSkill = ReadInt32(stream);
+			break;
 
-			TArray<uint8_t> buffer;
-			if (size)
-			{
-				buffer.Grow(size);
-				for (unsigned int i = 0u; i < size; ++i)
-					buffer.Push(ReadInt8(stream));
-			}
-
-			FNetworkCommand netCmd = { player, cmd, buffer };
-			primaryLevel->localEventManager->NetCommand(netCmd);
-		}
-		break;
-
-	case DEM_CHANGESKILL:
-		NextSkill = ReadInt32(stream);
-		break;
-
-	case DEM_KICK:
+		case DEM_KICK:
 		{
 			const int pNum = ReadInt8(stream);
 			if (pNum == consoleplayer)
@@ -3006,10 +2738,11 @@ void Net_DoCommand(int cmd, TArrayView<uint8_t>& stream, int player)
 			}
 		}
 		break;
-		
-	default:
-		I_Error("Unknown net command: %d", cmd);
-		break;
+
+		default:
+			I_Error("Unknown net command: %d", cmd);
+			break;
+		}
 	}
 }
 
@@ -3029,162 +2762,6 @@ static void RunScript(TArrayView<uint8_t>& stream, AActor *pawn, int snum, int a
 	}
 
 	P_StartScript(pawn->Level, pawn, nullptr, snum, primaryLevel->MapName.GetChars(), arg, min<int>(countof(arg), argn), ACS_NET | always);
-}
-
-// TODO: This really needs to be replaced with some kind of packet system that can simply read through packets and opt
-// not to execute them. Right now this is making setting up net commands a nightmare.
-// Reads through the network stream but doesn't actually execute any command. Used for getting the size of a stream.
-// The skip amount is the number of bytes the command possesses. This should mirror the bytes in Net_DoCommand().
-void Net_SkipCommand(int cmd, TArrayView<uint8_t>& stream)
-{
-	size_t skip = 0;
-	switch (cmd)
-	{
-		case DEM_SAY:
-			skip = strlen((char *)(stream.Data() + 1)) + 2;
-			break;
-
-		case DEM_ADDBOT:
-			skip = strlen((char *)(stream.Data() + 1)) + 6;
-			break;
-
-		case DEM_GIVECHEAT:
-		case DEM_TAKECHEAT:
-			skip = strlen((char *)(stream.Data())) + 5;
-			break;
-
-		case DEM_SETINV:
-			skip = strlen((char *)(stream.Data())) + 6;
-			break;
-
-		case DEM_NETEVENT:
-			skip = strlen((char *)(stream.Data())) + 15;
-			break;
-
-		case DEM_ZSC_CMD:
-			skip = strlen((char*)(stream.Data())) + 1;
-			skip += (stream[skip] << 8) | (stream[skip + 1]) + 2;
-			break;
-
-		case DEM_SUMMON2:
-		case DEM_SUMMONFRIEND2:
-		case DEM_SUMMONFOE2:
-			skip = strlen((char *)(stream.Data())) + 26;
-			break;
-		case DEM_CHANGEMAP2:
-			skip = strlen((char *)(stream.Data() + 1)) + 2;
-			break;
-		case DEM_MUSICCHANGE:
-		case DEM_PRINT:
-		case DEM_CENTERPRINT:
-		case DEM_UINFCHANGED:
-		case DEM_CHANGEMAP:
-		case DEM_SUMMON:
-		case DEM_SUMMONFRIEND:
-		case DEM_SUMMONFOE:
-		case DEM_SUMMONMBF:
-		case DEM_REMOVE:
-		case DEM_SPRAY:
-		case DEM_MORPHEX:
-		case DEM_KILLCLASSCHEAT:
-		case DEM_MDK:
-			skip = strlen((char *)(stream.Data())) + 1;
-			break;
-
-		case DEM_WARPCHEAT:
-			skip = 6;
-			break;
-
-		case DEM_INVUSE:
-		case DEM_FOV:
-		case DEM_MYFOV:
-		case DEM_CHANGESKILL:
-			skip = 4;
-			break;
-
-		case DEM_INVDROP:
-			skip = 8;
-			break;
-
-		case DEM_GENERICCHEAT:
-		case DEM_DROPPLAYER:
-		case DEM_ADDCONTROLLER:
-		case DEM_DELCONTROLLER:
-		case DEM_KICK:
-			skip = 1;
-			break;
-
-		case DEM_SAVEGAME:
-			skip = strlen((char *)(stream.Data())) + 1;
-			skip += strlen((char *)(stream.Data()) + skip) + 1;
-			break;
-
-		case DEM_SINFCHANGEDXOR:
-		case DEM_SINFCHANGED:
-			{
-				uint8_t t = stream[0];
-				skip = 1 + (t & 63);
-				if (cmd == DEM_SINFCHANGED)
-				{
-					switch (t >> 6)
-					{
-					case CVAR_Bool:
-						skip += 1;
-						break;
-					case CVAR_Int:
-					case CVAR_Float:
-						skip += 4;
-						break;
-					case CVAR_String:
-						skip += strlen((char*)(stream.Data() + skip)) + 1;
-						break;
-					}
-				}
-				else
-				{
-					skip += 1;
-				}
-			}
-			break;
-
-		case DEM_RUNSCRIPT:
-		case DEM_RUNSCRIPT2:
-			skip = 3 + *(stream.Data() + 2) * 4;
-			break;
-
-		case DEM_RUNNAMEDSCRIPT:
-			skip = strlen((char *)(stream.Data())) + 2;
-			skip += ((*(stream.Data() + skip - 1)) & 127) * 4;
-			break;
-
-		case DEM_RUNSPECIAL:
-			skip = 3 + *(stream.Data() + 2) * 4;
-			break;
-
-		case DEM_CONVREPLY:
-			skip = 3;
-			break;
-
-		case DEM_SETSLOT:
-		case DEM_SETSLOTPNUM:
-			{
-				skip = 2 + (cmd == DEM_SETSLOTPNUM);
-				for (int numweapons = stream[skip-1]; numweapons > 0; --numweapons)
-					skip += 1 + (stream[skip] >> 7);
-			}
-			break;
-
-		case DEM_ADDSLOT:
-		case DEM_ADDSLOTDEFAULT:
-			skip = 2 + (stream[1] >> 7);
-			break;
-
-		case DEM_SETPITCHLIMIT:
-			skip = 2;
-			break;
-	}
-
-	AdvanceStream(stream, skip);
 }
 
 // This was taken out of shared_hud, because UI code shouldn't do low level calculations that may change if the backing implementation changes.

@@ -712,7 +712,7 @@ bool FLevelLocals::ShouldDoIntermission(cluster_info_t* nextcluster, cluster_inf
 	return true;
 }
 
-void FLevelLocals::ChangeLevel(const char *levelname, int position, int inflags, int nextSkill)
+void FLevelLocals::ChangeLevel(const FString& levelname, int position, int inflags, int nextSkill)
 {
 	if (!isPrimaryLevel()) return;	// only the primary level may exit.
 

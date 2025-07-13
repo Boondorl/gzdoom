@@ -62,7 +62,7 @@ uint8_t globalfreeze, globalchangefreeze;	// user's freeze state.
 // writes some bytes to the network data stream, and the network code
 // later calls us.
 
-void cht_DoMDK(player_t *player, const char *mod)
+void cht_DoMDK(player_t *player, const FString& mod)
 {
 	if (player->mo == NULL)
 	{
@@ -578,7 +578,7 @@ void cht_SetInv(player_t *player, const char *string, int amount, bool beyond)
 	}
 }
 
-void cht_Give (player_t *player, const char *name, int amount)
+void cht_Give (player_t *player, const FString& name, int amount)
 {
 	if (!player->mo) return;
 	IFVIRTUALPTRNAME(player->mo, NAME_PlayerPawn, CheatGive)
