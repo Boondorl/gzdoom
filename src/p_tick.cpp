@@ -119,8 +119,8 @@ bool P_CheckTickerPaused ()
 		 && gamestate != GS_TITLELEVEL
 		 && ((menuactive != MENU_Off && menuactive != MENU_OnNoPause) ||
 			 ConsoleState == c_down || ConsoleState == c_falling)
-		 && !demoplayback
-		 && !demorecording
+		 && !DemoPlayback
+		 && !RecordingDemo
 		 && players[consoleplayer].viewz != NO_VALUE
 		 && wipegamestate == gamestate)
 	{
@@ -179,7 +179,7 @@ void P_Ticker (void)
 	}
 	r_NoInterpolate = true;
 
-	if (!demoplayback)
+	if (!DemoPlayback)
 	{
 		// This is a separate slot from the wipe in D_Display(), because this
 		// is delayed slightly due to latency. (Even on a singleplayer game!)

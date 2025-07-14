@@ -59,7 +59,7 @@
 // Note: ZDoom's limit is chosen such that the sky is rendered properly.
 CUSTOM_CVAR (Bool, cl_oldfreelooklimit, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOINITCALL)
 {
-	if (usergame) // [SP] Update pitch limits to the netgame/gamesim.
+	if (PlayerControlledGame) // [SP] Update pitch limits to the netgame/gamesim.
 		players[consoleplayer].SendPitchLimits();
 }
 

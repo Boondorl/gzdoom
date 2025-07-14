@@ -30,8 +30,6 @@
 
 #include "i_protocol.h"
 
-class SayPacket;
-
 #define xx(cmd, packet) DEM_##cmd
 
 enum EDemoCommand : uint8_t
@@ -39,13 +37,13 @@ enum EDemoCommand : uint8_t
 	DEM_INVALID,	//  0 Intentionally has no packet
 	DEM_USERCMD,		//  1 Player inputs
 	DEM_EMPTYUSERCMD,	//  2 Equivalent to [DEM_USERCMD, 0]
-	DEM_MUSICCHANGE,	//  4 String: music name
+	xx(MUSICCHANGE, ChangeMusicPacket),	//  4 String: music name
 	DEM_STOP,			//  7 End of demo
 	DEM_UINFCHANGED,	//  8 User info changed
 	DEM_SINFCHANGED,	//  9 Server/Host info changed
 	DEM_GENERICCHEAT,	// 10 Int8: cheat
 	DEM_GIVECHEAT,		// 11 String: item to give, Int32: quantity
-	DEM_SAY,			// 12 Int8: who to talk to, String: message
+	xx(SAY, SayPacket),			// 12 Int8: who to talk to, String: message
 	DEM_CHANGEMAP,		// 14 String: name of map
 	DEM_SUICIDE,		// 15 
 	DEM_ADDBOT,			// 16 Int8: botshift, String: userinfo for bot, Type: botskill_t
@@ -88,7 +86,7 @@ enum EDemoCommand : uint8_t
 	DEM_RUNSPECIAL,		// 62 Int16: special, Int8: Arg count, Int32s: Args
 	DEM_SETPITCHLIMIT,	// 63 Int8: up limit, Int8: down limit (in degrees)
 	DEM_RUNNAMEDSCRIPT,	// 65 String: script name, Int8: Arg count + Always flag; each arg is an Int32
-	DEM_REVERTCAMERA,	// 66 
+	xx(REVERTCAMERA, RevertCameraPacket),	// 66 
 	DEM_SETSLOTPNUM,	// 67 Int8: player number, the rest is the same as DEM_SETSLOT
 	DEM_REMOVE,			// 68 String: class to remove
 	DEM_FINISHGAME,		// 69 
@@ -99,12 +97,81 @@ enum EDemoCommand : uint8_t
 	DEM_ZSC_CMD,		// 74 String: command, Int16: Byte size of command
 	DEM_CHANGESKILL,	// 75 Int32: Skill
 	DEM_KICK,			// 76 Int8: Player number
-	DEM_READIED,		// 77 
+	xx(READIED, PlayerReadyPacket),		// 77 
 
 	DEM_NUM_COMMANDS
 };
 
 #undef xx
+
+DEFINE_NETPACKET_EMPTY(EndScreenRunnerPacket, DEM_ENDSCREENJOB);
+DEFINE_NETPACKET_EMPTY(PlayerReadyPacket, DEM_READIED);
+DEFINE_NETPACKET_EMPTY(UseAllPacket, DEM_INVUSEALL);
+DEFINE_NETPACKET_EMPTY(RevertCameraPacket, DEM_REVERTCAMERA);
+
+class SayPacket : public NetPacket
+{
+	DEFINE_NETPACKET(SayPacket, NetPacket, DEM_SAY, 2)
+	uint8_t _flags = 0u;
+	FString _message = {};
+	static constexpr uint8_t MSG_TEAM = 1u;
+	static constexpr uint8_t MSG_BOLD = 2u;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_UINT8(_flags);
+		SERIALIZE_STRING(_message);
+		return true;
+	}
+public:
+	SayPacket(uint8_t flags, const FString& message) : SayPacket()
+	{
+		_flags = flags;
+		_message = message;
+	}
+	bool ShouldWrite() const override
+	{
+		return _message.IsNotEmpty();
+	}
+};
+
+class NetEventPacket : public NetPacket
+{
+	DEFINE_NETPACKET(NetEventPacket, NetPacket, DEM_NETEVENT, 3)
+	FString _event = {};
+	int32_t _args[3] = {};
+	bool _bManual = true;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_STRING(_event);
+		size_t len = std::size(args);
+		if constexpr(Stream::IsWriting)
+		{
+			int i = len - 1;
+			for (; i >= 0; --i)
+			{
+				if (_args[i])
+					break;
+			}
+			len = (size_t)(i + 1);
+		}
+		TArrayView<const int32_t> data = { _args, len };
+		SERIALIZE_ARRAY_EXPECTING(int32_t, data, std::size(_args), false);
+		if constexpr(Stream::IsReading)
+			memcpy(_args, data.Data(), data.Size());
+		SERIALIZE_BOOL(_bManual);
+	}
+public:
+	NetEventPacket(const FString& event, int32_t arg0, int32_t arg1, int32_t arg2, bool bManual) : NetEventPacket()
+	{
+		_event = event;
+		_args[0] = arg0;
+		_args[1] = arg1;
+		_args[2] = arg2;
+		_bManual = bManual;
+	}
+};
+
+DEFINE_NETPACKET_STRING(ChangeMusicPacket, DEM_MUSICCHANGE);
 
 EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
 void InitializeDoomPackets();

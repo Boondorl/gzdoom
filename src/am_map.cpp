@@ -2858,7 +2858,7 @@ void DAutomap::drawPlayers ()
 		if (dmflags2 & DF2_NO_AUTOMAP_ALLIES && i != consoleplayer)
 			continue;
 		
-		if (deathmatch && !demoplayback &&
+		if (deathmatch && !DemoPlayback &&
 			!p->mo->IsTeammate (players[consoleplayer].mo) &&
 			p != players[consoleplayer].camera->player)
 		{

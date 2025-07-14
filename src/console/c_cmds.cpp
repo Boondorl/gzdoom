@@ -252,7 +252,7 @@ EXTERN_CVAR (Bool, chasedemo)
 
 CCMD (chase)
 {
-	if (demoplayback)
+	if (DemoPlayback)
 	{
 		int i;
 
@@ -348,7 +348,7 @@ CCMD (hxvisit)
 
 CCMD (changemap)
 {
-	if (!players[consoleplayer].mo || !usergame)
+	if (!players[consoleplayer].mo || !PlayerControlledGame)
 	{
 		Printf ("Use the map command when not in a game.\n");
 		return;
@@ -410,7 +410,7 @@ CCMD (changemap)
 
 CCMD (changeskill)
 {
-	if (!players[consoleplayer].mo || !usergame)
+	if (!players[consoleplayer].mo || !PlayerControlledGame)
 	{
 		Printf ("Cannot change skills while not in a game.\n");
 		return;

@@ -673,7 +673,7 @@ void P_ConversationCommand (int netcode, int pnum, TArrayView<uint8_t>& stream)
 
 	// The conversation menus are normally closed by the menu code, but that
 	// doesn't happen during demo playback, so we need to do it here.
-	if (demoplayback && CurrentMenu != NULL && CurrentMenu->IsKindOf("ConversationMenu"))
+	if (DemoPlayback && CurrentMenu != NULL && CurrentMenu->IsKindOf("ConversationMenu"))
 	{
 		CurrentMenu->Close();
 	}

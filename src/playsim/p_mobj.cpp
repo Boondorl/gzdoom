@@ -4718,7 +4718,7 @@ void AActor::Tick ()
 			}
 		}
 
-		if (Level->BotInfo.botnum && !demoplayback &&
+		if (Level->BotInfo.botnum && !DemoPlayback &&
 			((flags & (MF_SPECIAL|MF_MISSILE)) || (flags3 & MF3_ISMONSTER)))
 		{
 			Level->BotInfo.BotTick(this);
@@ -6397,7 +6397,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	}
 
 	// [RH] Allow chasecam for demo watching
-	if ((demoplayback || demonew) && chasedemo)
+	if ((DemoPlayback || demonew) && chasedemo)
 		p->cheats = CF_CHASECAM;
 
 	// setup gun psprite

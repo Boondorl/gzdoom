@@ -626,7 +626,7 @@ void AActor::Die (AActor *source, AActor *inflictor, int dmgflags, FName MeansOf
 		player->respawn_time = Level->time + TICRATE;
 
 		//Added by MC: Respawn bots
-		if (Level->BotInfo.botnum && !demoplayback)
+		if (Level->BotInfo.botnum && !DemoPlayback)
 		{
 			if (player->Bot != NULL)
 				player->Bot->t_respawn = (pr_botrespawn()%15)+((Level->BotInfo.botnum-1)*2)+TICRATE+1;

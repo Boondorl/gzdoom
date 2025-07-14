@@ -1195,7 +1195,7 @@ void DBaseStatusBar::DrawBottomStuff (EHudState state)
 
 void DBaseStatusBar::DrawTopStuff (EHudState state)
 {
-	if (demoplayback && demover != DEMOGAMEVERSION)
+	if (DemoPlayback && demover != DEMOGAMEVERSION)
 	{
 		DrawText(twod, SmallFont, CR_TAN, 0, GetTopOfStatusbar() - 40 * CleanYfac,
 			"Demo was recorded with a different version\n"

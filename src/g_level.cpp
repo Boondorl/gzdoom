@@ -178,10 +178,10 @@ CVAR(Int, sv_alwaystally, 0, CVAR_SERVERINFO)
 static FRandom pr_classchoice ("RandomPlayerClassChoice");
 
 extern level_info_t TheDefaultLevelInfo;
-extern bool timingdemo;
+extern bool BenchmarkDemo;
 
 // Start time for timing demos
-int starttime;
+int BenchmarkStartTime;
 
 
 extern FString BackupSaveName;
@@ -479,10 +479,10 @@ void G_NewInit ()
 	netgame = false;
 	multiplayer = multiplayernext;
 	multiplayernext = false;
-	if (demoplayback)
+	if (DemoPlayback)
 	{
 		C_RestoreCVars ();
-		demoplayback = false;
+		DemoPlayback = false;
 		D_SetupUserInfo ();
 	}
 	for (i = 0; i < MAXPLAYERS; ++i)
@@ -610,7 +610,7 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 
 	if (!savegamerestore)
 	{
-		if (!netgame && !demorecording && !demoplayback)
+		if (!netgame && !RecordingDemo && !DemoPlayback)
 		{
 			// [RH] Change the random seed for each new single player game
 			// [ED850] The demo already sets the RNG.
@@ -638,9 +638,9 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 		STAT_StartNewGame(mapname);
 	}
 
-	usergame = !bTitleLevel;		// will be set false if a demo
+	PlayerControlledGame = !bTitleLevel;		// will be set false if a demo
 	paused = 0;
-	demoplayback = false;
+	DemoPlayback = false;
 	automapactive = false;
 	viewactive = true;
 
@@ -712,7 +712,7 @@ bool FLevelLocals::ShouldDoIntermission(cluster_info_t* nextcluster, cluster_inf
 	return true;
 }
 
-void FLevelLocals::ChangeLevel(const FString& levelname, int position, int inflags, int nextSkill)
+void FLevelLocals::ChangeLevel(const char* levelname, int position, int inflags, int nextSkill)
 {
 	if (!isPrimaryLevel()) return;	// only the primary level may exit.
 
@@ -1370,7 +1370,7 @@ void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool
 	LocalViewPitch = 0;
 	paused = 0;
 
-	if (demoplayback || oldgs == GS_STARTUP || oldgs == GS_TITLELEVEL)
+	if (DemoPlayback || oldgs == GS_STARTUP || oldgs == GS_TITLELEVEL)
 		C_HideConsole();
 
 	C_FlushDisplay();
@@ -1464,7 +1464,7 @@ void FLevelLocals::DoLoadLevel(const FString &nextmapname, int position, bool au
 		BotInfo.Init ();
 	}
 
-	if (timingdemo)
+	if (BenchmarkDemo)
 	{
 		static bool firstTime = true;
 

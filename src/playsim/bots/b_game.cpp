@@ -134,7 +134,7 @@ void FCajunMaster::Main(FLevelLocals *Level)
 {
 	BotThinkCycles.Reset();
 
-	if (demoplayback || gamestate != GS_LEVEL || consoleplayer != Net_Arbitrator)
+	if (DemoPlayback || gamestate != GS_LEVEL || consoleplayer != Net_Arbitrator)
 		return;
 
 	//Add new bots?

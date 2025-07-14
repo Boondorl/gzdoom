@@ -160,7 +160,7 @@ void D_DoAdvanceDemo(void);
 
 static void RunScript(TArrayView<uint8_t>& stream, AActor *pawn, int snum, int argn, int always);
 
-extern	bool	 advancedemo;
+extern	bool	 AdvanceDemo;
 
 CVAR(Bool, vid_dontdowait, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, vid_lowerinbackground, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
@@ -328,7 +328,7 @@ void Net_ClearBuffers()
 
 bool Net_IsPlayerReady(int player)
 {
-	if (demoplayback || net_cutscenereadytype != RT_VOTE)
+	if (DemoPlayback || net_cutscenereadytype != RT_VOTE)
 		return false;
 
 	if (cutscene.runner)
@@ -347,7 +347,7 @@ bool Net_IsPlayerReady(int player)
 // Check if every client is ready to move on from the current cutscene.
 void Net_PlayerReadiedUp(int player)
 {
-	if (!netgame || demoplayback)
+	if (!netgame || DemoPlayback)
 		return;
 
 	// Allow unreadying in case a player needs to leave momentarily.
@@ -359,7 +359,7 @@ void Net_PlayerReadiedUp(int player)
 
 void Net_StartCutscene()
 {
-	CutsceneCountdown = netgame && !demoplayback && net_cutscenecountdown > 0.0f ? static_cast<int>(ceil(net_cutscenecountdown * TICRATE)) : 0;
+	CutsceneCountdown = netgame && !DemoPlayback && net_cutscenecountdown > 0.0f ? static_cast<int>(ceil(net_cutscenecountdown * TICRATE)) : 0;
 }
 
 // Allow the game to automatically start after a set amount of time.
@@ -456,7 +456,7 @@ void Net_ResetCommands(bool midTic)
 
 void Net_SetWaiting()
 {
-	if (netgame && !demoplayback && NetworkClients.Size() > 1)
+	if (netgame && !DemoPlayback && NetworkClients.Size() > 1)
 		LevelStartStatus = LST_WAITING;
 }
 
@@ -532,7 +532,7 @@ static size_t GetNetBufferSize()
 static void HSendPacket(int client, size_t size)
 {
 	// This data already exists locally in the demo file, so don't write it out.
-	if (demoplayback)
+	if (DemoPlayback)
 		return;
 
 	RemoteClient = client;
@@ -554,7 +554,7 @@ static void HSendPacket(int client, size_t size)
 // Returns false if no packet is waiting
 static bool HGetPacket()
 {
-	if (demoplayback)
+	if (DemoPlayback)
 		return false;
 
 	if (LocalNetBufferSize)
@@ -639,8 +639,8 @@ static void ClientQuit(int clientNum, int newHost)
 	if (clientNum == Net_Arbitrator)
 		SetArbitrator(newHost >= 0 ? newHost : NetworkClients[0]);
 
-	if (demorecording)
-		G_CheckDemoStatus();
+	if (RecordingDemo)
+		G_CheckDemoEnd();
 }
 
 static bool IsMapLoaded()
@@ -1065,7 +1065,7 @@ static int16_t CalculateConsistency(int client, uint32_t seed)
 // check, not just the player's x position like BOOM.
 static void MakeConsistencies()
 {
-	if (!netgame || demoplayback || (gametic % TicDup) || !IsMapLoaded())
+	if (!netgame || DemoPlayback || (gametic % TicDup) || !IsMapLoaded())
 		return;
 
 	const uint32_t rngSum = StaticSumSeeds();
@@ -1080,7 +1080,7 @@ static void MakeConsistencies()
 
 static bool Net_UpdateStatus()
 {
-	if (!netgame || demoplayback || NetworkClients.Size() <= 1)
+	if (!netgame || DemoPlayback || NetworkClients.Size() <= 1)
 		return true;
 
 	if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
@@ -1245,7 +1245,7 @@ void NetUpdate(int tics)
 	if (tics <= 0)
 		return;
 
-	if (netgame && !demoplayback)
+	if (netgame && !DemoPlayback)
 	{
 		// If a tic has passed, always send out a heartbeat packet (also doubles as
 		// a latency measurement tool).
@@ -1405,7 +1405,7 @@ void NetUpdate(int tics)
 	}
 
 	const int newestTic = ClientTic / TicDup;
-	if (demoplayback)
+	if (DemoPlayback)
 	{
 		// Don't touch net command data while playing a demo, as it'll already exist.
 		for (auto client : NetworkClients)
@@ -1805,7 +1805,7 @@ bool D_CheckNetGame()
 //
 void D_QuitNetGame()
 {
-	if (!netgame || !usergame || consoleplayer == -1 || demoplayback || NetworkClients.Size() == 1)
+	if (!netgame || !PlayerControlledGame || consoleplayer == -1 || DemoPlayback || NetworkClients.Size() == 1)
 		return;
 
 	// Send a bunch of packets for stability.
@@ -1864,7 +1864,7 @@ void D_QuitNetGame()
 ADD_STAT(network)
 {
 	FString out = {};
-	if (!netgame || demoplayback)
+	if (!netgame || DemoPlayback)
 	{
 		out.AppendFormat("No network stats available.");
 		return out;
@@ -2005,7 +2005,7 @@ static bool ShouldStabilizeTick()
 // while we wait for it to stabilize, otherwise everything will appear to jitter around.
 static void CalculateNetStabilityBuffer(int diff)
 {
-	if (!netgame || demoplayback)
+	if (!netgame || DemoPlayback)
 	{
 		StabilityBuffer = 0;
 		return;
@@ -2109,7 +2109,7 @@ void TryRunTics()
 
 	// Test player prediction code in singleplayer
 	// by running the gametic behind the ClientTic
-	if (!netgame && !demoplayback && cl_debugprediction > 0)
+	if (!netgame && !DemoPlayback && cl_debugprediction > 0)
 	{
 		int debugTarget = ClientTic - cl_debugprediction;
 		int debugOffset = gametic - debugTarget;
@@ -2160,7 +2160,7 @@ void TryRunTics()
 		if (stabilize)
 			TicStabilityBegin();
 
-		if (advancedemo)
+		if (AdvanceDemo)
 			D_DoAdvanceDemo();
 
 		G_Ticker();
@@ -2198,13 +2198,9 @@ void Net_Initialize()
 void Net_WritePacket(NetPacket& p)
 {
 	auto buffer = NetEvents.GetWriteBuffer();
-	const size_t size = p.GetSize();
-	if (size > buffer.Size())
-		I_Error("Net event buffer overflow");
-
 	auto stream = buffer;
 	WritePacket(p, stream);
-	NetEvents.AddData({ buffer.Data(), size });
+	NetEvents.AddData({ buffer.Data(), buffer.Size() - stream.Size() });
 }
 
 static int RemoveClass(FLevelLocals *Level, const PClass *cls)
@@ -2314,25 +2310,6 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 
 		case DEM_CENTERVIEW:
 			players[player].centering = true;
-			break;
-
-		case DEM_INVUSEALL:
-			if (gamestate == GS_LEVEL && !paused
-				&& players[player].playerstate != PST_DEAD)
-			{
-				AActor* item = players[player].mo->Inventory;
-				auto pitype = PClass::FindActor(NAME_PuzzleItem);
-				while (item != nullptr)
-				{
-					AActor* next = item->Inventory;
-					IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
-					{
-						VMValue param[] = { item, players[player].mo };
-						VMCall(func, param, 2, nullptr, 0);
-					}
-					item = next;
-				}
-			}
 			break;
 
 		case DEM_INVUSE:
@@ -2496,7 +2473,7 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 			// Do not autosave in multiplayer games or when dead.
 			// For demo playback, DEM_DOAUTOSAVE already exists in the demo if the
 			// autosave happened. And if it doesn't, we must not generate it.
-			if (!netgame && !demoplayback && disableautosave < 2 && autosavecount
+			if (!netgame && !DemoPlayback && disableautosave < 2 && autosavecount
 				&& players[player].playerstate == PST_LIVE)
 			{
 				Net_WriteInt8(DEM_DOAUTOSAVE);
@@ -2691,10 +2668,6 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 			players[player].MaxPitch = DAngle::fromDeg(ReadInt8(stream));		// down
 			break;
 
-		case DEM_REVERTCAMERA:
-			players[player].camera = players[player].mo;
-			break;
-
 		case DEM_FINISHGAME:
 			// Simulate an end-of-game action
 			primaryLevel->ChangeLevel(nullptr, 0, 0);
@@ -2712,12 +2685,8 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 		}
 		break;
 
-		case DEM_ENDSCREENJOB:
-			EndScreenJob();
-			break;
-
 		case DEM_READIED:
-			Net_PlayerReadiedUp(player);
+			
 			break;
 
 		case DEM_CHANGESKILL:
@@ -2802,7 +2771,7 @@ DEFINE_ACTION_FUNCTION_NATIVE(_ScreenJobRunner, IsPlayerReady, IsPlayerReady)
 
 static void ReadyPlayer()
 {
-	if (netgame && !demoplayback)
+	if (netgame && !DemoPlayback)
 		Net_WriteInt8(DEM_READIED);
 }
 

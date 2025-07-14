@@ -20,12 +20,19 @@
 
 #include "d_net.h"
 #include "s_music.h"
+#include "screenjob.h"
+#include "vm.h"
+#include "actor.h"
+#include "d_player.h"
+#include "i_interface.h"
+#include "gi.h"
 
 void InitializeDoomPackets()
 {
 	REGISTER_NETPACKET(SayPacket);
 	REGISTER_NETPACKET(ChangeMusicPacket);
 	REGISTER_NETPACKET(NetCommandPacket);
+	REGISTER_NETPACKET(RevertCameraPacket);
 }
 
 EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream)
@@ -35,89 +42,86 @@ EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream)
 
 // Data-typed packets for easier one-liners.
 
-class SayPacket : public NetPacket
+NETPACKET_EXECUTE(EndScreenRunnerPacket)
 {
-	DEFINE_NETPACKET(SayPacket, NetPacket, DEM_SAY, 2);
-	uint8_t _flags = 0u;
-	FString _message = {};
-	static constexpr uint8_t MSG_TEAM = 1u;
-	static constexpr uint8_t MSG_BOLD = 2u;
-	DEFINE_NETPACKET_SERIALIZER()
+	EndScreenJob();
+	return true;
+}
+
+NETPACKET_EXECUTE(PlayerReadyPacket)
+{
+	Net_PlayerReadiedUp(player);
+	return true;
+}
+
+NETPACKET_EXECUTE(RevertCameraPacket)
+{
+	players[player].camera = players[player].mo;
+	return true;
+}
+
+NETPACKET_EXECUTE(UseAllPacket)
+{
+	if (gamestate == GS_LEVEL && !paused
+		&& players[player].playerstate != PST_DEAD)
 	{
-		SERIALIZE_UINT8(_flags);
-		SERIALIZE_STRING(_message);
+		AActor* item = players[player].mo->Inventory;
+		while (item != nullptr)
+		{
+			AActor* next = item->Inventory;
+			IFVIRTUALPTRNAME(item, NAME_Inventory, UseAll)
+				VMCallVoid<AActor*, AActor*>(func, item, players[player].mo);
+			item = next;
+		}
+	}
+}
+
+NETPACKET_EXECUTE(ChangeMusicPacket)
+{
+	S_ChangeMusic(Value.GetChars());
+	return true;
+}
+
+NETPACKET_EXECUTE(SayPacket)
+{
+	if (cl_showchat == CHAT_DISABLED || (MutedClients & ((uint64_t)1u << player)))
 		return true;
-	}
-public:
-	SayPacket(uint8_t flags, const FString& message) : SayPacket()
+
+	const char* name = players[player].userinfo.GetName();
+	if (!(_flags & MSG_TEAM))
 	{
-		_flags = flags;
-		_message = message;
-	}
-	bool ShouldWrite() const override
-	{
-		return _message.IsNotEmpty();
-	}
-	bool Execute(int pNum) override
-	{
-		if (cl_showchat == CHAT_DISABLED || (MutedClients & ((uint64_t)1u << pNum)))
+		if (cl_showchat < CHAT_GLOBAL)
 			return true;
 
-		const char* name = players[pNum].userinfo.GetName();
-		if (!(_flags & MSG_TEAM))
-		{
-			if (cl_showchat < CHAT_GLOBAL)
-				return true;
+		// Said to everyone
+		if (deathmatch && teamplay)
+			Printf(PRINT_CHAT, "(All) ");
+		if ((_flags & MSG_BOLD) && !cl_noboldchat)
+			Printf(PRINT_CHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, player, _message.GetChars());
+		else
+			Printf(PRINT_CHAT, "%s [%d]" TEXTCOLOR_CHAT ": %s" TEXTCOLOR_CHAT "\n", name, player, _message.GetChars());
 
-			// Said to everyone
-			if (deathmatch && teamplay)
-				Printf(PRINT_CHAT, "(All) ");
-			if ((_flags & MSG_BOLD) && !cl_noboldchat)
-				Printf(PRINT_CHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, pNum, _message.GetChars());
-			else
-				Printf(PRINT_CHAT, "%s [%d]" TEXTCOLOR_CHAT ": %s" TEXTCOLOR_CHAT "\n", name, pNum, _message.GetChars());
-
-			if (!cl_nochatsound)
-				S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
-		}
-		else if (!deathmatch || players[pNum].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
-		{
-			if (cl_showchat < CHAT_TEAM_ONLY)
-				return;
-
-			// Said only to members of the player's team
-			if (deathmatch && teamplay)
-				Printf(PRINT_TEAMCHAT, "(Team) ");
-			if ((_flags & MSG_BOLD) && !cl_noboldchat)
-				Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, pNum, _message.GetChars());
-			else
-				Printf(PRINT_TEAMCHAT, "%s [%d]" TEXTCOLOR_TEAMCHAT ": %s" TEXTCOLOR_TEAMCHAT "\n", name, pNum, _message.GetChars());
-
-			if (!cl_nochatsound)
-				S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
-		}
-		return true;
+		if (!cl_nochatsound)
+			S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
 	}
-};
-
-class PrintPacket : public StringPacket
-{
-	DEFINE_NETPACKET(PrintPacket, StringPacket, DEM_PRINT, 1)
-public:
-	PrintPacket(const FString& message) : PrintPacket()
+	else if (!deathmatch || players[player].userinfo.GetTeam() == players[consoleplayer].userinfo.GetTeam())
 	{
-		Value = message;
+		if (cl_showchat < CHAT_TEAM_ONLY)
+			return;
+
+		// Said only to members of the player's team
+		if (deathmatch && teamplay)
+			Printf(PRINT_TEAMCHAT, "(Team) ");
+		if ((_flags & MSG_BOLD) && !cl_noboldchat)
+			Printf(PRINT_TEAMCHAT, TEXTCOLOR_BOLD "* %s [%d]" TEXTCOLOR_BOLD "%s" TEXTCOLOR_BOLD "\n", name, player, _message.GetChars());
+		else
+			Printf(PRINT_TEAMCHAT, "%s [%d]" TEXTCOLOR_TEAMCHAT ": %s" TEXTCOLOR_TEAMCHAT "\n", name, player, _message.GetChars());
+
+		if (!cl_nochatsound)
+			S_Sound(CHAN_VOICE, CHANF_UI, gameinfo.chatSound, 1.0f, ATTN_NONE);
 	}
-	bool ShouldWrite() const override
-	{
-		return Value.IsNotEmpty();
-	}
-	bool Execute(int pNum) override
-	{
-		Printf("%s", Value.GetChars());
-		return true;
-	}
-};
+	return true;
+}
 
 class CheatPacket : public NetPacket
 {
@@ -204,7 +208,7 @@ public:
 class RunSpecialPacket : public NetPacket
 {
 	DEFINE_NETPACKET(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2)
-		int16_t _special = 0u;
+	int16_t _special = 0;
 	int32_t _args[5] = {};
 	DEFINE_NETPACKET_SERIALIZER()
 	{
@@ -244,41 +248,10 @@ public:
 	}
 };
 
-class ChangeMusicPacket : public NetPacket
-{
-	DEFINE_NETPACKET(ChangeMusicPacket, NetPacket, DEM_MUSICCHANGE, 1)
-		FString _name = {};
-
-public:
-	ChangeMusicPacket(const FString& name) : ChangeMusicPacket()
-	{
-		_name = name;
-	}
-
-	bool Read(TArrayView<uint8_t>& stream) override
-	{
-		_name = ReadString(stream);
-		return true;
-	}
-
-	bool Write(TArrayView<uint8_t>& stream) override
-	{
-		WriteInt8(DEM_MUSICCHANGE, stream);
-		WriteString(_name, stream);
-		return true;
-	}
-
-	bool Execute(int pNum) override
-	{
-		S_ChangeMusic(_name.GetChars());
-		return true;
-	}
-};
-
 class NetCommandPacket : public NetPacket
 {
 	DEFINE_NETPACKET(NetCommandPacket, NetPacket, DEM_ZSC_CMD, 2)
-		FName _command = NAME_None;
+	FName _command = NAME_None;
 	TArray<uint8_t> _buffer = {}; // Make sure the command is completely sandboxed.
 	DEFINE_NETPACKET_SERIALIZER()
 	{
@@ -293,14 +266,9 @@ class NetCommandPacket : public NetPacket
 		}
 	}
 public:
-	NetCommandPacket(FName command) : NetCommandPacket()
+	NetCommandPacket(FName command, const TArrayView<const uint8_t>& data) : NetCommandPacket()
 	{
 		_command = command;
-	}
-	void ParseCommand(const TArrayView<const uint8_t>& data)
-	{
-		_buffer.Clear();
-
 	}
 	bool Execute(int pNum) override
 	{

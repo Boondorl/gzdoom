@@ -55,7 +55,7 @@ enum
 	PPS_NOBLOCKINGCHECK		= 2,
 };
 
-void G_DeferedPlayDemo (const char* demo);
+void G_DeferDemo(const FString& demo);
 
 // Can be called by the startup code or M_Responder,
 // calls P_SetupLevel or W_EnterWorld.
@@ -71,11 +71,11 @@ void G_DoQuickSave ();
 // Only called by startup code.
 void G_RecordDemo (const char* name);
 
-void G_BeginRecording (const char *startmap);
+void G_BeginRecording(FString map);
 
 void G_PlayDemo (char* name);
 void G_TimeDemo (const char* name);
-bool G_CheckDemoStatus (void);
+bool G_CheckDemoEnd();
 
 void G_Ticker (void);
 bool G_Responder (event_t*	ev);

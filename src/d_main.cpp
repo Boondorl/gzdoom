@@ -168,7 +168,7 @@ void CloseWidgetResources();
 bool D_CheckNetGame ();
 void D_ProcessEvents ();
 void G_BuildTiccmd (usercmd_t* cmd);
-void D_DoAdvanceDemo ();
+void D_DoAdvanceDemo();
 void D_LoadWadSettings ();
 void ParseGLDefs();
 void DrawFullscreenSubtitle(FFont* font, const char *text);
@@ -201,8 +201,8 @@ EXTERN_CVAR(Bool, ticker)
 EXTERN_CVAR(Bool, vid_fps)
 
 extern bool setmodeneeded;
-extern bool demorecording;
-bool M_DemoNoPlay;	// [RH] if true, then skip any demos in the loop
+extern bool RecordingDemo;
+bool NoTitleDemos;	// [RH] if true, then skip any demos in the loop
 extern bool insave;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
 extern FName MessageBoxClass;
@@ -241,7 +241,7 @@ CUSTOM_CVAR(Int, vid_rendermode, 4, CVAR_ARCHIVE | CVAR_GLOBALCONFIG | CVAR_NOIN
 		self = self - 2; // softpoly to software
 	}
 
-	if (usergame)
+	if (PlayerControlledGame)
 	{
 		// [SP] Update pitch limits to the netgame/gamesim.
 		players[consoleplayer].SendPitchLimits();
@@ -319,7 +319,7 @@ bool singletics = false;	// debug flag to cancel adaptiveness
 FString startmap;
 bool setmap;
 bool autostart;
-bool advancedemo;
+bool AdvanceDemo;
 FILE *debugfile;
 gamestate_t wipegamestate = GS_DEMOSCREEN;	// can be -1 to force a wipe
 bool PageBlank;
@@ -342,7 +342,7 @@ uint32_t r_renderercaps = 0;
 
 // PRIVATE DATA DEFINITIONS ------------------------------------------------
 
-static int demosequence;
+static int CurDemoSequence;
 static int pagetic;
 
 // CODE --------------------------------------------------------------------
@@ -523,7 +523,7 @@ CUSTOM_CVAR (Int, dmflags2, 0, CVAR_SERVERINFO | CVAR_NOINITCALL)
 				S_UpdateSounds (p->camera);
 				StatusBar->AttachToPlayer (p);
 
-				if (demoplayback || multiplayer)
+				if (DemoPlayback || multiplayer)
 					StatusBar->ShowPlayerName ();
 			}
 		}
@@ -1173,8 +1173,8 @@ void D_ErrorCleanup ()
 	savegamerestore = false;
 	primaryLevel->BotInfo.RemoveAllBots (primaryLevel, true);
 	D_QuitNetGame ();
-	if (demorecording || demoplayback)
-		G_CheckDemoStatus ();
+	if (RecordingDemo || DemoPlayback)
+		G_CheckDemoEnd ();
 	Net_ClearBuffers ();
 	G_NewInit ();
 	M_ClearMenus ();
@@ -1311,7 +1311,7 @@ void D_PageDrawer (void)
 
 void D_AdvanceDemo (void)
 {
-	advancedemo = true;
+	AdvanceDemo = true;
 }
 
 //==========================================================================
@@ -1337,7 +1337,7 @@ void D_DoStrifeAdvanceDemo ()
 	gamestate = GS_DEMOSCREEN;
 	PageBlank = false;
 
-	switch (demosequence)
+	switch (CurDemoSequence)
 	{
 	default:
 	case 0:
@@ -1426,10 +1426,10 @@ void D_DoStrifeAdvanceDemo ()
 		wipegamestate = GS_FORCEWIPEFADE;
 		break;
 	}
-	if (demosequence++ > 10)
-		demosequence = 0;
-	if (demosequence == 9 && !(gameinfo.flags & GI_SHAREWARE))
-		demosequence = 10;
+	if (CurDemoSequence++ > 10)
+		CurDemoSequence = 0;
+	if (CurDemoSequence == 9 && !(gameinfo.flags & GI_SHAREWARE))
+		CurDemoSequence = 10;
 
 	if (pagename != nullptr)
 	{
@@ -1448,103 +1448,96 @@ void D_DoStrifeAdvanceDemo ()
 //
 //==========================================================================
 
-void D_DoAdvanceDemo (void)
+void D_DoAdvanceDemo()
 {
-	static char demoname[8] = "DEMO1";
-	static int democount = 0;
-	static int pagecount;
-	FString pagename;
+	constexpr char DemoName[] = "DEMO";
 
-	advancedemo = false;
+	static int curDemo = 0;
+	static int curPage = 0;
 
+	AdvanceDemo = false;
 	if (gameaction != ga_nothing)
-	{
 		return;
-	}
 
 	players[consoleplayer].playerstate = PST_LIVE;	// not reborn
-	usergame = false;				// no save / end game here
+	PlayerControlledGame = false;				// no save / end game here
 	paused = 0;
 
 	// [RH] If you want something more dynamic for your title, create a map
 	// and name it TITLEMAP. That map will be loaded and used as the title.
-
 	if (P_CheckMapData("TITLEMAP"))
 	{
-		G_InitNew ("TITLEMAP", true);
+		G_InitNew("TITLEMAP", true);
 		return;
 	}
 
 	if (gameinfo.gametype == GAME_Strife)
 	{
-		D_DoStrifeAdvanceDemo ();
+		D_DoStrifeAdvanceDemo();
 		return;
 	}
 
-	switch (demosequence)
+	FString pageName = {};
+	switch (CurDemoSequence)
 	{
 	case 3:
 		if (gameinfo.advisoryTime)
 		{
 			Advisory = TexMan.GetTextureID("ADVISOR", ETextureType::MiscPatch);
-			demosequence = 1;
+			CurDemoSequence = 1;
 			pagetic = (int)(gameinfo.advisoryTime * TICRATE);
 			break;
 		}
-		// fall through to case 1 if no advisory notice
+		// Fall through to case 1 if no advisory notice.
 		[[fallthrough]];
-
 	case 1:
 		Advisory.SetInvalid();
-		if (!M_DemoNoPlay)
+		if (!NoTitleDemos)
 		{
-			democount++;
-			mysnprintf (demoname + 4, countof(demoname) - 4, "%d", democount);
-			if (fileSystem.CheckNumForName (demoname) < 0)
+			FString fileName = DemoName;
+			fileName.AppendFormat("%d", ++curDemo);
+			if (fileSystem.CheckNumForName(fileName.GetChars()) < 0)
 			{
-				demosequence = 0;
-				democount = 0;
-				// falls through to case 0 below
+				CurDemoSequence = 0;
+				curDemo = 0;
+				// Falls through to case 0 below.
 			}
 			else
 			{
-				singledemo = false;
-				G_DeferedPlayDemo (demoname);
-				demosequence = 2;
+				SingleDemoPlayback = false;
+				G_DeferDemo(fileName);
+				CurDemoSequence = 2;
 				break;
 			}
 		}
 		[[fallthrough]];
-
 	default:
 	case 0:
 		gamestate = GS_DEMOSCREEN;
-		pagename = gameinfo.TitlePage;
+		pageName = gameinfo.TitlePage;
 		pagetic = (int)(gameinfo.titleTime * TICRATE);
-		if (!playedtitlemusic) S_ChangeMusic (gameinfo.titleMusic.GetChars(), gameinfo.titleOrder, false);
+		if (!playedtitlemusic)
+			S_ChangeMusic(gameinfo.titleMusic.GetChars(), gameinfo.titleOrder, false);
 		playedtitlemusic = true;
-		demosequence = 3;
-		pagecount = 0;
-		C_HideConsole ();
+		CurDemoSequence = 3;
+		curPage = 0;
+		C_HideConsole();
 		break;
 
 	case 2:
 		pagetic = (int)(gameinfo.pageTime * TICRATE);
 		gamestate = GS_DEMOSCREEN;
-		if (gameinfo.creditPages.Size() > 0)
+		if (gameinfo.creditPages.Size())
 		{
-			pagename = gameinfo.creditPages[pagecount].GetChars();
-			pagecount = (pagecount+1) % gameinfo.creditPages.Size();
+			pageName = gameinfo.creditPages[curPage].GetChars();
+			curPage = (curPage + 1) % gameinfo.creditPages.Size();
 		}
-		demosequence = 1;
+		CurDemoSequence = 1;
 		break;
 	}
 
-
-	if (pagename.IsNotEmpty())
-	{
-		Page = TexMan.CheckForTexture(pagename.GetChars(), ETextureType::MiscPatch);
-	}
+	if (pageName.IsNotEmpty())
+		Page = TexMan.CheckForTexture(pageName.GetChars(), ETextureType::MiscPatch);
 }
 
 //==========================================================================
@@ -1557,7 +1550,7 @@ void D_StartTitle (void)
 {
 	playedtitlemusic = false;
 	gameaction = ga_nothing;
-	demosequence = -1;
+	CurDemoSequence = -1;
 	D_AdvanceDemo ();
 }
 
@@ -1574,8 +1567,8 @@ CCMD (endgame)
 	if (!netgame)
 	{
 		gameaction = ga_fullconsole;
-		demosequence = -1;
-		G_CheckDemoStatus();
+		CurDemoSequence = -1;
+		G_CheckDemoEnd();
 	}
 }
 
@@ -2755,7 +2748,7 @@ bool System_WantNativeMouse()
 
 static bool System_CaptureModeInGame()
 {
-	if (demoplayback || paused) return false;
+	if (DemoPlayback || paused) return false;
 	switch (mouse_capturemode)
 	{
 	default:
@@ -3555,8 +3548,8 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 		v = Args->CheckValue("-playdemo");
 		if (v != NULL)
 		{
-			singledemo = true;				// quit after one demo
-			G_DeferedPlayDemo (v);
+			SingleDemoPlayback = true;				// quit after one demo
+			G_DeferDemo (v);
 		}
 		else
 		{
@@ -3577,7 +3570,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 							NoWipe = TICRATE;
 						}
 						CheckWarpTransMap(startmap, true);
-						if (demorecording)
+						if (RecordingDemo)
 							G_BeginRecording(startmap.GetChars());
 						G_InitNew(startmap.GetChars(), false);
 						if (StoredWarp.IsNotEmpty())
@@ -3602,7 +3595,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 						}
 					}
 				}
-				else if (demorecording)
+				else if (RecordingDemo)
 				{
 					G_BeginRecording(NULL);
 				}
@@ -3863,9 +3856,9 @@ int GameMain()
 
 void D_Cleanup()
 {
-	if (demorecording)
+	if (RecordingDemo)
 	{
-		G_CheckDemoStatus();
+		G_CheckDemoEnd();
 	}
 
 	// Music and sound should be stopped first

@@ -805,6 +805,7 @@ set (PCH_SOURCES
 	d_anonstats.cpp
 	d_net.cpp
 	d_netinfo.cpp
+	d_netpacket.cpp
 	d_protocol.cpp
 	doomstat.cpp
 	g_cvars.cpp

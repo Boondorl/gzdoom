@@ -132,16 +132,16 @@ extern	int				consoleplayer;
 // DEMO playback/recording related stuff.
 // No demo, there is a human player in charge?
 // Disable save/end game?
-extern	bool			usergame;
+extern	bool			PlayerControlledGame;
 
 extern	FString			newdemoname;
 extern	FString			newdemomap;
-extern	bool			demoplayback;
-extern	bool			demorecording;
+extern	bool			DemoPlayback;
+extern	bool			RecordingDemo;
 extern	int				demover;
 
 // Quit after playing a demo from cmdline.
-extern	bool			singledemo; 	
+extern	bool			SingleDemoPlayback; 	
 
 extern	int				SaveVersion;
 

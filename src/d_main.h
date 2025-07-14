@@ -33,7 +33,7 @@
 #include "startupinfo.h"
 #include "c_cvars.h"
 
-extern bool		advancedemo;
+extern bool		AdvanceDemo;
 EXTERN_CVAR(Bool, hud_toggled);
 void D_ToggleHud();
 

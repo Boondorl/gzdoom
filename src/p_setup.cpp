@@ -152,7 +152,7 @@ static void AddToList(uint8_t *hitlist, FTextureID texid, int bitmask)
 
 static void PrecacheLevel(FLevelLocals *Level)
 {
-	if (demoplayback)
+	if (DemoPlayback)
 		return;
 
 	int i;

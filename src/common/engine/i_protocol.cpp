@@ -33,7 +33,6 @@
 */
 
 #include "i_protocol.h"
-#include "engineerrors.h"
 #include "i_net.h"
 
 TMap<uint8_t, std::unique_ptr<NetPacket>(*)()> NetPacketFactory = {};
@@ -78,22 +77,21 @@ bool NetPacket::Write(const TArrayView<uint8_t>& stream, size_t& written)
 	return true;
 }
 
-size_t NetPacket::GetSize()
+bool NetPacket::Skip(const TArrayView<const uint8_t>& stream, size_t& skipped)
 {
-	if (!ShouldWrite())
-		return 0u;
-
-	MeasureStream m = {};
+	skipped = 0u;
+	MeasureStream m = { stream };
 	if (!m.SerializeUInt8(NetCommand))
-		return 0u;
+		return false;
 	if (!m.SerializeUInt8(ArgCount))
-		return 0u;
+		return false;
 
 	size_t parsedArgs = 0u;
 	if (!Serialize(m, parsedArgs) || parsedArgs != ArgCount)
-		return 0u;
+		return false;
 
-	return m.GetTotalBytes();
+	skipped = m.GetReadBytes();
+	return skipped <= stream.Size();
 }
 
 std::unique_ptr<NetPacket> CreatePacket(uint8_t type)
@@ -134,141 +132,9 @@ void WritePacket(NetPacket& packet, TArrayView<uint8_t>& stream)
 
 void SkipPacket(NetPacket& packet, TArrayView<const uint8_t>& stream)
 {
-	const size_t bytes = packet.GetSize();
-	if (bytes > stream.Size())
+	size_t bytes = 0u;
+	if (!packet.Skip(stream, bytes))
 		I_Error("Malformed net command %u", packet.NetCommand);
 
 	stream = { stream.Data() + bytes, stream.Size() - bytes };
 }
-
-// Common packet types for easier defining.
-
-class EmptyPacket : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		return true;
-	}
-};
-class Int8Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	int8_t Value = 0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_INT8(Value);
-		return true;
-	}
-};
-class UInt8Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	uint8_t Value = 0u;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_UINT8(Value);
-		return true;
-	}
-};
-class Int16Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	int16_t Value = 0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_INT16(Value);
-		return true;
-	}
-};
-class UInt16Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	uint16_t Value = 0u;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_UINT16(Value);
-		return true;
-	}
-};
-class Int32Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	int32_t Value = 0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_INT32(Value);
-		return true;
-	}
-};
-class UInt32Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	uint32_t Value = 0u;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_UINT32(Value);
-		return true;
-	}
-};
-class Int64Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	int64_t Value = 0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_INT64(Value);
-		return true;
-	}
-};
-class UInt64Packet : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	uint64_t Value = 0u;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_UINT64(Value);
-		return true;
-	}
-};
-class FloatPacket : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	float Value = 0.0f;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_FLOAT(Value);
-		return true;
-	}
-};
-class DoublePacket : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	double Value = 0.0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_DOUBLE(Value);
-		return true;
-	}
-};
-class StringPacket : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	FString Value = {};
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_STRING(Value);
-		return true;
-	}
-};

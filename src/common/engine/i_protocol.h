@@ -36,6 +36,7 @@
 
 #include "tarray.h"
 #include "zstring.h"
+#include "engineerrors.h"
 
 class ByteWriter
 {
@@ -47,23 +48,29 @@ public:
 	inline bool WouldWritePastEnd(size_t bytes) const { return _curPos + bytes >= _buffer.Size(); }
 	inline size_t GetWrittenBytes() const { return _curPos; }
 
+	void SkipBytes(size_t bytes)
+	{
+		assert(_curPos + bytes < _buffer.Size());
+		_curPos += bytes;
+	}
 	void WriteBytes(const TArrayView<const uint8_t>& bytes)
 	{
-		assert(_curPos + bytes.Size() < _buffer.Size());
 		memcpy(&_buffer[_curPos], bytes.Data(), bytes.Size());
-		_curPos += bytes.Size();
+		SkipBytes(bytes.Size());
 	}
 	template<typename T>
 	void WriteValue(T value)
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
-		WriteBytes({ (uint8_t*)&value, sizeof(T) });
+		*(T*)&buffer[_curPos] = T;
+		SkipBytes(sizeof(T));
 	}
 	template<typename T>
 	void WriteType(const T& value)
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
-		WriteBytes({ (uint8_t*)&value, sizeof(T) });
+		*(T*)&buffer[_curPos] = T;
+		SkipBytes(sizeof(T));
 	}
 };
 
@@ -77,11 +84,15 @@ public:
 	inline bool WouldReadPastEnd(size_t bytes) const { return _curPos + bytes >= _buffer.Size(); }
 	inline size_t GetReadBytes() const { return _curPos; }
 
-	TArrayView<const uint8_t> ReadBytes(size_t bytes)
+	void SkipBytes(size_t bytes)
 	{
 		assert(_curPos + bytes < _buffer.Size());
-		TArrayView<const uint8_t> view = { &_buffer[_curPos], bytes };
 		_curPos += bytes;
+	}
+	TArrayView<const uint8_t> ReadBytes(size_t bytes)
+	{
+		TArrayView<const uint8_t> view = { &_buffer[_curPos], bytes };
+		SkipBytes(bytes);
 		return view;
 	}
 	template<typename T>
@@ -164,6 +175,10 @@ public:
 			return false;
 		_writer.WriteValue<uint64_t>(value);
 		return true;
+	}
+	bool SerializeString(const FString& str)
+	{
+		return SerializeArray<char>({ str.GetChars(), str.Len() }, 0u, false);
 	}
 	template<typename T>
 	bool SerializeType(const T& value)
@@ -257,6 +272,14 @@ public:
 		value = _reader.ReadValue<uint64_t>();
 		return true;
 	}
+	bool SerializeString(FString& str)
+	{
+		TArrayView<const char> data;
+		if (!SerializeArray<char>(data, 0u, false))
+			return false;
+		str = FString(data.Data(), data.Size());
+		return true;
+	}
 	template<typename T>
 	bool SerializeType(T& value)
 	{
@@ -284,69 +307,78 @@ public:
 // Useful for getting the size of a packet.
 class MeasureStream
 {
-	size_t _totalBytes = 0;
+	ByteReader _reader;
 public:
 	enum { IsWriting = 0 };
 	enum { IsReading = 0 };
 
-	inline size_t GetTotalBytes() const { return _totalBytes; }
+	MeasureStream(const TArrayView<const uint8_t>& stream) : _reader(stream) {}
+
+	inline size_t GetReadBytes() const { return _reader.GetReadBytes(); }
 
 	bool SerializeInt8(int8_t value)
 	{
-		_totalBytes += 1u;
+		_reader.SkipBytes(sizeof(int8_t));
 		return true;
 	}
 	bool SerializeUInt8(uint8_t value)
 	{
-		_totalBytes += 1u;
+		_reader.SkipBytes(sizeof(uint8_t));
 		return true;
 	}
 	bool SerializeInt16(int16_t value)
 	{
-		_totalBytes += 2u;
+		_reader.SkipBytes(sizeof(int16_t));
 		return true;
 	}
 	bool SerializeUInt16(uint16_t value)
 	{
-		_totalBytes += 2u;
+		_reader.SkipBytes(sizeof(uint16_t));
 		return true;
 	}
 	bool SerializeInt32(int32_t value)
 	{
-		_totalBytes += 4u;
+		_reader.SkipBytes(sizeof(int32_t));
 		return true;
 	}
 	bool SerializeUInt32(uint32_t value)
 	{
-		_totalBytes += 4u;
+		_reader.SkipBytes(sizeof(uint32_t));
 		return true;
 	}
 	bool SerializeInt64(int64_t value)
 	{
-		_totalBytes += 8u;
+		_reader.SkipBytes(sizeof(int64_t));
 		return true;
 	}
 	bool SerializeUInt64(uint64_t value)
 	{
-		_totalBytes += 8u;
+		_reader.SkipBytes(sizeof(uint64_t));
 		return true;
+	}
+	bool SerializeString(const FString& str)
+	{
+		const TArrayView<const char> data = { nullptr, 0u };
+		return SerializeArray<char>(data, 0u, false);
 	}
 	template<typename T>
 	bool SerializeType(const T& value)
 	{
-		_totalBytes += sizeof(T);
+		_reader.SkipBytes(sizeof(T));
 		return true;
 	}
 	template<typename T>
 	bool SerializeArray(const TArrayView<const T>& values, size_t expected, bool exact)
 	{
-		_totalBytes += sizeof(uint16_t) + values.Size() * sizeof(T);
+		_reader.SkipBytes(_reader.ReadValue<uint16_t>() * sizeof(T));
 		return true;
 	}
 };
 
 #define REGISTER_NETPACKET(cls)																						\
-		NetPacketFactory.Insert(cls::Type, [](){ return std::unique_ptr<NetPacket>(new cls(cls::GetReader())); })
+		if (NetPacketFactory.CheckKey(cls::Type) != nullptr)														\
+			I_Error("Attempted to override existing net command %u", cls::Type);									\
+		NetPacketFactory.Insert(cls::Type, [](){ return std::unique_ptr<NetPacket>(new cls(cls::GetDefault())); })
 
 #define DEFINE_NETPACKET_BASE(parentCls)		\
 		protected:								\
@@ -357,10 +389,28 @@ public:
 #define DEFINE_NETPACKET(cls, parentCls, id, argCount)		\
 		public:												\
 			static constexpr uint8_t Type = id;				\
-			static cls GetReader() { return {}; }			\
+			static cls GetDefault() { return {}; }			\
+			bool Execute(int player) override;				\
 		private:											\
 			using Super = parentCls;						\
 			cls() : parentCls(id, argCount) {}
+
+// Easy setup macros for base packet types.
+#define DEFINE_NETPACKET_EMPTY(cls, id)		class cls : public EmptyPacket { DEFINE_NETPACKET(cls, EmptyPacket, id, 0) }
+#define DEFINE_NETPACKET_INT8(cls, id)		class cls : public Int8Packet { DEFINE_NETPACKET(cls, Int8Packet, id, 1) public: cls(int8_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT8(cls, id)		class cls : public UInt8Packet { DEFINE_NETPACKET(cls, UInt8Packet, id, 1) public: cls(uint8_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT16(cls, id)		class cls : public Int16Packet { DEFINE_NETPACKET(cls, Int16Packet, id, 1) public: cls(int16_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT16(cls, id)	class cls : public UInt16Packet { DEFINE_NETPACKET(cls, UInt16Packet, id, 1) public: cls(uint16_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT32(cls, id)		class cls : public Int32Packet { DEFINE_NETPACKET(cls, Int32Packet, id, 1) public: cls(int32_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT32(cls, id)	class cls : public UInt32Packet { DEFINE_NETPACKET(cls, UInt32Packet, id, 1) public: cls(uint32_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT64(cls, id)		class cls : public Int64Packet { DEFINE_NETPACKET(cls, Int64Packet, id, 1) public: cls(int64_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT64(cls, id)	class cls : public UInt64Packet { DEFINE_NETPACKET(cls, UInt64Packet, id, 1) public: cls(uint64_t value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_FLOAT(cls, id)		class cls : public FloatPacket { DEFINE_NETPACKET(cls, FloatPacket, id, 1) public: cls(float value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_DOUBLE(cls, id)	class cls : public DoublePacket { DEFINE_NETPACKET(cls, DoublePacket, id, 1) public: cls(double value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_STRING(cls, id)	class cls : public StringPacket { DEFINE_NETPACKET(cls, StringPacket, id, 1) public: cls(const FString& value) : cls() { Value = value; } }
+
+#define NETPACKET_EXECUTE(cls)			\
+		bool cls::Execute(int player)
 
 #define DEFINE_NETPACKET_SERIALIZER()																										\
 		protected:																															\
@@ -395,6 +445,8 @@ public:
 			if (Stream::IsReading)					\
 				value = u8Value;					\
 		} while (0)
+
+#define SERIALIZE_BOOL(value)	SERIALIZE_UINT8(value)
 
 #define SERIALIZE_INT16(value)						\
 		do											\
@@ -577,8 +629,8 @@ class NetPacket
 	}
 public:
 	static constexpr uint8_t Type = 0u;
-	const uint8_t ArgCount = 0u;
 	const uint8_t NetCommand = 0u;
+	const uint8_t ArgCount = 0u;
 
 	NetPacket(uint8_t netCommand, uint8_t argCount) : NetCommand(netCommand), ArgCount(argCount) {}
 	virtual ~NetPacket() = default;
@@ -586,27 +638,146 @@ public:
 	{
 		return true;
 	}
-	virtual bool Execute(int pNum)
+	virtual bool Execute(int player)
 	{
 		return false;
 	}
 	bool Read(const TArrayView<const uint8_t>& stream, size_t& read);
 	bool Write(const TArrayView<uint8_t>& stream, size_t& written);
-	size_t GetSize();
+	bool Skip(const TArrayView<const uint8_t>& stream, size_t& skipped);
 };
 
-class EmptyPacket;
-class Int8Packet;
-class UInt8Packet;
-class Int16Packet;
-class UInt16Packet;
-class Int32Packet;
-class UInt32Packet;
-class Int64Packet;
-class UInt64Packet;
-class FloatPacket;
-class DoublePacket;
-class StringPacket;
+// Common packet types for easier defining.
+
+class EmptyPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		return true;
+	}
+};
+class Int8Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int8_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_INT8(Value);
+		return true;
+	}
+};
+class UInt8Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint8_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_UINT8(Value);
+		return true;
+	}
+};
+class Int16Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int16_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_INT16(Value);
+		return true;
+	}
+};
+class UInt16Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint16_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_UINT16(Value);
+		return true;
+	}
+};
+class Int32Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int32_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_INT32(Value);
+		return true;
+	}
+};
+class UInt32Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint32_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_UINT32(Value);
+		return true;
+	}
+};
+class Int64Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	int64_t Value = 0;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_INT64(Value);
+		return true;
+	}
+};
+class UInt64Packet : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	uint64_t Value = 0u;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_UINT64(Value);
+		return true;
+	}
+};
+class FloatPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	float Value = 0.0f;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_FLOAT(Value);
+		return true;
+	}
+};
+class DoublePacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	double Value = 0.0;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_DOUBLE(Value);
+		return true;
+	}
+};
+class StringPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	FString Value = {};
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_STRING(Value);
+		return true;
+	}
+};
 
 extern TMap<uint8_t, std::unique_ptr<NetPacket>(*)()> NetPacketFactory;
 

@@ -458,7 +458,7 @@ bool P_NoInterpolation(player_t const *player, AActor const *actor)
 		&& !(player->cheats & CF_INTERPVIEW)
 		&& player - players == consoleplayer
 		&& actor == player->mo
-		&& !demoplayback
+		&& !DemoPlayback
 		&& !(player->cheats & (CF_TOTALLYFROZEN | CF_FROZEN))
 		&& player->playerstate == PST_LIVE
 		&& player->mo->reactiontime == 0
@@ -1216,7 +1216,7 @@ CUSTOM_CVAR(Float, maxviewpitch, 90.f, CVAR_ARCHIVE | CVAR_SERVERINFO)
 {
 	if (self>90.f) self = 90.f;
 	else if (self<-90.f) self = -90.f;
-	if (usergame)
+	if (PlayerControlledGame)
 	{
 		// [SP] Update pitch limits to the netgame/gamesim.
 		players[consoleplayer].SendPitchLimits();

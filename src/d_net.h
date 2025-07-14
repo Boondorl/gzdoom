@@ -198,6 +198,7 @@ EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
 void Net_SkipCommands(TArrayView<const uint8_t>& stream);
 void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream);
 
+void Net_PlayerReadiedUp(int player);
 bool Net_CheckCutsceneReady();
 void Net_AdvanceCutscene();
 void Net_ResetCommands(bool midTic);
