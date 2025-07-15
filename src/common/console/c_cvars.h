@@ -269,7 +269,7 @@ private:
 	// These need to go away!
 	friend FString C_GetMassCVarString (uint32_t filter, bool compact);
 	friend void C_SerializeCVars(FSerializer& arc, const char* label, uint32_t filter);
-	friend void C_ReadCVars (TArrayView<uint8_t>& demo_p);
+	friend void C_ReadCVars (const FString& cvars);
 	friend void C_BackupCVars (void);
 	friend FBaseCVar *FindCVar (const char *var_name, FBaseCVar **prev);
 	friend FBaseCVar *FindCVarSub (const char *var_name, int namelen);

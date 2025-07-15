@@ -6011,7 +6011,7 @@ EXTERN_CVAR (Bool, chasedemo)
 EXTERN_CVAR(Bool, sv_singleplayerrespawn)
 EXTERN_CVAR(Float, fov)
 
-extern bool demonew;
+extern bool InitializingDemo;
 
 //==========================================================================
 //
@@ -6397,7 +6397,7 @@ AActor *FLevelLocals::SpawnPlayer (FPlayerStart *mthing, int playernum, int flag
 	}
 
 	// [RH] Allow chasecam for demo watching
-	if ((DemoPlayback || demonew) && chasedemo)
+	if ((DemoPlayback || InitializingDemo) && chasedemo)
 		p->cheats = CF_CHASECAM;
 
 	// setup gun psprite

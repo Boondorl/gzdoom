@@ -808,7 +808,7 @@ FString D_GetUserInfoStrings(int pnum, bool compact)
 	return result;
 }
 
-void D_ReadUserInfoStrings (int pnum, TArrayView<uint8_t>& stream, bool update)
+void D_ReadUserInfoStrings (int pnum, const FString& data, bool update)
 {
 	userinfo_t *info = &players[pnum].userinfo;
 	TArray<FName> compact_names(info->CountUsed());

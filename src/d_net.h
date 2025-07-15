@@ -142,14 +142,8 @@ struct FClientNetState
 {
 	// Networked client data.
 	struct FNetTic {
-		TArray<uint8_t>	Data;
-		usercmd_t		Command;
-		void AddData(const TArrayView<const uint8_t>& data)
-		{
-			Data.Clear();
-			for (size_t i = 0u; i < data.Size(); ++i)
-				Data.Push(data[i]);
-		}
+		DynamicWriteStream	Data;
+		usercmd_t			Command;
 	} Tics[BACKUPTICS] = {};
 
 	// Local information about client.

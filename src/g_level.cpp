@@ -388,8 +388,8 @@ UNSAFE_CCMD(recordmap)
 				}
 				G_DeferedInitNew(mapname);
 				gameaction = ga_recordgame;
-				newdemoname = argv[1];
-				newdemomap = mapname;
+				NewDemoFileName = argv[1];
+				NewDemoMap = mapname;
 			}
 		}
 		catch (CRecoverableError &error)
@@ -479,8 +479,9 @@ void G_NewInit ()
 	netgame = false;
 	multiplayer = multiplayernext;
 	multiplayernext = false;
-	if (DemoPlayback)
+	if (IsPlayingDemo())
 	{
+		// Boon TODO: Uhhhh, this doesn't look correct at all? What's the idea here.
 		C_RestoreCVars ();
 		DemoPlayback = false;
 		D_SetupUserInfo ();
@@ -610,7 +611,7 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 
 	if (!savegamerestore)
 	{
-		if (!netgame && !RecordingDemo && !DemoPlayback)
+		if (!netgame && !IsRecordingDemo() && !IsPlayingDemo())
 		{
 			// [RH] Change the random seed for each new single player game
 			// [ED850] The demo already sets the RNG.
@@ -640,7 +641,7 @@ void G_InitNew (const char *mapname, bool bTitleLevel)
 
 	PlayerControlledGame = !bTitleLevel;		// will be set false if a demo
 	paused = 0;
-	DemoPlayback = false;
+	DemoPlayback = false; // ???????
 	automapactive = false;
 	viewactive = true;
 
@@ -1327,6 +1328,7 @@ public:
 
 IMPLEMENT_CLASS(DAutosaver, false, false)
 
+// Boon TODO: Axe this
 void DAutosaver::Tick ()
 {
 	Net_WriteInt8 (DEM_CHECKAUTOSAVE);
@@ -1370,7 +1372,7 @@ void G_DoLoadLevel(const FString &nextmapname, int position, bool autosave, bool
 	LocalViewPitch = 0;
 	paused = 0;
 
-	if (DemoPlayback || oldgs == GS_STARTUP || oldgs == GS_TITLELEVEL)
+	if (IsPlayingDemo() || oldgs == GS_STARTUP || oldgs == GS_TITLELEVEL)
 		C_HideConsole();
 
 	C_FlushDisplay();

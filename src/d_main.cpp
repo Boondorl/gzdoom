@@ -201,7 +201,6 @@ EXTERN_CVAR(Bool, ticker)
 EXTERN_CVAR(Bool, vid_fps)
 
 extern bool setmodeneeded;
-extern bool RecordingDemo;
 bool NoTitleDemos;	// [RH] if true, then skip any demos in the loop
 extern bool insave;
 extern TDeletingArray<FLightDefaults *> LightDefaults;
@@ -431,6 +430,7 @@ CUSTOM_CVAR (Int, dmflags, 0, CVAR_SERVERINFO | CVAR_NOINITCALL)
 
 	if (self & DF_NO_FREELOOK)
 	{
+		// Boon TODO: Just write the center button across all players...
 		Net_WriteInt8 (DEM_CENTERVIEW);
 	}
 	// If nofov is set, force everybody to the arbitrator's FOV.
@@ -523,7 +523,7 @@ CUSTOM_CVAR (Int, dmflags2, 0, CVAR_SERVERINFO | CVAR_NOINITCALL)
 				S_UpdateSounds (p->camera);
 				StatusBar->AttachToPlayer (p);
 
-				if (DemoPlayback || multiplayer)
+				if (IsPlayingDemo() || multiplayer)
 					StatusBar->ShowPlayerName ();
 			}
 		}
@@ -1173,8 +1173,7 @@ void D_ErrorCleanup ()
 	savegamerestore = false;
 	primaryLevel->BotInfo.RemoveAllBots (primaryLevel, true);
 	D_QuitNetGame ();
-	if (RecordingDemo || DemoPlayback)
-		G_CheckDemoEnd ();
+	G_EndDemo ();
 	Net_ClearBuffers ();
 	G_NewInit ();
 	M_ClearMenus ();
@@ -1320,19 +1319,19 @@ void D_AdvanceDemo (void)
 //
 //==========================================================================
 
-void D_DoStrifeAdvanceDemo ()
+void D_DoStrifeAdvanceDemo()
 {
-	static const char *const fullVoices[6] =
+	constexpr const char* const fullVoices[] =
 	{
 		"svox/pro1", "svox/pro2", "svox/pro3", "svox/pro4", "svox/pro5", "svox/pro6"
 	};
-	static const char *const teaserVoices[6] =
+	constexpr const char* const teaserVoices[] =
 	{
 		"svox/voc91", "svox/voc92", "svox/voc93", "svox/voc94", "svox/voc95", "svox/voc96"
 	};
-	const char *const *voices = gameinfo.flags & GI_SHAREWARE ? teaserVoices : fullVoices;
-	const char *pagename = nullptr;
-	const char *subtitle = nullptr;
+	const auto voices = (gameinfo.flags & GI_SHAREWARE) ? teaserVoices : fullVoices;
+	FString pageName = {};
+	FString subtitle = {};
 
 	gamestate = GS_DEMOSCREEN;
 	PageBlank = false;
@@ -1342,87 +1341,83 @@ void D_DoStrifeAdvanceDemo ()
 	default:
 	case 0:
 		pagetic = 6 * TICRATE;
-		pagename = "TITLEPIC";
-		if (fileSystem.CheckNumForName ("d_logo", ns_music) < 0)
-		{ // strife0.wad does not have d_logo
-			S_StartMusic ("");
-		}
+		pageName = "TITLEPIC";
+		if (fileSystem.CheckNumForName("d_logo", ns_music) < 0)
+			S_StartMusic(""); // strife0.wad does not have d_logo
 		else
-		{
-			S_StartMusic ("d_logo");
-		}
-		C_HideConsole ();
+			S_StartMusic("d_logo");
+		C_HideConsole();
 		break;
 
 	case 1:
 		// [RH] Strife fades to black and then to the Rogue logo, but
 		// I think it looks better if it doesn't fade.
 		pagetic = 10 * TICRATE/35;
-		pagename = "";	// PANEL0, but strife0.wad doesn't have it, so don't use it.
+		pageName = "";	// PANEL0, but strife0.wad doesn't have it, so don't use it.
 		PageBlank = true;
-		S_Sound (CHAN_VOICE, CHANF_UI, "bishop/active", 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, "bishop/active", 1, ATTN_NORM);
 		break;
 
 	case 2:
 		pagetic = 4 * TICRATE;
-		pagename = "RGELOGO";
+		pageName = "RGELOGO";
 		break;
 
 	case 3:
 		pagetic = 7 * TICRATE;
-		pagename = "PANEL1";
+		pageName = "PANEL1";
 		subtitle = "$TXT_SUB_INTRO1";
-		S_Sound (CHAN_VOICE, CHANF_UI, voices[0], 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, voices[0], 1, ATTN_NORM);
 		// The new Strife teaser has D_FMINTR.
 		// The full retail Strife has D_INTRO.
 		// And the old Strife teaser has both. (I do not know which one it actually uses, nor do I care.)
-		S_StartMusic (gameinfo.flags & GI_TEASER2 ? "d_fmintr" : "d_intro");
+		S_StartMusic((gameinfo.flags & GI_TEASER2) ? "d_fmintr" : "d_intro");
 		break;
 
 	case 4:
 		pagetic = 9 * TICRATE;
-		pagename = "PANEL2";
+		pageName = "PANEL2";
 		subtitle = "$TXT_SUB_INTRO2";
-		S_Sound (CHAN_VOICE, CHANF_UI, voices[1], 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, voices[1], 1, ATTN_NORM);
 		break;
 
 	case 5:
 		pagetic = 12 * TICRATE;
-		pagename = "PANEL3";
+		pageName = "PANEL3";
 		subtitle = "$TXT_SUB_INTRO3";
-		S_Sound (CHAN_VOICE, CHANF_UI, voices[2], 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, voices[2], 1, ATTN_NORM);
 		break;
 
 	case 6:
 		pagetic = 11 * TICRATE;
-		pagename = "PANEL4";
+		pageName = "PANEL4";
 		subtitle = "$TXT_SUB_INTRO4";
-		S_Sound (CHAN_VOICE, CHANF_UI, voices[3], 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, voices[3], 1, ATTN_NORM);
 		break;
 
 	case 7:
 		pagetic = 10 * TICRATE;
-		pagename = "PANEL5";
+		pageName = "PANEL5";
 		subtitle = "$TXT_SUB_INTRO5";
-		S_Sound (CHAN_VOICE, CHANF_UI, voices[4], 1, ATTN_NORM);
+		S_Sound(CHAN_VOICE, CHANF_UI, voices[4], 1, ATTN_NORM);
 		break;
 
 	case 8:
 		pagetic = 16 * TICRATE;
-		pagename = "PANEL6";
+		pageName = "PANEL6";
 		subtitle = "$TXT_SUB_INTRO6";
 		S_Sound (CHAN_VOICE, CHANF_UI, voices[5], 1, ATTN_NORM);
 		break;
 
 	case 9:
 		pagetic = 6 * TICRATE;
-		pagename = "vellogo";
+		pageName = "vellogo";
 		wipegamestate = GS_FORCEWIPEFADE;
 		break;
 
 	case 10:
 		pagetic = 12 * TICRATE;
-		pagename = "CREDIT";
+		pageName = "CREDIT";
 		wipegamestate = GS_FORCEWIPEFADE;
 		break;
 	}
@@ -1431,10 +1426,10 @@ void D_DoStrifeAdvanceDemo ()
 	if (CurDemoSequence == 9 && !(gameinfo.flags & GI_SHAREWARE))
 		CurDemoSequence = 10;
 
-	if (pagename != nullptr)
+	if (pageName.IsNotEmpty())
 	{
-		Page = TexMan.CheckForTexture(pagename, ETextureType::MiscPatch);
-		Subtitle = subtitle;
+		Page = TexMan.CheckForTexture(pageName.GetChars(), ETextureType::MiscPatch);
+		Subtitle = subtitle.GetChars();
 	}
 	else
 	{
@@ -1551,7 +1546,7 @@ void D_StartTitle (void)
 	playedtitlemusic = false;
 	gameaction = ga_nothing;
 	CurDemoSequence = -1;
-	D_AdvanceDemo ();
+	D_AdvanceDemo();
 }
 
 //==========================================================================
@@ -1568,7 +1563,7 @@ CCMD (endgame)
 	{
 		gameaction = ga_fullconsole;
 		CurDemoSequence = -1;
-		G_CheckDemoEnd();
+		G_EndDemo();
 	}
 }
 
@@ -2670,7 +2665,7 @@ CUSTOM_CVAR(Int, mouse_capturemode, 1, CVAR_GLOBALCONFIG | CVAR_ARCHIVE)
 	}
 }
 
-
+// Boon TODO: What in the goddam?
 void Mlook_ReleaseHandler()
 {
 	if (lookspring)
@@ -2748,7 +2743,7 @@ bool System_WantNativeMouse()
 
 static bool System_CaptureModeInGame()
 {
-	if (DemoPlayback || paused) return false;
+	if (IsPlayingDemo() || paused) return false;
 	switch (mouse_capturemode)
 	{
 	default:
@@ -3570,7 +3565,7 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 							NoWipe = TICRATE;
 						}
 						CheckWarpTransMap(startmap, true);
-						if (RecordingDemo)
+						if (IsRecordingDemo())
 							G_BeginRecording(startmap.GetChars());
 						G_InitNew(startmap.GetChars(), false);
 						if (StoredWarp.IsNotEmpty())
@@ -3595,9 +3590,9 @@ static int D_InitGame(const FIWADInfo* iwad_info, std::vector<std::string>& allw
 						}
 					}
 				}
-				else if (RecordingDemo)
+				else if (IsRecordingDemo())
 				{
-					G_BeginRecording(NULL);
+					G_BeginRecording("");
 				}
 			}
 		}
@@ -3856,9 +3851,9 @@ int GameMain()
 
 void D_Cleanup()
 {
-	if (RecordingDemo)
+	if (IsRecordingDemo())
 	{
-		G_CheckDemoEnd();
+		G_EndDemo();
 	}
 
 	// Music and sound should be stopped first

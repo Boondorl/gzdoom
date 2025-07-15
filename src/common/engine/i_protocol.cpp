@@ -90,7 +90,7 @@ bool NetPacket::Skip(const TArrayView<const uint8_t>& stream, size_t& skipped)
 	if (!Serialize(m, parsedArgs) || parsedArgs != ArgCount)
 		return false;
 
-	skipped = m.GetReadBytes();
+	skipped = m.GetSkippedBytes();
 	return skipped <= stream.Size();
 }
 

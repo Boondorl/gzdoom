@@ -99,14 +99,14 @@ static FRandom pr_pspawn ("PlayerSpawn");
 extern int startpos, laststartpos;
 
 bool WriteZip(const char* filename, const FileSys::FCompressedBuffer* content, size_t contentcount);
-bool	G_CheckDemoEnd();
+void	G_EndDemo();
 void	G_ReadDemoCommand(usercmd_t& cmd, int player);
 void	G_WriteDemoCommand(usercmd_t& cmd, int player, int tic);
 void	G_PlayerReborn (int player);
 
 void	G_DoNewGame (void);
 void	G_DoLoadGame (void);
-void	G_DoPlayDemo (void);
+void	G_DoPlayDemo();
 void	G_DoCompleted (void);
 void	G_DoVictory (void);
 void	G_DoWorldDone (void);
@@ -171,23 +171,18 @@ bool			playeringame[MAXPLAYERS];
 int 			gametic;
 
 CVAR(Bool, demo_compress, true, CVAR_ARCHIVE|CVAR_GLOBALCONFIG);
-FString			newdemoname;
-FString			newdemomap;
-FString			DemoFileName;
-bool 			RecordingDemo;
-bool 			DemoPlayback;
-bool			demonew;				// [RH] Only used around G_InitNew for demos
-int				demover;
-TArray<uint8_t>	DemoBuffer;
-TArrayView<uint8_t>	demo_p;
-uint8_t*			democompspot;
-uint8_t*			demobodyspot;
-size_t			maxdemosize;
-uint8_t*			zdemformend;			// end of FORM ZDEM chunk
-uint8_t*			zdembodyend;			// end of ZDEM BODY chunk
-bool 			SingleDemoPlayback; 			// quit after playing a demo from cmdline 
- 
-bool 			precache = true;		// if true, load all graphics at start 
+FString			NewDemoFileName = {}; // If recording was started manually after game launch, use these.
+FString			NewDemoMap = {};
+FString			DemoFileName = {};		// Name of the file to write the demo to.
+EDemoState		DemoState = DEMO_NONE;			// Current status of demo playback/recording.
+bool 			SingleDemoPlayback = false;	// Playing back only one demo (quit after it's done).
+bool			InitializingDemo = false;				// [RH] Only used around G_InitNew for demos
+StaticReadBuffer	DemoPlaybackBuffer = {};	// Events and user commands for playback.
+DynamicWriteStream	DemoBuffer = {};			// Final data to write out to the file.
+DynamicWriteStream	DemoTempBuffer = {};		// Store demo data here until we can finalize it and write it out as a chunk.
+DynamicWriteStream	DemoBody = {};				// Store the events and user data here so it can be measured after the recording is done.
+bool DemoPlayback = false; // Deprecated, only here for ZScript. Check with IsPlayingDemo() instead.
+
  
  
 #define MAXPLMOVE				(forwardmove[1]) 
@@ -333,6 +328,7 @@ CCMD (slot)
 	}
 }
 
+// Boon TODO: Put this on the player.
 CCMD (centerview)
 {
 	if ((players[consoleplayer].cheats & CF_TOTALLYFROZEN))
@@ -340,11 +336,13 @@ CCMD (centerview)
 	Net_WriteInt8 (DEM_CENTERVIEW);
 }
 
+// Boon TODO: Toggle crouch logic needs to be moved to the player so it can be predicted correctly.
 CCMD(crouch)
 {
 	Net_WriteInt8(DEM_CROUCH);
 }
 
+// Boon TODO: Put this on the player.
 CCMD (land)
 {
 	SendLand = true;
@@ -369,6 +367,7 @@ CCMD (pause)
 	sendpause = true;
 }
 
+// Boon TODO: Put this on the player.
 CCMD (turn180)
 {
 	sendturn180 = true;
@@ -555,6 +554,16 @@ CCMD (select)
 		}
 	}
 	user->player->inventorytics = 5*TICRATE;
+}
+
+bool IsRecordingDemo()
+{
+	return DemoState == DEMO_RECORDING;
+}
+
+bool IsPlayingDemo()
+{
+	return DemoState == DEMO_PLAYING;
 }
 
 static inline int joyint(double val)
@@ -782,7 +791,7 @@ void G_BuildTiccmd (usercmd_t *cmd)
 	if (sendturn180)
 	{
 		sendturn180 = false;
-		cmd->buttons |= BT_TURN180;
+		cmd->buttons |= BT_TURN180; // Doesn't this desync the game?
 	}
 	if (sendpause)
 	{
@@ -920,7 +929,7 @@ static void ChangeSpy (int changespy)
 	{
 		// When watching demos, you will just have to wait until your player
 		// has done this for you, since it could desync otherwise.
-		if (!DemoPlayback)
+		if (!IsPlayingDemo())
 		{
 			Net_WriteInt8(DEM_REVERTCAMERA);
 		}
@@ -932,7 +941,7 @@ static void ChangeSpy (int changespy)
 		return;
 
 	// Otherwise, cycle to the next player.
-	bool checkTeam = !DemoPlayback && deathmatch;
+	bool checkTeam = deathmatch && !IsPlayingDemo();
 	int pnum = consoleplayer;
 	if (changespy != SPY_CANCEL) 
 	{
@@ -958,7 +967,7 @@ static void ChangeSpy (int changespy)
 	players[consoleplayer].camera = players[pnum].mo;
 	S_UpdateSounds(players[consoleplayer].camera);
 	StatusBar->AttachToPlayer (&players[pnum]);
-	if (DemoPlayback || multiplayer)
+	if (IsPlayingDemo() || multiplayer)
 	{
 		StatusBar->ShowPlayerName ();
 	}
@@ -1000,7 +1009,7 @@ bool G_Responder (event_t *ev)
 	// any other key pops up menu if in demos
 	// [RH] But only if the key isn't bound to a "special" command
 	if (gameaction == ga_nothing && 
-		(DemoPlayback || gamestate == GS_DEMOSCREEN || gamestate == GS_TITLELEVEL))
+		(IsPlayingDemo() || gamestate == GS_DEMOSCREEN || gamestate == GS_TITLELEVEL))
 	{
 		if (chatmodeon) chatmodeon = 0;
 
@@ -1097,8 +1106,8 @@ static void G_FullConsole()
 
 	if (hud_toggled)
 		D_ToggleHud();
-	if (DemoPlayback)
-		G_CheckDemoEnd();
+	if (IsPlayingDemo())
+		G_EndDemo();
 	D_QuitNetGame();
 	AdvanceDemo = false;
 	C_FullConsole();
@@ -1140,7 +1149,7 @@ void D_RunCutscene()
 // use the net message from the cutscene finishing to know when to go.
 static void D_CheckCutsceneAdvance()
 {
-	if (netgame && !DemoPlayback && Net_CheckCutsceneReady())
+	if (netgame && DemoState != DEMO_PLAYING && Net_CheckCutsceneReady())
 		Net_AdvanceCutscene();
 }
 
@@ -1177,9 +1186,9 @@ void G_Ticker ()
 		switch (gameaction)
 		{
 		case ga_recordgame:
-			G_CheckDemoEnd();
-			G_RecordDemo(newdemoname.GetChars());
-			G_BeginRecording(newdemomap.GetChars());
+			G_EndDemo();
+			G_RecordDemo(NewDemoFileName.GetChars());
+			G_BeginRecording(NewDemoMap.GetChars());
 			[[fallthrough]];
 		case ga_newgame2:	// Silence GCC (see above)
 		case ga_newgame:
@@ -1257,11 +1266,11 @@ void G_Ticker ()
 		usercmd_t& nextCmd = ClientStates[client].Tics[curTic % BACKUPTICS].Command;
 
 		RunPlayerEventData(client, curTic);
-		if (RecordingDemo)
+		if (DemoState == DEMO_RECORDING)
 			G_WriteDemoCommand(nextCmd, client, curTic);
 
 		players[client].oldbuttons = cmd.buttons;
-		if (DemoPlayback)
+		if (DemoState == DEMO_PLAYING)
 			G_ReadDemoCommand(cmd, client);
 		else
 			memcpy(&cmd, &nextCmd, sizeof(usercmd_t));
@@ -1721,10 +1730,10 @@ void FLevelLocals::DoReborn (int playernum, bool force)
 		}
 		else
 		{ // Reload the level from scratch
-			bool indemo = DemoPlayback;
+			EDemoState indemo = DemoState;
 			BackupSaveName = "";
 			G_InitNew (MapName.GetChars(), false);
-			DemoPlayback = indemo;
+			DemoState = indemo;
 		}
 	}
 	else
@@ -1974,7 +1983,7 @@ void G_DoLoadGame ()
 
 	if (gameaction != ga_autoloadgame)
 	{
-		DemoPlayback = false;
+		DemoState = DEMO_NONE;
 	}
 	hidecon = gameaction == ga_loadgamehidecon;
 	gameaction = ga_nothing;
@@ -2112,10 +2121,10 @@ void G_DoLoadGame ()
 	G_ReadVisited(arc);
 
 	// load a base level
-	bool demoplaybacksave = DemoPlayback;
+	EDemoState demoplaybacksave = DemoState;
 	G_InitNew(map.GetChars(), false);
 	FinishLoadingCVars();
-	DemoPlayback = demoplaybacksave;
+	DemoState = demoplaybacksave;
 	savegamerestore = false;
 
 	STAT_Serialize(arc);
@@ -2333,9 +2342,9 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 		return;
 	}
 
-	if (DemoPlayback)
+	if (DemoState == DEMO_RECORDING)
 	{
-		filename = G_BuildSaveName ("demosave");
+		filename = G_BuildSaveName("demosave");
 	}
 
 	if (cl_waitforsave)
@@ -2484,24 +2493,13 @@ void G_DoSaveGame (bool okForQuicksave, bool forceQuicksave, FString filename, c
 
 void G_ReadDemoCommand(usercmd_t& cmd, int player)
 {
-	EDemoCommand type = DEM_INVALID;
-	// Boon TODO: This needs an index to keep track of our current reading position since all of the data
-	// will be loaded in when playing back. This is what demo_p was trying to do.
-	TArrayView<const uint8_t> stream = { DemoBuffer.Data(), DemoBuffer.Size() };
-	while (type != DEM_USERCMD && type != DEM_EMPTYUSERCMD)
+	uint8_t type = DEM_INVALID;
+	while ((type = DemoPlaybackBuffer.ReadValue<uint8_t>()) != DEM_USERCMD && type != DEM_EMPTYUSERCMD)
 	{
-		if (!RecordingDemo && stream.Data() >= zdembodyend)
-		{
-			// Nothing left in the BODY chunk, so end playback.
-			G_CheckDemoEnd();
-			break;
-		}
-
-		type = GetPacketType(stream);
 		switch (type)
 		{
 		case DEM_STOP:
-			G_CheckDemoEnd();
+			G_EndDemo();
 			break;
 
 		case DEM_USERCMD:
@@ -2539,7 +2537,7 @@ void G_WriteDemoCommand(usercmd_t& cmd, int player, int tic)
 	if (StopRecordingDemo)
 	{
 		// Use "stop" console command to end demo recording.
-		G_CheckDemoEnd();
+		G_EndDemo();
 		if (!netgame)
 			gameaction = ga_fullconsole;
 		return;
@@ -2549,19 +2547,14 @@ void G_WriteDemoCommand(usercmd_t& cmd, int player, int tic)
 	auto& events = ClientStates[player].Tics[tic % BACKUPTICS].Data;
 	if (events.Size() && !(gametic % TicDup))
 	{
-		DemoBuffer.Append(events);
+		DemoBody.WriteBytes(events.GetView());
 		events.Clear();
 	}
 
 	// [RH] Now write out a "normal" ticcmd.
-	// Let's not write directly into a TArray buffer, please.
-	uint8_t cmdBuffer[32] = {};
-	TArrayView<uint8_t> data = { cmdBuffer, std::size(cmdBuffer) };
-	auto stream = data;
-	WriteUserCommand(cmd, &players[player].cmd, stream);
-	const size_t written = data.Size() - stream.Size();
-	for (size_t i = 0u; i < written; ++i)
-		DemoBuffer.Push(data[i]);
+	DynamicWriteStream w;
+	WriteUserCommand(cmd, &players[player].cmd, w);
+	DemoBody.WriteBytes(w.GetView());
 }
 
 
@@ -2569,15 +2562,13 @@ void G_WriteDemoCommand(usercmd_t& cmd, int player, int tic)
 //
 // G_RecordDemo
 //
-void G_RecordDemo (const char* name)
+void G_RecordDemo(const char* fileName)
 {
 	PlayerControlledGame = false;
-	DemoFileName = name;
-	FixPathSeperator (DemoFileName);
-	DefaultExtension (DemoFileName, ".lmp");
-	maxdemosize = 0x20000;
-	DemoBuffer.Resize(maxdemosize);
-	RecordingDemo = true; 
+	DemoFileName = fileName;
+	FixPathSeperator(DemoFileName);
+	DefaultExtension(DemoFileName, ".lmp");
+	DemoState = DEMO_RECORDING;
 }
 
 
@@ -2590,68 +2581,41 @@ void G_BeginRecording(FString map)
 	if (map.IsEmpty())
 		map = primaryLevel->MapName;
 
-	uint8_t buffer[2048] = {};
-	WriteStream w = { { buffer, std::size(buffer) } };
+	DemoTempBuffer.WriteValue<int32_t>(ZDEM_ID);	// Write ZDEM ID		
 
-	w.SerializeInt32(FORM_ID);	// Write FORM ID
-	w.SerializeUInt32(0u);		// Leave space for len
-	w.SerializeInt32(ZDEM_ID);	// Write ZDEM ID		
+	// Write header chunks
+	DynamicWriteStream w = {};
 
-	// Write header chunk
-	// Boon TODO: Should this shit just be entirely rewritten? What is even the point?
-	StartChunk (demo_p);
-	w.SerializeInt32(ZDHD_ID);
-	w.SerializeUInt32(0u);		// Leave space for len
-	w.SerializeInt16(DEMOGAMEVERSION);	// Write ZDoom version
-	w.SerializeInt8(2);	// Write minimum version needed to use this demo.
-	w.SerializeInt8(3);	// (Useful?)				
-
-	w.SerializeString(map);	// Write name of map demo was recorded on.
-	w.SerializeUInt32(rngseed);	// Write RNG seed
-	w.SerializeInt8(consoleplayer);
-	FinishChunk (demo_p);
+	w.WriteValue<int8_t>(DEMO_MAJOR);	// Write minimum version needed to use this demo.
+	w.WriteValue<int8_t>(DEMO_MINOR);
+	w.WriteValue<int8_t>(DEMO_REVISION);
+	w.WriteString(map);
+	w.WriteValue<uint32_t>(rngseed);
+	w.WriteValue<int8_t>(consoleplayer);
+	w.WriteValue<bool>(multiplayer);
+	WriteDemoChunk(ZDHD_ID, w.GetView(), DemoTempBuffer);
 
 	// Write player info chunks
 	for (size_t i = 0u; i < MAXPLAYERS; ++i)
 	{
 		if (playeringame[i])
 		{
-			StartChunk(UINF_ID, demo_p);
-			WriteInt8((uint8_t)i, demo_p);
-			auto str = D_GetUserInfoStrings(i);
-			WriteFString(str, demo_p);
-			FinishChunk(demo_p);
+			w.Clear();
+			w.WriteValue<uint8_t>(i);
+			w.WriteString(D_GetUserInfoStrings(i));
+			WriteDemoChunk(UINF_ID, w.GetView(), DemoTempBuffer);
 		}
 	}
 
-	// It is possible to start a "multiplayer" game with only one player,
-	// so checking the number of players when playing back the demo is not
-	// enough.
-	if (multiplayer)
-	{
-		StartChunk (NETD_ID, demo_p);
-		FinishChunk (demo_p);
-	}
-
 	// Write cvars chunk
-	StartChunk (VARS_ID, demo_p);
-	C_WriteCVars (demo_p, CVAR_SERVERINFO|CVAR_DEMOSAVE);
-	FinishChunk (demo_p);
+	C_WriteCVars(w, CVAR_SERVERINFO|CVAR_DEMOSAVE);
+	WriteDemoChunk(VARS_ID, w.GetView(), DemoTempBuffer);
 
 	// Write weapon ordering chunk
-	StartChunk (WEAP_ID, demo_p);
-	P_WriteDemoWeaponsChunk(demo_p);
-	FinishChunk (demo_p);
+	P_WriteDemoWeaponsChunk(w);
+	WriteDemoChunk(WEAP_ID, w.GetView(), DemoTempBuffer);
 
-	// Indicate body is compressed
-	StartChunk (COMP_ID, demo_p);
-	democompspot = demo_p.Data();
-	WriteInt32 (0, demo_p);
-	FinishChunk (demo_p);
-
-	// Begin BODY chunk
-	StartChunk (BODY_ID, demo_p);
-	demobodyspot = demo_p.Data();
+	// The body will be written out after it's done.
 }
 
 
@@ -2659,7 +2623,7 @@ void G_BeginRecording(FString map)
 // G_PlayDemo
 //
 
-FString DeferredDemoName;
+FString DeferredDemoName = {};
 
 void G_DeferDemo(const FString& name)
 {
@@ -2667,278 +2631,250 @@ void G_DeferDemo(const FString& name)
 	gameaction = (gameaction == ga_loadgame) ? ga_loadgameplaydemo : ga_playdemo;
 }
 
-UNSAFE_CCMD (playdemo)
+UNSAFE_CCMD(playdemo)
 {
 	if (netgame)
 	{
 		Printf("End your current netgame first!\n");
 		return;
 	}
-	if (RecordingDemo)
+	if (DemoState != DEMO_NONE)
 	{
 		Printf("End your current demo first!\n");
 		return;
 	}
 	if (argv.argc() > 1)
 	{
-		G_DeferDemo (argv[1]);
+		G_DeferDemo(argv[1]);
 		SingleDemoPlayback = true;
 	}
 }
 
-UNSAFE_CCMD (timedemo)
+UNSAFE_CCMD(timedemo)
 {
 	if (argv.argc() > 1)
 	{
-		G_TimeDemo (argv[1]);
+		G_TimeDemo(argv[1]);
 		SingleDemoPlayback = true;
 	}
 }
 
 // [RH] Process all the information in a FORM ZDEM
 //		until a BODY chunk is entered.
-bool G_ProcessIFFDemo (FString &mapname)
+//	Note that older demo versions cannot be supported anymore since
+//	the demo command system was rewritten in #GAMEVERSION. Allowing
+//	them would be too big a security concern.
+bool G_VerifyDemoHeader(FString& map, TArrayView<const uint8_t> fileData)
 {
-	bool headerHit = false;
-	bool bodyHit = false;
-	int numPlayers = 0;
-	int id, len, i;
-	uLong uncompSize = 0;
-	uint8_t *nextchunk;
-
-	DemoPlayback = true;
-
-	for (i = 0; i < MAXPLAYERS; i++)
-		playeringame[i] = 0;
-
-	len = ReadInt32 (demo_p);
-	zdemformend = demo_p.Data() + len + (len & 1);
+	int32_t id = 0;
+	auto data = ReadDemoChunk(id, fileData);
+	if (id != FORM_ID || !data.Size())
+		return false;
 
 	// Check to make sure this is a ZDEM chunk file.
 	// TODO: Support multiple FORM ZDEMs in a CAT. Might be useful.
+	ReadStream idCheck = { data };
+	if (!idCheck.SerializeInt32(id) || id != ZDEM_ID)
+		return false;
 
-	id = ReadInt32 (demo_p);
-	if (id != ZDEM_ID)
+	data = idCheck.GetRemainingData();
+	if (!data.Size())
+		return false;
+
+	// We have to wait until we're out of the loop here before setting the playback
+	// buffer, that way it can be uncompressed properly.
+	uint32_t compressed = 0u;
+	TArrayView<const uint8_t> bodyData = { nullptr, 0u };
+	// Try to prevent data duplication. This should never happen outside of players, so if it does
+	// that likely means someone has a malformed demo file, intentional or not.
+	TArray<int> parsedIds = {};
+	memset(playeringame, 0, std::size(playeringame));
+	size_t totalPlayers = 0u;
+	while (data.Size())
 	{
-		Printf ("Not a " GAMENAME " demo file!\n");
-		return true;
-	}
+		ReadStream r = { ReadDemoChunk(id, data) };
+		if (!r.Size())
+			return false;
 
-	// Process all chunks until a BODY chunk is encountered.
-
-	while (demo_p.Data() < zdemformend && !bodyHit)
-	{
-		id = ReadInt32 (demo_p);
-		len = ReadInt32 (demo_p);
-		nextchunk = demo_p.Data() + len + (len & 1);
-		if (nextchunk > zdemformend)
+		if (id != UINF_ID)
 		{
-			Printf ("Demo is mangled!\n");
-			return true;
+			if (parsedIds.Find(id) < parsedIds.Size())
+				return false;
+			parsedIds.Push(id);
 		}
 
 		switch (id)
 		{
 		case ZDHD_ID:
-			headerHit = true;
-
-			demover = ReadInt16 (demo_p);	// ZDoom version demo was created with
-			if (demover < MINDEMOVERSION)
 			{
-				Printf ("Demo requires an older version of " GAMENAME "!\n");
-				//return true;
+				// Minimum ZDoom version
+				int8_t ver = 0;
+				if (!r.SerializeInt8(ver) || ver < DEMO_MAJOR)
+				{
+					Printf("Demo requires a newer version of " GAMENAME "!\n");
+					return false;
+				}
+				if (!r.SerializeInt8(ver) || ver < DEMO_MINOR)
+				{
+					Printf("Demo requires a newer version of " GAMENAME "!\n");
+					return false;
+				}
+				if (!r.SerializeInt8(ver) || ver < DEMO_REVISION)
+				{
+					Printf("Demo requires a newer version of " GAMENAME "!\n");
+					return false;
+				}
+				if (!r.SerializeString(map))
+					return false;
+				if (!r.SerializeUInt32(rngseed))
+					return false;
+				uint8_t pNum = 0u;
+				if (!r.SerializeUInt8(pNum))
+					return false;
+				if (!r.SerializeBool(multiplayer))
+					return false;
+				consoleplayer = pNum;
+				// Only reset the RNG if this demo is not in conjunction with a savegame.
+				if (!map.IsNotEmpty())
+					FRandom::StaticClearRandom();
 			}
-			if (ReadInt16 (demo_p) > DEMOGAMEVERSION)	// Minimum ZDoom version
-			{
-				Printf ("Demo requires a newer version of " GAMENAME "!\n");
-				return true;
-			}
-			if (demover >= 0x21a)
-			{
-				mapname = ReadStringConst(demo_p);
-			}
-			else
-			{
-				mapname = FString((char*)demo_p.Data(), 8);
-				AdvanceStream(demo_p, 8);
-			}
-			rngseed = ReadInt32 (demo_p);
-			// Only reset the RNG if this demo is not in conjunction with a savegame.
-			if (mapname[0] != 0)
-			{
-				FRandom::StaticClearRandom ();
-			}
-			consoleplayer = ReadInt8(demo_p);
 			break;
 
 		case VARS_ID:
-			C_ReadCVars (demo_p);
+			{
+				FString cvars = {};
+				if (!r.SerializeString(cvars))
+					return false;
+				C_ReadCVars(cvars);
+			}
 			break;
 
 		case UINF_ID:
-			i = ReadInt8 (demo_p);
-			if (!playeringame[i])
 			{
-				playeringame[i] = 1;
-				numPlayers++;
+				uint8_t pNum = 0u;
+				// Duplicate player found? That shouldn't happen...
+				if (!r.SerializeUInt8(pNum) || playeringame[pNum])
+					return false;
+				FString info = {};
+				if (!r.SerializeString(info))
+					return false;
+				playeringame[pNum] = true;
+				++totalPlayers;
+				D_ReadUserInfoStrings(pNum, info, false);
 			}
-			D_ReadUserInfoStrings (i, demo_p, false);
-			break;
-
-		case NETD_ID:
-			multiplayer = true;
 			break;
 
 		case WEAP_ID:
-			P_ReadDemoWeaponsChunk(demo_p);
+			if (!P_ReadDemoWeaponsChunk(r))
+				return false;
 			break;
 
 		case BODY_ID:
-			bodyHit = true;
-			zdembodyend = demo_p.Data() + len;
+			bodyData = r.GetRemainingData();
 			break;
 
 		case COMP_ID:
-			uncompSize = ReadInt32 (demo_p);
+			if (!r.SerializeUInt32(compressed))
+				return false;
 			break;
 		}
-
-		if (!bodyHit)
-			demo_p = TArrayView(nextchunk, demo_p.Size() + demo_p.Data() - nextchunk);
 	}
 
-	if (!headerHit)
-	{
-		Printf ("Demo has no header!\n");
-		return true;
-	}
+	// We can allow all the chunks to be shifted around, but we still need to make sure we
+	// hit all of them, otherwise the file is malformed.
+	if (parsedIds.Size() < 5 || !totalPlayers || compressed <= bodyData.Size())
+		return false;
 
-	if (!numPlayers)
+	if (compressed)
 	{
-		Printf ("Demo has no players!\n");
-		return true;
-	}
-
-	if (!bodyHit)
-	{
-		zdembodyend = NULL;
-		Printf ("Demo has no BODY chunk!\n");
-		return true;
-	}
-
-	if (numPlayers > 1)
-		multiplayer = netgame = true;
-
-	if (uncompSize > 0)
-	{
-		auto uncompressed = TArray<uint8_t>(uncompSize, true);
-		int r = uncompress (uncompressed.Data(), &uncompSize, demo_p.Data(), uLong(zdembodyend - demo_p.Data()));
+		uLong uncompSize = 0u;
+		TArray<uint8_t> uncompressed(compressed, true);
+		const int r = uncompress(uncompressed.Data(), &uncompSize, bodyData.Data(), uLong(bodyData.Size()));
+		// If this happens, we need to abort the entire engine ASAP.
+		if (uncompSize != compressed)
+			I_FatalError("Uncompressed data size did not match demo file's specified size");
 		if (r != Z_OK)
 		{
-			Printf ("Could not decompress demo! %s\n", M_ZLibError(r).GetChars());
-			return true;
+			Printf("Could not decompress demo: %s\n", M_ZLibError(r).GetChars());
+			return false;
 		}
-		zdembodyend = uncompressed.Data() + uncompSize;
-		DemoBuffer = std::move(uncompressed);
-		demo_p = TArrayView(DemoBuffer.Data(), uncompSize);
+		DemoPlaybackBuffer = { uncompressed };
+	}
+	else
+	{
+		DemoPlaybackBuffer = { bodyData };
 	}
 
-	return false;
+	return true;
 }
 
-void G_DoPlayDemo (void)
+void G_DoPlayDemo()
 {
-	FString mapname;
-	int demolump;
-
 	gameaction = ga_nothing;
 
 	// [RH] Allow for demos not loaded as lumps
-	demolump = fileSystem.CheckNumForFullName (DeferredDemoName.GetChars(), true);
-	if (demolump >= 0)
+	// TODO: Really need to port the actual dynamic writer for this kind of thing...
+	TArray<uint8_t> temp = {};
+	const int demoLump = fileSystem.CheckNumForFullName(DeferredDemoName.GetChars(), true);
+	if (demoLump >= 0)
 	{
-		size_t demolen = fileSystem.FileLength (demolump);
-		DemoBuffer.Resize(demolen);
-		fileSystem.ReadFile (demolump, DemoBuffer.Data());
+		temp.Resize(fileSystem.FileLength(demoLump));
+		fileSystem.ReadFile(demoLump, temp.Data());
 	}
 	else
 	{
-		FixPathSeperator (DeferredDemoName);
-		DefaultExtension (DeferredDemoName, ".lmp");
+		FixPathSeperator(DeferredDemoName);
+		DefaultExtension(DeferredDemoName, ".lmp");
 		FileReader fr;
 		if (!fr.OpenFile(DeferredDemoName.GetChars()))
-		{
 			I_Error("Unable to open demo '%s'", DeferredDemoName.GetChars());
-		}
-		size_t demolen = fr.GetLength();
-		DemoBuffer.Resize(demolen);
-		if (fr.Read(DemoBuffer.Data(), demolen) != demolen)
-		{
+
+		const size_t len = fr.GetLength();
+		temp.Resize(len);
+		if (fr.Read(temp.Data(), len) != len)
 			I_Error("Unable to read demo '%s'", DeferredDemoName.GetChars());
-		}
 	}
-	demo_p = TArrayView(DemoBuffer.Data(), DemoBuffer.Size());
 
-	if (SingleDemoPlayback) Printf ("Playing demo %s\n", DeferredDemoName.GetChars());
-
-	C_BackupCVars ();		// [RH] Save cvars that might be affected by demo
-
-	if (ReadInt32 (demo_p) != FORM_ID)
-	{
-		const char *eek = "Cannot play non-" GAMENAME " demos.\n";
-
-		C_ForgetCVars();
-		DemoBuffer.Reset();
-		demo_p = NULL;
-		if (SingleDemoPlayback)
-		{
-			I_Error ("%s", eek);
-		}
-		else
-		{
-			//Printf (PRINT_BOLD, "%s", eek);
-			gameaction = ga_nothing;
-		}
-	}
-	else if (G_ProcessIFFDemo (mapname))
+	FString map = {};
+	C_BackupCVars();		// [RH] Save cvars that might be affected by demo
+	if (!G_VerifyDemoHeader(map, { temp.Data(), temp.Size() }))
 	{
 		C_RestoreCVars();
-		gameaction = ga_nothing;
-		DemoPlayback = false;
+		if (SingleDemoPlayback)
+			I_Error("Failed to read demo file\n");
+		else
+			gameaction = ga_nothing;;
 	}
 	else
 	{
-		// don't spend a lot of time in loadlevel 
-		precache = false;
-		demonew = true;
-		if (mapname.Len() != 0)
-		{
-			G_InitNew (mapname.GetChars(), false);
-		}
-		else if (primaryLevel->sectors.Size() == 0)
-		{
-			I_Error("Cannot play demo without its savegame\n");
-		}
-		C_HideConsole ();
-		demonew = false;
-		precache = true;
+		if (SingleDemoPlayback)
+			Printf("Playing demo %s\n", DeferredDemoName.GetChars());
 
+		InitializingDemo = true;
+
+		if (map.IsNotEmpty())
+			G_InitNew(map.GetChars(), false);
+		else if (!primaryLevel->sectors.Size())
+			I_Error("Cannot play demo without its savegame\n");
+		C_HideConsole();
 		PlayerControlledGame = false;
-		DemoPlayback = true;
+		DemoState = DEMO_PLAYING;
 		playedtitlemusic = false;
+
+		InitializingDemo = false;
 	}
 }
 
 //
 // G_TimeDemo
 //
-void G_TimeDemo (const char* name)
+void G_TimeDemo(const char* demoName)
 {
-	nodrawers = !!Args->CheckParm ("-nodraw");
-	noblit = !!Args->CheckParm ("-noblit");
+	nodrawers = !!Args->CheckParm("-nodraw");
+	noblit = !!Args->CheckParm("-noblit");
 	BenchmarkDemo = true;
 
-	DeferredDemoName = name;
+	DeferredDemoName = demoName;
 	gameaction = (gameaction == ga_loadgame) ? ga_loadgameplaydemo : ga_playdemo;
 }
 
@@ -2946,16 +2882,16 @@ void G_TimeDemo (const char* name)
 /*
 ===================
 =
-= G_CheckDemoEnd
+= G_EndDemo
 =
 = Called after a death or level completion to allow demos to be cleaned up
-= Returns false if a new demo loop action will take place
+=
 ===================
 */
 
-bool G_CheckDemoEnd()
+void G_EndDemo()
 {
-	if (DemoPlayback)
+	if (IsPlayingDemo())
 	{
 		extern int BenchmarkStartTime;
 		const int benchmarkEndTime = BenchmarkDemo ? I_GetTime() - BenchmarkStartTime : 0;
@@ -2968,8 +2904,8 @@ bool G_CheckDemoEnd()
 		if (StatusBar != nullptr)
 			StatusBar->AttachToPlayer(&players[0]);
 
-		DemoBuffer.Reset();
-		DemoPlayback = false;
+		DemoPlaybackBuffer = {};
+		DemoState = DEMO_NONE;
 		if (SingleDemoPlayback || BenchmarkDemo)
 		{
 			if (BenchmarkDemo)
@@ -2977,6 +2913,7 @@ bool G_CheckDemoEnd()
 				// Trying to get back to a stable state after timing a demo
 				// seems to cause problems. I don't feel like fixing that
 				// right now.
+				BenchmarkDemo = false;
 				I_FatalError("timed %i gametics in %i realtics (%.1f fps)\n"
 							  "(This is not really an error.)", gametic,
 							  benchmarkEndTime, (float)gametic/(float)benchmarkEndTime*(float)TICRATE);
@@ -2986,39 +2923,46 @@ bool G_CheckDemoEnd()
 				Printf("Demo ended\n");
 			}
 			gameaction = ga_fullconsole;
-			BenchmarkDemo = false;
-			return true;
 		}
 		else
 		{
 			D_AdvanceDemo(); 
 		}
-
-		return false; 
 	}
-	else if (RecordingDemo)
+	else if (IsRecordingDemo())
 	{
-		DemoBuffer.Push(DEM_STOP);
+		DemoBody.WriteValue<uint8_t>(DEM_STOP);
+
+		// Now that the entire BODY chunk has been created, replace it with
+		// a compressed version. If the BODY successfully compresses, the
+		// contents of the COMP chunk will be changed to indicate the
+		// uncompressed size of the BODY.
+		DynamicWriteStream w = {};
 		if (demo_compress)
 		{
-			// Now that the entire BODY chunk has been created, replace it with
-			// a compressed version. If the BODY successfully compresses, the
-			// contents of the COMP chunk will be changed to indicate the
-			// uncompressed size of the BODY.
-			uLong len = uLong(demo_p.Data() - demobodyspot);
-			uLong outlen = (len + len/100 + 12);
-			TArray<Byte> compressed(outlen, true);
-			int r = compress2 (compressed.Data(), &outlen, demobodyspot, len, 9);
-			if (r == Z_OK && outlen < len)
+			const uLong len = uLong(DemoBody.Size());
+			uLong compSize = (len + len/100 + 12);
+			TArray<uint8_t> compressed(compSize, true);
+			const int r = compress2(compressed.Data(), &compSize, DemoBody.Data(), len, 9);
+			if (r == Z_OK && compSize < len)
 			{
-				UncheckedWriteInt32 (len, &democompspot);
-				memcpy (demobodyspot, compressed.Data(), outlen);
-				demo_p = TArrayView(demobodyspot + outlen, demo_p.Size() + len - outlen);
+				w.WriteValue<uint32_t>(len);
+				DemoBody.Clear();
+				DemoBody.WriteBytes({ compressed.Data(), compressed.Size() });
+			}
+			else
+			{
+				w.WriteValue<uint32_t>(0u);
 			}
 		}
-		FinishChunk (demo_p);
-		uint8_t* formlen = DemoBuffer.Data() + 4;
-		UncheckedWriteInt32 (int(demo_p.Data() - DemoBuffer.Data() - 8), &formlen);
+		else
+		{
+			w.WriteValue<uint32_t>(0u);
+		}
+		WriteDemoChunk(COMP_ID, w.GetView(), DemoTempBuffer);
+		WriteDemoChunk(BODY_ID, DemoBody.GetView(), DemoTempBuffer);
+
+		WriteDemoChunk(FORM_ID, DemoTempBuffer.GetView(), DemoBuffer);
 
 		auto fw = FileWriter::Open(DemoFileName.GetChars());
 		bool saved = false;
@@ -3031,14 +2975,15 @@ bool G_CheckDemoEnd()
 				RemoveFile(DemoFileName.GetChars());
 		}
 		DemoBuffer.Reset();
-		RecordingDemo = StopRecordingDemo = false;
+		DemoTempBuffer.Reset();
+		DemoBody.Reset();
+		DemoState = DEMO_NONE;
+		StopRecordingDemo = false;
 		if (saved)
 			Printf("Demo %s recorded\n", DemoFileName.GetChars()); 
 		else
 			Printf("Demo %s could not be saved\n", DemoFileName.GetChars());
 	}
-
-	return true; 
 }
 
 void G_StartSlideshow(FLevelLocals *Level, FName whichone, int state)

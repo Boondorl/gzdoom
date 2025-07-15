@@ -873,7 +873,7 @@ void P_WriteDemoWeaponsChunk(TArrayView<uint8_t>& demo)
 //
 //===========================================================================
 
-void P_ReadDemoWeaponsChunk(TArrayView<uint8_t>& demo)
+void P_ReadDemoWeaponsChunk(TArrayView<const uint8_t>& demo)
 {
 	int count, i;
 	PClassActor *type;

@@ -1305,7 +1305,7 @@ FString C_GetMassCVarString (uint32_t filter, bool compact)
 	return dump;
 }
 
-void C_ReadCVars (TArrayView<uint8_t>& demo_p)
+void C_ReadCVars (const FString& cvars)
 {
 	char *ptr = (char *)demo_p.Data();
 	char *breakpt;

@@ -124,7 +124,7 @@ PClassActor *Net_ReadWeapon(TArrayView<uint8_t>& stream);
 
 void P_SetupWeapons_ntohton();
 void P_WriteDemoWeaponsChunk(TArrayView<uint8_t>& demo);
-void P_ReadDemoWeaponsChunk(TArrayView<uint8_t>& demo);
+void P_ReadDemoWeaponsChunk(TArrayView<const uint8_t>& demo);
 
 
 enum class EBobStyle

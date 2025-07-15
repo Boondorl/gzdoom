@@ -582,11 +582,8 @@ void P_SetupLevel(FLevelLocals *Level, int position, bool newGame)
 	P_ClearParticles(Level);
 
 	// preload graphics and sounds
-	if (precache)
-	{
-		PrecacheLevel(Level);
-		S_PrecacheLevel(Level);
-	}
+	PrecacheLevel(Level);
+	S_PrecacheLevel(Level);
 
 	if (deathmatch)
 	{

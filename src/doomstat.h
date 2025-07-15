@@ -132,13 +132,19 @@ extern	int				consoleplayer;
 // DEMO playback/recording related stuff.
 // No demo, there is a human player in charge?
 // Disable save/end game?
+enum EDemoState : uint8_t
+{
+	DEMO_NONE,
+	DEMO_RECORDING,
+	DEMO_PLAYING,
+};
+
 extern	bool			PlayerControlledGame;
 
-extern	FString			newdemoname;
-extern	FString			newdemomap;
-extern	bool			DemoPlayback;
-extern	bool			RecordingDemo;
-extern	int				demover;
+extern	FString			NewDemoFileName;
+extern	FString			NewDemoMap;
+bool IsPlayingDemo();
+bool IsRecordingDemo();
 
 // Quit after playing a demo from cmdline.
 extern	bool			SingleDemoPlayback; 	
@@ -169,9 +175,6 @@ extern	bool	 		playeringame[/*MAXPLAYERS*/];
 
 // File handling stuff.
 extern	FILE*			debugfile;
-
-// if true, load all graphics at level load
-extern	bool	 		precache;
 
 
 //-------

@@ -48,20 +48,9 @@
 #define UINF_ID		BIGE_ID('U','I','N','F')
 #define COMP_ID		BIGE_ID('C','O','M','P')
 #define BODY_ID		BIGE_ID('B','O','D','Y')
-#define NETD_ID		BIGE_ID('N','E','T','D')
 #define WEAP_ID		BIGE_ID('W','E','A','P')
 
 constexpr int MoreButtons = 0x80;
-
-struct zdemoheader_s {
-	uint8_t	demovermajor;
-	uint8_t	demoverminor;
-	uint8_t	minvermajor;
-	uint8_t	minverminor;
-	uint8_t	map[8];
-	unsigned int rngseed;
-	uint8_t	consoleplayer;
-};
 
 struct usercmd_t
 {
@@ -267,9 +256,9 @@ void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, TArrayView<uint8_t
 void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic);
 void SkipUserCommand(TArrayView<const uint8_t>& stream);
 
-void StartChunk (int id, TArrayView<uint8_t>& stream);
-void FinishChunk (TArrayView<uint8_t>& stream);
-void SkipChunk (TArrayView<uint8_t>& stream);
+void WriteDemoChunk(int32_t id, const TArrayView<const uint8_t> data, DynamicWriteStream& stream);
+TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, TArrayView<const uint8_t>& stream);
+void SkipDemoChunk(TArrayView<const uint8_t>& stream);
 
 void RunPlayerEventData(int player, int tic);
 

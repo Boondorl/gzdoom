@@ -59,7 +59,7 @@ bool D_SendServerFlagChange (FBaseCVar *cvar, int bitnum, bool set, bool silent)
 void D_DoServerInfoChange (TArrayView<uint8_t>& stream, bool singlebit);
 
 FString D_GetUserInfoStrings(int pnum, bool compact = false);
-void D_ReadUserInfoStrings (int player, TArrayView<uint8_t>& stream, bool update);
+void D_ReadUserInfoStrings (int player, const FString& data, bool update);
 
 struct FPlayerColorSet;
 void D_GetPlayerColor (int player, float *h, float *s, float *v, FPlayerColorSet **colorset);

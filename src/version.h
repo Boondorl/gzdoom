@@ -65,11 +65,9 @@ const char *GetVersionString();
 // Protocol version used in demos.
 // Bump it if you change existing DEM_ commands or add new ones.
 // Otherwise, it should be safe to leave it alone.
-#define DEMOGAMEVERSION 0x221
-
-// Minimum demo version we can play.
-// Bump it whenever you change or remove existing DEM_ commands.
-#define MINDEMOVERSION 0x221
+#define DEMO_MAJOR 4
+#define DEMO_MINOR 15
+#define DEMO_REVISION 1
 
 // SAVEVER is the version of the information stored in level snapshots.
 // Note that SAVEVER is not directly comparable to VERSION.

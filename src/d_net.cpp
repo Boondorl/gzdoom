@@ -640,7 +640,7 @@ static void ClientQuit(int clientNum, int newHost)
 		SetArbitrator(newHost >= 0 ? newHost : NetworkClients[0]);
 
 	if (RecordingDemo)
-		G_CheckDemoEnd();
+		G_EndDemo();
 }
 
 static bool IsMapLoaded()
@@ -2005,7 +2005,7 @@ static bool ShouldStabilizeTick()
 // while we wait for it to stabilize, otherwise everything will appear to jitter around.
 static void CalculateNetStabilityBuffer(int diff)
 {
-	if (!netgame || DemoPlayback)
+	if (!netgame || IsPlayingDemo())
 	{
 		StabilityBuffer = 0;
 		return;
@@ -2109,7 +2109,7 @@ void TryRunTics()
 
 	// Test player prediction code in singleplayer
 	// by running the gametic behind the ClientTic
-	if (!netgame && !DemoPlayback && cl_debugprediction > 0)
+	if (!netgame && !IsPlayingDemo() && cl_debugprediction > 0)
 	{
 		int debugTarget = ClientTic - cl_debugprediction;
 		int debugOffset = gametic - debugTarget;

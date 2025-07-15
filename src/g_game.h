@@ -73,9 +73,9 @@ void G_RecordDemo (const char* name);
 
 void G_BeginRecording(FString map);
 
-void G_PlayDemo (char* name);
-void G_TimeDemo (const char* name);
-bool G_CheckDemoEnd();
+void G_PlayDemo(char* fileName);
+void G_TimeDemo(const char* fileName);
+void G_EndDemo();
 
 void G_Ticker (void);
 bool G_Responder (event_t*	ev);

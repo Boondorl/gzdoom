@@ -101,7 +101,7 @@ void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic)
 	// tick is actually executed.
 	Net_SkipCommands(stream);
 
-	curTic.AddData({ start.Data(), start.Size() - stream.Size() });
+	curTic.Data.WriteBytes({ start.Data(), start.Size() - stream.Size() });
 	auto basis = tic > 0 ? &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command : nullptr;
 	if (GetPacketType(stream) == DEM_EMPTYUSERCMD)
 	{
@@ -126,44 +126,48 @@ void RunPlayerEventData(int player, int tic)
 	{
 		TArrayView<const uint8_t> stream = { data.Data(), data.Size() };
 		Net_ReadCommands(player, stream);
-		if (!RecordingDemo)
+		if (!IsRecordingDemo())
 			data.Clear();
 	}
 }
 
 // Demo related functionality
 
-uint8_t* streamPos = nullptr;
-
-// Write the header of an IFF chunk and leave space
-// for the length field.
-void StartChunk(int id, TArrayView<uint8_t>& stream)
+void WriteDemoChunk(int32_t id, const TArrayView<const uint8_t> data, DynamicWriteStream& stream)
 {
-	WriteInt32(id, stream);
-	streamPos = stream.Data();
-	AdvanceStream(stream, 4);
+	stream.WriteValue<int32_t>(id);
+	stream.WriteChunk<uint8_t>(data);
+	if (data.Size() & 1)
+		stream.WriteValue<uint8_t>(0u);
 }
 
-// Write the length field for the chunk and insert
-// pad byte if the chunk is odd-sized.
-void FinishChunk(TArrayView<uint8_t>& stream)
+TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, TArrayView<const uint8_t>& stream)
 {
-	if (streamPos == nullptr)
-		return;
-
-	int len = int(stream.Data() - streamPos - 4);
-	auto streamPosView = TArrayView<uint8_t>(streamPos, 4);
-	WriteInt32(len, streamPosView);
-	if (len & 1)
-		WriteInt8(0, stream);
-
-	streamPos = nullptr;
+	ReadStream r = { stream };
+	if (!r.SerializeInt32(id))
+		return { nullptr, 0u };
+	TArrayView<const uint8_t> data = { nullptr, 0u };
+	if (!r.SerializeChunk<uint8_t>(data, 0u, false))
+		return { nullptr, 0u };
+	uint8_t pad = 0u;
+	if ((data.Size() & 1) && !r.SerializeUInt8(pad))
+		return { nullptr, 0u };
+	stream = r.GetRemainingData();
+	return data;
 }
 
-// Skip past an unknown chunk. *stream should be
-// pointing to the chunk's length field.
-void SkipChunk(TArrayView<uint8_t>& stream)
+void SkipDemoChunk(TArrayView<const uint8_t>& stream)
 {
-	int len = ReadInt32(stream);
-	AdvanceStream(stream, len + (len & 1));
+	MeasureStream m = { stream };
+	m.SkipValue<int32_t>();
+	m.SkipChunk<uint8_t>();
+	if (m.GetSkippedBytes() & 1)
+		m.SkipValue<int8_t>();
+
+	// Skipping does zero checking so we need to make sure we don't
+	// end up outside the stream after doing so.
+	if (m.GetSkippedBytes() > stream.Size())
+		I_Error("Malformed chunk found in demo file");
+	else
+		stream = { stream.Data() + m.GetSkippedBytes(), stream.Size() - m.GetSkippedBytes() };
 }

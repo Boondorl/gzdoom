@@ -1195,14 +1195,6 @@ void DBaseStatusBar::DrawBottomStuff (EHudState state)
 
 void DBaseStatusBar::DrawTopStuff (EHudState state)
 {
-	if (DemoPlayback && demover != DEMOGAMEVERSION)
-	{
-		DrawText(twod, SmallFont, CR_TAN, 0, GetTopOfStatusbar() - 40 * CleanYfac,
-			"Demo was recorded with a different version\n"
-			"of " GAMENAME ". Expect it to go out of sync.",
-			DTA_CleanNoMove, true, TAG_DONE);
-	}
-
 	if (state != HUD_AltHud)
 	{
 		auto saved = fullscreenOffsets;
