@@ -437,7 +437,7 @@ void ActivateEndGameMenu()
 		if (!netgame)
 		{
 			if (RecordingDemo)
-				G_CheckDemoEnd();
+				G_EndDemo();
 			D_StartTitle();
 		}
 	});
