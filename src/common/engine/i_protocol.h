@@ -82,16 +82,19 @@
 			template<typename Stream>																										\
 			bool SerializeInternal(Stream& stream, size_t& argCount)
 
+#define IF_WRITING()	if constexpr(Stream::IsWriting)
+#define IF_READING()	if constexpr(Stream::IsReading)
+
 #define SERIALIZE_INT8(value)						\
 		do											\
 		{											\
 			int8_t i8Value;							\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				i8Value = (int8_t)value;			\
 			if (!stream.SerializeInt8(i8Value))		\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = i8Value;					\
 		} while (0)
 
@@ -99,12 +102,12 @@
 		do											\
 		{											\
 			uint8_t u8Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				u8Value = (uint8_t)value;			\
 			if (!stream.SerializeUInt8(u8Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = u8Value;					\
 		} while (0)
 
@@ -112,12 +115,12 @@
 		do										\
 		{										\
 			bool bValue;						\
-			if (Stream::IsWriting)				\
+			IF_WRITING()						\
 				bValue = (bool)value;			\
 			if (!stream.SerializeBool(bValue))	\
 				return false;					\
 			++argCount;							\
-			if (Stream::IsReading)				\
+			IF_READING()						\
 				value = bValue;					\
 		} while (0)
 
@@ -125,12 +128,12 @@
 		do											\
 		{											\
 			int16_t i16Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				i16Value = (int16_t)value;			\
 			if (!stream.SerializeInt16(i16Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = i16Value;					\
 		} while (0)
 
@@ -138,12 +141,12 @@
 		do											\
 		{											\
 			uint16_t u16Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				u16Value = (uint16_t)value;			\
 			if (!stream.SerializeUInt16(u16Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = u16Value;					\
 		} while (0)
 
@@ -151,12 +154,12 @@
 		do											\
 		{											\
 			int32_t i32Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				i32Value = (int32_t)value;			\
 			if (!stream.SerializeInt32(i32Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = i32Value;					\
 		} while (0)
 
@@ -164,12 +167,12 @@
 		do											\
 		{											\
 			uint32_t u32Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				u32Value = (uint32_t)value;			\
 			if (!stream.SerializeUInt32(u32Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = u32Value;					\
 		} while (0)
 
@@ -177,12 +180,12 @@
 		do											\
 		{											\
 			int64_t i64Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				i64Value = (int64_t)value;			\
 			if (!stream.SerializeInt64(i64Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = i64Value;					\
 		} while (0)
 
@@ -190,12 +193,12 @@
 		do											\
 		{											\
 			uint64_t u64Value;						\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				u64Value = (uint64_t)value;			\
 			if (!stream.SerializeUInt64(u64Value))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = u64Value;					\
 		} while (0)
 
@@ -203,12 +206,12 @@
 		do										\
 		{										\
 			float fValue;						\
-			if (Stream::IsWriting)				\
+			IF_WRITING()						\
 				fValue = (float)value;			\
 			if (!stream.SerializeFloat(fValue))	\
 				return false;					\
 			++argCount;							\
-			if (Stream::IsReading)				\
+			IF_READING()						\
 				value = fValue;					\
 		} while (0)
 
@@ -216,26 +219,26 @@
 		do											\
 		{											\
 			double dValue;							\
-			if (Stream::IsWriting)					\
+			IF_WRITING()							\
 				dValue = (double)value;				\
 			if (!stream.SerializeDouble(dValue))	\
 				return false;						\
 			++argCount;								\
-			if (Stream::IsReading)					\
+			IF_READING()							\
 				value = dValue;						\
 		} while (0)
 
-#define SERIALIZE_STRING(value)					\
-		do										\
-		{										\
-			FString str;						\
-			if (Stream::Writing)				\
-				str = value;					\
-			if (!stream.SerializeString(str))	\
-				return false;					\
-			++argCount;							\
-			if (Stream::Reading)				\
-				value = str;					\
+#define SERIALIZE_STRING(value)						\
+		do											\
+		{											\
+			FString sValue;							\
+			IF_WRITING()							\
+				sValue = value;						\
+			if (!stream.SerializeString(sValue))	\
+				return false;						\
+			++argCount;								\
+			IF_READING()							\
+				value = sValue;						\
 		} while (0)
 
 // Boon TODO: This definitely needs to be fixed lol
@@ -251,7 +254,7 @@
 			if (!stream.SerializeArray<char>(str, 0u, false))	\
 				return false;									\
 			++argCount;											\
-			if (Stream::Reading)								\
+			IF_READING()										\
 				value = FString(str.Data(), str.Size());		\
 		} while (0)
 
@@ -259,40 +262,29 @@
 		do												\
 		{												\
 			type tValue;								\
-			if (Stream::IsWriting)						\
+			IF_WRITING()								\
 				tValue = (type)value;					\
 			if (!stream.SerializeType<type>(tValue))	\
 				return false;							\
 			++argCount;									\
-			if (Stream::IsReading)						\
+			IF_READING()								\
 				value = tValue;							\
 		} while (0)
 
-#define SERIALIZE_ARRAY(type, data)								\
-		do														\
-		{														\
-			TArrayView<const type> arr;							\
-			if (Stream::IsWriting)								\
-				arr = data;										\
-			if (!stream.SerializeArray<type>(arr, 0u, false))	\
-				return false;									\
-			++argCount;											\
-			if (Stream::IsReading)								\
-				data = arr;										\
-		} while (0)
-
-#define SERIALIZE_ARRAY_EXPECTING(type, data, len, exact)			\
+#define SERIALIZE_ARRAY_EXPECTING(type, value, len, exact)			\
 		do															\
 		{															\
-			TArrayView<const type> arr;								\
-			if (Stream::IsWriting)									\
-				arr = data;											\
-			if (!stream.SerializeArray<type>(arr, len, exact))		\
+			TArrayView<const type> aValue;							\
+			IF_WRITING()											\
+				aValue = value;										\
+			if (!stream.SerializeArray<type>(aValue, len, exact))	\
 				return false;										\
 			++argCount;												\
-			if (Stream::IsReading)									\
-				data = arr;											\
+			IF_READING()											\
+				value = aValue;										\
 		} while (0)
+
+#define SERIALIZE_ARRAY(type, value)	SERIALIZE_ARRAY_EXPECTING(type, value, 0u, false)
 
 class NetPacket
 {

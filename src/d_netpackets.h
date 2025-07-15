@@ -90,7 +90,7 @@ enum EDemoCommand : uint8_t
 	DEM_SETSLOTPNUM,	// 67 Int8: player number, the rest is the same as DEM_SETSLOT
 	DEM_REMOVE,			// 68 String: class to remove
 	DEM_FINISHGAME,		// 69 
-	DEM_NETEVENT,		// 70 String: event name, Int8: Arg count; each arg is an Int32, Int8: manual
+	xx(NETEVENT, NetEventPacket),		// 70 String: event name, Int8: Arg count; each arg is an Int32, Int8: manual
 	DEM_MDK,			// 71 String: damage type
 	DEM_SETINV,			// 72 String: item name, Int32: amount, Int8: allow beyond max
 	DEM_ENDSCREENJOB,	// 73 
@@ -144,7 +144,7 @@ class NetEventPacket : public NetPacket
 	{
 		SERIALIZE_STRING(_event);
 		size_t len = std::size(args);
-		if constexpr(Stream::IsWriting)
+		IF_WRITING()
 		{
 			int i = len - 1;
 			for (; i >= 0; --i)
@@ -156,7 +156,7 @@ class NetEventPacket : public NetPacket
 		}
 		TArrayView<const int32_t> data = { _args, len };
 		SERIALIZE_ARRAY_EXPECTING(int32_t, data, std::size(_args), false);
-		if constexpr(Stream::IsReading)
+		IF_READING()
 			memcpy(_args, data.Data(), data.Size());
 		SERIALIZE_BOOL(_bManual);
 	}
