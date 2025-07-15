@@ -37,6 +37,7 @@
 
 #include "tarray.h"
 #include "zstring.h"
+#include <limits>
 
 // Byte streams.
 
@@ -65,7 +66,8 @@ public:
 	}
 	void WriteBytes(const TArrayView<const uint8_t> bytes)
 	{
-		memcpy(&_buffer[_curPos], bytes.Data(), bytes.Size());
+		if (bytes.Size())
+			memcpy(&_buffer[_curPos], bytes.Data(), bytes.Size());
 		SkipBytes(bytes.Size());
 	}
 	template<typename T>
@@ -91,7 +93,7 @@ class ByteReader
 
 	TArrayView<const uint8_t> InternalReadBytes(size_t bytes, bool skip)
 	{
-		const TArrayView<const uint8_t> view = { &_buffer[_curPos], bytes };
+		const TArrayView<const uint8_t> view = bytes ? TArrayView{ &_buffer[_curPos], bytes } : TArrayView<const uint8_t>{ nullptr, 0u };
 		if (skip)
 			SkipBytes(bytes);
 		return view;
@@ -159,6 +161,26 @@ public:
 class WriteStream
 {
 	ByteWriter _writer;
+
+	template<typename T, typename Size>
+	bool SerializeRange(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const size_t len = values.Size();
+		if (len > std::numeric_limits<Size>::max() || (expected && ((!exact && len > expected) || (exact && len != expected))))
+			return false;
+		const size_t size = len * sizeof(T);
+		if (_writer.WouldWritePastEnd(sizeof(Size) + size))
+			return false;
+		const Size l = (Size)len;
+		_writer.WriteValue<Size>(l);
+		if (size)
+		{
+			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
+			_writer.WriteBytes(bytes);
+		}
+		return true;
+	}
 public:
 	enum { IsWriting = 1 };
 	enum { IsReading = 0 };
@@ -264,48 +286,67 @@ public:
 		return true;
 	}
 	template<typename T>
+	bool SerializeSmallArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint8_t>(values, expected, exact);
+	}
+	template<typename T>
 	bool SerializeArray(const TArrayView<const T> values, size_t expected, bool exact)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const size_t len = values.Size();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (_writer.WouldWritePastEnd((sizeof(uint16_t) + size)))
-			return false;
-		const uint16_t l = (uint16_t)len;
-		_writer.WriteValue<uint16_t>(l);
-		if (size)
-		{
-			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
-			_writer.WriteBytes(bytes);
-		}
-		return true;
+		return SerializeRange<T, uint16_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeLargeArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint32_t>(values, expected, exact);
 	}
 	template<typename T>
 	bool SerializeChunk(const TArrayView<const T> values, size_t expected, bool exact)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const size_t len = values.Size();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (_writer.WouldWritePastEnd((sizeof(uint32_t) + size)))
-			return false;
-		const uint32_t l = (uint32_t)len;
-		_writer.WriteValue<uint32_t>(l);
-		if (size)
-		{
-			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
-			_writer.WriteBytes(bytes);
-		}
-		return true;
+		return SerializeRange<T, uint64_t>(values, expected, exact);
 	}
 };
 
 class ReadStream
 {
 	ByteReader _reader;
+
+	template<typename T, typename Size>
+	TArrayView<const T> ReadRange()
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const Size len = _reader.ReadValue<Size>();
+		return len ? { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len } : { nullptr, 0u };
+	}
+	template<typename T, typename Size>
+	TArrayView<const T> PeekRange()
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const Size len = _reader.PeekValue<Size>();
+		return len ? { (T*)(_reader.PeekBytes(sizeof(Size) + len * sizeof(T)).Data() + sizeof(Size)), len } : { nullptr, 0u };
+	}
+	template<typename T, typename Size>
+	bool SerializeRange(TArrayView<const T>& values, size_t expected, bool exact)
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		if (_reader.WouldReadPastEnd(sizeof(Size)))
+			return false;
+		const Size len = _reader.ReadValue<Size>();
+		if (expected && ((!exact && len > expected) || (exact && len != expected)))
+			return false;
+		const size_t size = len * sizeof(T);
+		if (size)
+		{
+			if (_reader.WouldReadPastEnd(size))
+				return false;
+			values = { (const T*)_reader.ReadBytes(size).Data(), len };
+		}
+		else
+		{
+			values = { nullptr, 0u };
+		}
+		return true;
+	}
 public:
 	enum { IsWriting = 0 };
 	enum { IsReading = 1 };
@@ -336,18 +377,24 @@ public:
 		_reader.ReadType<T>(value);
 	}
 	template<typename T>
+	TArrayView<const T> ReadSmallArray()
+	{
+		return ReadRange<T, uint8_t>();
+	}
+	template<typename T>
 	TArrayView<const T> ReadArray()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint16_t len = _reader.ReadValue<uint16_t>();
-		return { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len };
+		return ReadRange<T, uint16_t>();
+	}
+	template<typename T>
+	TArrayView<const T> ReadLargeArray()
+	{
+		return ReadRange<T, uint32_t>();
 	}
 	template<typename T>
 	TArrayView<const T> ReadChunk()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint32_t len = _reader.ReadValue<uint32_t>();
-		return { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len };
+		return ReadRange<T, uint64_t>();
 	}
 
 	// Peeking API.
@@ -367,18 +414,24 @@ public:
 		_reader.PeekType<T>(value);
 	}
 	template<typename T>
+	TArrayView<const T> PeekSmallArray()
+	{
+		return PeekRange<T, uint8_t>();
+	}
+	template<typename T>
 	TArrayView<const T> PeekArray()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint16_t len = _reader.PeekValue<uint16_t>();
-		return { (T*)(_reader.PeekBytes(sizeof(uint16_t) + len * sizeof(T)).Data() + sizeof(uint16_t)), len };
+		return PeekRange<T, uint16_t>();
+	}
+	template<typename T>
+	TArrayView<const T> PeekLargeArray()
+	{
+		return PeekRange<T, uint32_t>();
 	}
 	template<typename T>
 	TArrayView<const T> PeekChunk()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint32_t len = _reader.PeekValue<uint32_t>();
-		return { (T*)(_reader.PeekBytes(sizeof(uint32_t) + len * sizeof(T)).Data() + sizeof(uint32_t)), len };
+		return PeekRange<T, uint64_t>();
 	}
 
 	// Networking API.
@@ -486,48 +539,24 @@ public:
 		return true;
 	}
 	template<typename T>
+	bool SerializeSmallArray(TArrayView<const T>& values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint8_t>(values, expected, exact);
+	}
+	template<typename T>
 	bool SerializeArray(TArrayView<const T>& values, size_t expected, bool exact)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		if (_reader.WouldReadPastEnd(sizeof(uint16_t)))
-			return false;
-		const uint16_t len = _reader.ReadValue<uint16_t>();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (size)
-		{
-			if (_reader.WouldReadPastEnd(size))
-				return false;
-			values = { (const T*)_reader.ReadBytes(size).Data(), len };
-		}
-		else
-		{
-			values = { nullptr, 0u };
-		}
-		return true;
+		return SerializeRange<T, uint16_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeLargeArray(TArrayView<const T>& values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint32_t>(values, expected, exact);
 	}
 	template<typename T>
 	bool SerializeChunk(TArrayView<const T>& values, size_t expected, bool exact)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		if (_reader.WouldReadPastEnd(sizeof(uint32_t)))
-			return false;
-		const uint32_t len = _reader.ReadValue<uint32_t>();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (size)
-		{
-			if (_reader.WouldReadPastEnd(size))
-				return false;
-			values = { (const T*)_reader.ReadBytes(size).Data(), len };
-		}
-		else
-		{
-			values = { nullptr, 0u };
-		}
-		return true;
+		return SerializeRange<T, uint64_t>(values, expected, exact);
 	}
 };
 
@@ -535,6 +564,18 @@ public:
 class MeasureStream
 {
 	ByteReader _reader;
+
+	template<typename T, typename Size>
+	void SkipRange()
+	{
+		_reader.SkipBytes(_reader.ReadValue<Size>() * sizeof(T));
+	}
+	template<typename T, typename Size>
+	bool SerializeRange(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		_reader.SkipBytes(_reader.ReadValue<Size>() * sizeof(T));
+		return true;
+	}
 public:
 	enum { IsWriting = 0 };
 	enum { IsReading = 0 };
@@ -556,14 +597,24 @@ public:
 		_reader.SkipBytes(sizeof(T));
 	}
 	template<typename T>
+	void SkipSmallArray()
+	{
+		SkipRange<T, uint8_t>();
+	}
+	template<typename T>
 	void SkipArray()
 	{
-		_reader.SkipBytes(_reader.ReadValue<uint16_t>() * sizeof(T));
+		SkipRange<T, uint16_t>();
+	}
+	template<typename T>
+	void SkipLargeArray()
+	{
+		SkipRange<T, uint32_t>();
 	}
 	template<typename T>
 	void SkipChunk()
 	{
-		_reader.SkipBytes(_reader.ReadValue<uint32_t>() * sizeof(T));
+		SkipRange<T, uint64_t>();
 	}
 
 	// Networking API.
@@ -622,16 +673,24 @@ public:
 		return true;
 	}
 	template<typename T>
+	bool SerializeSmallArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint8_t>(values, expected, exact);
+	}
+	template<typename T>
 	bool SerializeArray(const TArrayView<const T> values, size_t expected, bool exact)
 	{
-		_reader.SkipBytes(_reader.ReadValue<uint16_t>() * sizeof(T));
-		return true;
+		return SerializeRange<T, uint16_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeLargeArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint32_t>(values, expected, exact);
 	}
 	template<typename T>
 	bool SerializeChunk(const TArrayView<const T> values, size_t expected, bool exact)
 	{
-		_reader.SkipBytes(_reader.ReadValue<uint32_t>() * sizeof(T));
-		return true;
+		return SerializeRange<T, uint64_t>(values, expected, exact);
 	}
 };
 
@@ -639,6 +698,19 @@ public:
 class DynamicWriteStream
 {
 	TArray<uint8_t> _array = {};
+
+	template<typename T, typename Size>
+	void WriteRange(const TArrayView<const T> data)
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const size_t len = data.Size();
+		if (len > std::numeric_limits<Size>::max())
+			return;
+		Size l = (Size)len;
+		WriteValue<Size>(l);
+		if (l)
+			WriteBytes({ (uint8_t*)data.Data(), l * sizeof(T) });
+	}
 public:
 	inline void Clear() { _array.Clear(); }
 	inline void Reset() { _array.Reset(); }
@@ -668,20 +740,24 @@ public:
 		WriteBytes({ (uint8_t*)&T, sizeof(T) });
 	}
 	template<typename T>
+	void WriteSmallArray(const TArrayView<const T> data)
+	{
+		WriteRange<T, uint8_t>(data);
+	}
+	template<typename T>
 	void WriteArray(const TArrayView<const T> data)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint16_t size = data.Size();
-		WriteValue<uint16_t>(size);
-		WriteBytes({ (uint8_t*)data.Data(), size * sizeof(T) });
+		WriteRange<T, uint16_t>(data);
+	}
+	template<typename T>
+	void WriteLargeArray(const TArrayView<const T> data)
+	{
+		WriteRange<T, uint32_t>(data);
 	}
 	template<typename T>
 	void WriteChunk(const TArrayView<const T> data)
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint32_t size = data.Size();
-		WriteValue<uint32_t>(size);
-		WriteBytes({ (uint8_t*)data.Data(), size * sizeof(T) });
+		WriteRange<T, uint64_t>(data);
 	}
 };
 
@@ -692,9 +768,23 @@ class StaticReadBuffer
 	size_t _curPos = 0u;
 	TArray<uint8_t> _array = {};
 
+	template<typename T, typename Size>
+	TArrayView<const T> ReadRange()
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const Size size = ReadValue<Size>();
+		return size ? { (const T*)ReadBytes(size * sizeof(T)).Data(), size } : { nullptr, 0u };
+	}
+	template<typename T, typename Size>
+	TArrayView<const T> PeekRange()
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const Size size = PeekValue<Size>();
+		return size ? { (const T*)(PeekBytes(sizeof(Size) + size * sizeof(T)).Data() + sizeof(Size)), size } : { nullptr, 0u };
+	}
 	TArrayView<const uint8_t> InternalReadBytes(size_t bytes, bool skip)
 	{
-		if (_curPos + bytes >= Size())
+		if (!bytes || _curPos + bytes >= Size())
 			return { nullptr, 0u };
 
 		const TArrayView<const uint8_t> data = { &_array[_curPos], bytes };
@@ -746,18 +836,24 @@ public:
 		value = *(T*)ReadBytes(sizeof(T)).Data();
 	}
 	template<typename T>
+	TArrayView<const T> ReadSmallArray()
+	{
+		return ReadRange<T, uint8_t>();
+	}
+	template<typename T>
 	TArrayView<const T> ReadArray()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint16_t size = ReadValue<uint16_t>();
-		return { (const T*)ReadBytes(size * sizeof(T)).Data(), size };
+		return ReadRange<T, uint16_t>();
+	}
+	template<typename T>
+	TArrayView<const T> ReadLargeArray()
+	{
+		return ReadRange<T, uint32_t>();
 	}
 	template<typename T>
 	TArrayView<const T> ReadChunk()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint32_t size = ReadValue<uint32_t>();
-		return { (const T*)ReadBytes(size * sizeof(T)).Data(), size };
+		return ReadRange<T, uint64_t>();
 	}
 	TArrayView<const uint8_t> PeekBytes(size_t bytes)
 	{
@@ -781,18 +877,24 @@ public:
 		value = *(T*)PeekBytes(sizeof(T)).Data();
 	}
 	template<typename T>
+	TArrayView<const T> PeekSmallArray()
+	{
+		return PeekRange<T, uint8_t>();
+	}
+	template<typename T>
 	TArrayView<const T> PeekArray()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint16_t size = PeekValue<uint16_t>();
-		return { (const T*)(PeekBytes(sizeof(uint16_t) + size * sizeof(T)).Data() + sizeof(uint16_t)), size };
+		return PeekRange<T, uint16_t>();
+	}
+	template<typename T>
+	TArrayView<const T> PeekLargeArray()
+	{
+		return PeekRange<T, uint32_t>();
 	}
 	template<typename T>
 	TArrayView<const T> PeekChunk()
 	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		const uint32_t size = PeekValue<uint32_t>();
-		return { (const T*)(PeekBytes(sizeof(uint32_t) + size * sizeof(T)).Data() + sizeof(uint32_t)), size };
+		return PeekRange<T, uint64_t>();
 	}
 };
 

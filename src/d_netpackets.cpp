@@ -123,6 +123,13 @@ NETPACKET_EXECUTE(SayPacket)
 	return true;
 }
 
+NETPACKET_EXECUTE(RunSpecialPacket)
+{
+	if (!CheckCheatmode(player == consoleplayer))
+		P_ExecuteSpecial(players[player].mo->Level, _special, nullptr, players[player].mo, false, _args[0], _args[1], _args[2], _args[3], _args[4]);
+	return true;
+}
+
 class CheatPacket : public NetPacket
 {
 	DEFINE_NETPACKET_BASE(NetPacket)
@@ -201,49 +208,6 @@ public:
 	bool Execute(int pNum) override
 	{
 		cht_SetInv(&players[pNum], ItemCls, Amount, _bPastMax);
-		return true;
-	}
-};
-
-class RunSpecialPacket : public NetPacket
-{
-	DEFINE_NETPACKET(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2)
-	int16_t _special = 0;
-	int32_t _args[5] = {};
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_INT16(_special);
-		size_t len = std::size(_args);
-		if (Stream::Writing)
-		{
-			int i = len - 1;
-			for (; i >= 0; --i)
-			{
-				if (_args[i])
-					break;
-			}
-			len = (size_t)(i + 1);
-		}
-		TArrayView<const int32_t> data = { _args, len };
-		SERIALIZE_ARRAY_EXPECTING(int32_t, data, std::size(_args), false);
-		if (Stream::Reading)
-			memcpy(_args, data.Data(), data.Size());
-		return true;
-	}
-public:
-	RunSpecialPacket(int16_t special, const TArrayView<const int32_t>& args) : RunSpecialPacket()
-	{
-		_special = special;
-		memcpy(_args, args.Data(), min<size_t>(args.Size(), std::size(_args)));
-	}
-	bool ShouldWrite() const override
-	{
-		return _special > 0;
-	}
-	bool Execute(int pNum) override
-	{
-		if (!CheckCheatmode(pNum == consoleplayer))
-			P_ExecuteSpecial(players[pNum].mo->Level, _special, nullptr, players[pNum].mo, false, _args[0], _args[1], _args[2], _args[3], _args[4]);
 		return true;
 	}
 };

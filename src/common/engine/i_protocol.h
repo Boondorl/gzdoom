@@ -61,6 +61,7 @@
 #define DEFINE_NETPACKET_EMPTY(cls,	id)		class cls : public EmptyPacket	{ DEFINE_NETPACKET(cls, EmptyPacket,	id, 0)	}
 #define DEFINE_NETPACKET_INT8(cls,	id)		class cls : public Int8Packet	{ DEFINE_NETPACKET(cls, Int8Packet,		id, 1)	public: cls(int8_t value)			: cls() { Value = value; } }
 #define DEFINE_NETPACKET_UINT8(cls, id)		class cls : public UInt8Packet	{ DEFINE_NETPACKET(cls, UInt8Packet,	id, 1)	public: cls(uint8_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_BOOL(cls, id)		class cls : public BoolPacket	{ DEFINE_NETPACKET(cls, BoolPacket,		id, 1)	public: cls(bool value)				: cls() { Value = value; } }
 #define DEFINE_NETPACKET_INT16(cls, id)		class cls : public Int16Packet	{ DEFINE_NETPACKET(cls, Int16Packet,	id, 1)	public: cls(int16_t value)			: cls() { Value = value; } }
 #define DEFINE_NETPACKET_UINT16(cls, id)	class cls : public UInt16Packet	{ DEFINE_NETPACKET(cls, UInt16Packet,	id, 1)	public: cls(uint16_t value)			: cls() { Value = value; } }
 #define DEFINE_NETPACKET_INT32(cls, id)		class cls : public Int32Packet	{ DEFINE_NETPACKET(cls, Int32Packet,	id, 1)	public: cls(int32_t value)			: cls() { Value = value; } }
@@ -271,20 +272,39 @@
 				value = tValue;							\
 		} while (0)
 
-#define SERIALIZE_ARRAY_EXPECTING(type, value, len, exact)			\
+#define SERIALIZE_SMALL_ARRAY_INTERNAL(type, value, len, exact)			\
+		do																\
+		{																\
+			TArrayView<const type> rValue;								\
+			IF_WRITING()												\
+				rValue = value;											\
+			if (!stream.SerializeSmallArray<type>(rValue, len, exact))	\
+				return false;											\
+			++argCount;													\
+			IF_READING()												\
+				value = rValue;											\
+		} while (0)
+
+#define SERIALIZE_ARRAY_INTERNAL(type, value, len, exact)			\
 		do															\
 		{															\
-			TArrayView<const type> aValue;							\
+			TArrayView<const type> rValue;							\
 			IF_WRITING()											\
-				aValue = value;										\
-			if (!stream.SerializeArray<type>(aValue, len, exact))	\
+				rValue = value;										\
+			if (!stream.SerializeArray<type>(rValue, len, exact))	\
 				return false;										\
 			++argCount;												\
 			IF_READING()											\
-				value = aValue;										\
+				value = rValue;										\
 		} while (0)
 
-#define SERIALIZE_ARRAY(type, value)	SERIALIZE_ARRAY_EXPECTING(type, value, 0u, false)
+#define SERIALIZE_SMALL_ARRAY_EXPECTING(value, len, exact)	SERIALIZE_SMALL_ARRAY_INTERNAL(decltype(value[0]), value, len, exact)
+#define SERIALIZE_SMALL_ARRAY(value)						SERIALIZE_SMALL_ARRAY_EXPECTING(value, 0u, false)
+#define SERIALIZE_ARRAY_EXPECTING(value, len, exact)		SERIALIZE_ARRAY_INTERNAL(decltype(value[0]), value, len, exact)
+#define SERIALIZE_ARRAY(value)								SERIALIZE_ARRAY_EXPECTING(value, 0u, false)
+
+#undef SERIALIZE_SMALL_ARRAY_INTERNAL
+#undef SERIALIZE_ARRAY_INTERNAL
 
 class NetPacket
 {
@@ -341,6 +361,17 @@ protected:
 	DEFINE_NETPACKET_SERIALIZER()
 	{
 		SERIALIZE_UINT8(Value);
+		return true;
+	}
+};
+class BoolPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket)
+protected:
+	bool Value = false;
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_BOOL(Value);
 		return true;
 	}
 };

@@ -134,6 +134,43 @@ public:
 	}
 };
 
+class RunSpecialPacket : public NetPacket
+{
+	DEFINE_NETPACKET(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2)
+	int16_t _special = 0;
+	int32_t _args[5] = {};
+	DEFINE_NETPACKET_SERIALIZER()
+	{
+		SERIALIZE_INT16(_special);
+		size_t len = std::size(_args);
+		IF_WRITING()
+		{
+			int i = len - 1;
+			for (; i >= 0; --i)
+			{
+				if (_args[i])
+					break;
+			}
+			len = (size_t)(i + 1);
+		}
+		TArrayView<const int32_t> data = { _args, len };
+		SERIALIZE_SMALL_ARRAY_EXPECTING(data, std::size(_args), false);
+		IF_READING()
+			memcpy(_args, data.Data(), data.Size());
+		return true;
+	}
+public:
+	RunSpecialPacket(int16_t special, const TArrayView<const int32_t>& args) : RunSpecialPacket()
+	{
+		_special = special;
+		memcpy(_args, args.Data(), min<size_t>(args.Size(), std::size(_args)));
+	}
+	bool ShouldWrite() const override
+	{
+		return _special > 0;
+	}
+};
+
 class NetEventPacket : public NetPacket
 {
 	DEFINE_NETPACKET(NetEventPacket, NetPacket, DEM_NETEVENT, 3)
