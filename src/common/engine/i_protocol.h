@@ -34,617 +34,8 @@
 #ifndef __I_PROTOCOL_H__
 #define __I_PROTOCOL_H__
 
-#include "tarray.h"
-#include "zstring.h"
+#include "i_bytestream.h"
 #include "engineerrors.h"
-
-// Byte streams.
-
-class ByteWriter
-{
-	const TArrayView<uint8_t> _buffer = { nullptr, 0u };
-	size_t _curPos = 0u;
-public:
-	ByteWriter(const TArrayView<uint8_t> buffer) : _buffer(buffer) {}
-
-	inline bool WouldWritePastEnd(size_t bytes) const { return _curPos + bytes >= Size(); }
-	inline size_t GetWrittenBytes() const { return _curPos; }
-	inline TArrayView<uint8_t> GetWrittenData() const { return { Data(), _curPos }; }
-	inline TArrayView<uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
-	inline uint8_t* Data() const { return _buffer.Data(); }
-	inline size_t Size() const { return _buffer.Size(); }
-
-	void Reset()
-	{
-		_curPos = 0u;
-	}
-	void SkipBytes(size_t bytes)
-	{
-		assert(_curPos + bytes < Size());
-		_curPos += bytes;
-	}
-	void WriteBytes(const TArrayView<const uint8_t> bytes)
-	{
-		memcpy(&_buffer[_curPos], bytes.Data(), bytes.Size());
-		SkipBytes(bytes.Size());
-	}
-	template<typename T>
-	void WriteValue(T value)
-	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		*(T*)&buffer[_curPos] = T;
-		SkipBytes(sizeof(T));
-	}
-	template<typename T>
-	void WriteType(const T& value)
-	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		*(T*)&buffer[_curPos] = T;
-		SkipBytes(sizeof(T));
-	}
-};
-
-class ByteReader
-{
-	const TArrayView<const uint8_t> _buffer = { nullptr, 0u };
-	size_t _curPos = 0u;
-public:
-	ByteReader(const TArrayView<const uint8_t> buffer) : _buffer(buffer) {}
-
-	inline bool WouldReadPastEnd(size_t bytes) const { return _curPos + bytes >= Size(); }
-	inline size_t GetReadBytes() const { return _curPos; }
-	inline TArrayView<const uint8_t> GetReadData() const { return { Data(), _curPos }; }
-	inline TArrayView<const uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
-	inline const uint8_t* Data() const { return _buffer.Data(); }
-	inline size_t Size() const { return _buffer.Size(); }
-
-	void Reset()
-	{
-		_curPos = 0u;
-	}
-	void SkipBytes(size_t bytes)
-	{
-		assert(_curPos + bytes < Size());
-		_curPos += bytes;
-	}
-	TArrayView<const uint8_t> ReadBytes(size_t bytes)
-	{
-		const TArrayView<const uint8_t> view = { &_buffer[_curPos], bytes };
-		SkipBytes(bytes);
-		return view;
-	}
-	template<typename T>
-	T ReadValue()
-	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		return *(T*)ReadBytes(sizeof(T)).Data();
-	}
-	template<typename T>
-	void ReadType(T& value)
-	{
-		static_assert(std::is_trivially_copyable_v<T>);
-		value = *(T*)ReadBytes(sizeof(T)).Data();
-	}
-};
-
-// Byte stream handlers.
-// NOTE: Strings are intentionally NOT serialized with their null terminators as this is
-// a completely unreliable way of determining their length (malformed strings will mess with buffers in
-// unpredictable ways). Instead they're serialized as arrays of chars. This is not an oversight, please do
-// not "fix" this as FString itself also automatically adds a null terminator when constructing from a
-// char array.
-
-class WriteStream
-{
-	ByteWriter _writer;
-public:
-	enum { IsWriting = 1 };
-	enum { IsReading = 0 };
-
-	WriteStream(const TArrayView<uint8_t> buffer) : _writer(buffer) {}
-
-	inline void Reset() { _writer.Reset(); }
-	inline size_t GetWrittenBytes() const { return _writer.GetWrittenBytes(); }
-	inline TArrayView<uint8_t> GetWrittenData() const { return _writer.GetWrittenData(); }
-	inline TArrayView<uint8_t> GetRemainingData() const { return _writer.GetRemainingData(); }
-	inline size_t Size() const { return _writer.Size(); }
-	inline uint8_t* Data() const { return _writer.Data(); }
-
-	bool SerializeInt8(int8_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(int8_t)))
-			return false;
-		_writer.WriteValue<int8_t>(value);
-		return true;
-	}
-	bool SerializeUInt8(uint8_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(uint8_t)))
-			return false;
-		_writer.WriteValue<uint8_t>(value);
-		return true;
-	}
-	bool SerializeInt16(int16_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(int16_t)))
-			return false;
-		_writer.WriteValue<int16_t>(value);
-		return true;
-	}
-	bool SerializeUInt16(uint16_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(uint16_t)))
-			return false;
-		_writer.WriteValue<uint16_t>(value);
-		return true;
-	}
-	bool SerializeInt32(int32_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(int32_t)))
-			return false;
-		_writer.WriteValue<int32_t>(value);
-		return true;
-	}
-	bool SerializeUInt32(uint32_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(uint32_t)))
-			return false;
-		_writer.WriteValue<uint32_t>(value);
-		return true;
-	}
-	bool SerializeInt64(int64_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(int64_t)))
-			return false;
-		_writer.WriteValue<int64_t>(value);
-		return true;
-	}
-	bool SerializeUInt64(uint64_t value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(uint64_t)))
-			return false;
-		_writer.WriteValue<uint64_t>(value);
-		return true;
-	}
-	bool SerializeBool(bool value)
-	{
-		return SerializeUInt8((uint8_t)value);
-	}
-	bool SerializeString(const FString& str)
-	{
-		return SerializeArray<char>({ str.GetChars(), str.Len() }, 0u, false);
-	}
-	template<typename T>
-	bool SerializeType(const T& value)
-	{
-		if (_writer.WouldWritePastEnd(sizeof(T)))
-			return false;
-		_writer.WriteType<T>(value);
-		return true;
-	}
-	template<typename T>
-	bool SerializeArray(const TArrayView<const T> values, size_t expected, bool exact)
-	{
-		const size_t len = values.Size();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (_writer.WouldWritePastEnd((sizeof(uint16_t) + size)))
-			return false;
-		const uint16_t l = (uint16_t)len;
-		_writer.WriteValue<uint16_t>(l);
-		if (size)
-		{
-			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
-			_writer.WriteBytes(bytes);
-		}
-		return true;
-	}
-	template<typename T>
-	bool SerializeChunk(const TArrayView<const T> values, size_t expected, bool exact)
-	{
-		const size_t len = values.Size();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (_writer.WouldWritePastEnd((sizeof(uint32_t) + size)))
-			return false;
-		const uint32_t l = (uint32_t)len;
-		_writer.WriteValue<uint32_t>(l);
-		if (size)
-		{
-			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
-			_writer.WriteBytes(bytes);
-		}
-		return true;
-	}
-};
-
-class ReadStream
-{
-	ByteReader _reader;
-public:
-	enum { IsWriting = 0 };
-	enum { IsReading = 1 };
-
-	ReadStream(const TArrayView<const uint8_t> buffer) : _reader(buffer) {}
-	
-	inline void Reset() { _reader.Reset(); }
-	inline size_t GetReadBytes() const { return _reader.GetReadBytes(); }
-	inline TArrayView<const uint8_t> GetReadData() const { return _reader.GetReadData(); }
-	inline TArrayView<const uint8_t> GetRemainingData() const { return _reader.GetRemainingData(); }
-	inline size_t Size() const { return _reader.Size(); }
-	inline const uint8_t* Data() const { return _reader.Data(); }
-
-	// Direct read API. This has no safety checking so use with extreme caution.
-	FString ReadString()
-	{
-		const auto data = ReadArray<char>();
-		return FString(data.Data(), data.Size());
-	}
-	template<typename T>
-	T ReadValue()
-	{
-		return _reader.ReadValue<T>();
-	}
-	template<typename T>
-	void ReadType(T& value)
-	{
-		_reader.ReadType<T>(value);
-	}
-	template<typename T>
-	TArrayView<const T> ReadArray()
-	{
-		const uint16_t len = _reader.ReadValue<uint16_t>();
-		return { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len };
-	}
-	template<typename T>
-	TArrayView<const T> ReadChunk()
-	{
-		const uint32_t len = _reader.ReadValue<uint32_t>();
-		return { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len };
-	}
-
-	// Networking API.
-	bool SerializeInt8(int8_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(int8_t)))
-			return false;
-		value = _reader.ReadValue<int8_t>();
-		return true;
-	}
-	bool SerializeUInt8(uint8_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint8_t)))
-			return false;
-		value = _reader.ReadValue<uint8_t>();
-		return true;
-	}
-	bool SerializeInt16(int16_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(int16_t)))
-			return false;
-		value = _reader.ReadValue<int16_t>();
-		return true;
-	}
-	bool SerializeUInt16(uint16_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint16_t)))
-			return false;
-		value = _reader.ReadValue<uint16_t>();
-		return true;
-	}
-	bool SerializeInt32(int32_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(int32_t)))
-			return false;
-		value = _reader.ReadValue<int32_t>();
-		return true;
-	}
-	bool SerializeUInt32(uint32_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint32_t)))
-			return false;
-		value = _reader.ReadValue<uint32_t>();
-		return true;
-	}
-	bool SerializeInt64(int64_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(int64_t)))
-			return false;
-		value = _reader.ReadValue<int64_t>();
-		return true;
-	}
-	bool SerializeUInt64(uint64_t& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint64_t)))
-			return false;
-		value = _reader.ReadValue<uint64_t>();
-		return true;
-	}
-	bool SerializeBool(bool& value)
-	{
-		uint8_t val;
-		if (!SerializeUInt8(val))
-			return false;
-		value = (bool)val;
-		return true;
-	}
-	bool SerializeString(FString& str)
-	{
-		TArrayView<const char> data;
-		if (!SerializeArray<char>(data, 0u, false))
-			return false;
-		str = FString(data.Data(), data.Size());
-		return true;
-	}
-	template<typename T>
-	bool SerializeType(T& value)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(T)))
-			return false;
-		_reader.ReadType<T>(value);
-		return true;
-	}
-	template<typename T>
-	bool SerializeArray(TArrayView<const T>& values, size_t expected, bool exact)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint16_t)))
-			return false;
-		const uint16_t len = _reader.ReadValue<uint16_t>();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (size)
-		{
-			if (_reader.WouldReadPastEnd(size))
-				return false;
-			values = { (const T*)_reader.ReadBytes(size).Data(), len };
-		}
-		else
-		{
-			values = { nullptr, 0u };
-		}
-		return true;
-	}
-	template<typename T>
-	bool SerializeChunk(TArrayView<const T>& values, size_t expected, bool exact)
-	{
-		if (_reader.WouldReadPastEnd(sizeof(uint32_t)))
-			return false;
-		const uint32_t len = _reader.ReadValue<uint32_t>();
-		if (expected && ((!exact && len > expected) || (exact && len != expected)))
-			return false;
-		const size_t size = len * sizeof(T);
-		if (size)
-		{
-			if (_reader.WouldReadPastEnd(size))
-				return false;
-			values = { (const T*)_reader.ReadBytes(size).Data(), len };
-		}
-		else
-		{
-			values = { nullptr, 0u };
-		}
-		return true;
-	}
-};
-
-// Useful for getting the size of a packet.
-class MeasureStream
-{
-	ByteReader _reader;
-public:
-	enum { IsWriting = 0 };
-	enum { IsReading = 0 };
-
-	MeasureStream(const TArrayView<const uint8_t> stream) : _reader(stream) {}
-
-	inline void Reset() { _reader.Reset(); }
-	inline size_t GetSkippedBytes() const { return _reader.GetReadBytes(); }
-	inline size_t Size() const { return _reader.Size(); }
-
-	// Direct skipping API.
-	void SkipString()
-	{
-		SkipArray<char>();
-	}
-	template<typename T>
-	void SkipValue()
-	{
-		_reader.SkipBytes(sizeof(T));
-	}
-	template<typename T>
-	void SkipArray()
-	{
-		_reader.SkipBytes(_reader.ReadValue<uint16_t>() * sizeof(T));
-	}
-	template<typename T>
-	void SkipChunk()
-	{
-		_reader.SkipBytes(_reader.ReadValue<uint32_t>() * sizeof(T));
-	}
-
-	// Networking API.
-	bool SerializeInt8(int8_t value)
-	{
-		_reader.SkipBytes(sizeof(int8_t));
-		return true;
-	}
-	bool SerializeUInt8(uint8_t value)
-	{
-		_reader.SkipBytes(sizeof(uint8_t));
-		return true;
-	}
-	bool SerializeInt16(int16_t value)
-	{
-		_reader.SkipBytes(sizeof(int16_t));
-		return true;
-	}
-	bool SerializeUInt16(uint16_t value)
-	{
-		_reader.SkipBytes(sizeof(uint16_t));
-		return true;
-	}
-	bool SerializeInt32(int32_t value)
-	{
-		_reader.SkipBytes(sizeof(int32_t));
-		return true;
-	}
-	bool SerializeUInt32(uint32_t value)
-	{
-		_reader.SkipBytes(sizeof(uint32_t));
-		return true;
-	}
-	bool SerializeInt64(int64_t value)
-	{
-		_reader.SkipBytes(sizeof(int64_t));
-		return true;
-	}
-	bool SerializeUInt64(uint64_t value)
-	{
-		_reader.SkipBytes(sizeof(uint64_t));
-		return true;
-	}
-	bool SerializeBool(bool value)
-	{
-		return SerializeUInt8(0u);
-	}
-	bool SerializeString(const FString& str)
-	{
-		return SerializeArray<char>({ nullptr, 0u }, 0u, false);
-	}
-	template<typename T>
-	bool SerializeType(const T& value)
-	{
-		_reader.SkipBytes(sizeof(T));
-		return true;
-	}
-	template<typename T>
-	bool SerializeArray(const TArrayView<const T> values, size_t expected, bool exact)
-	{
-		_reader.SkipBytes(_reader.ReadValue<uint16_t>() * sizeof(T));
-		return true;
-	}
-	template<typename T>
-	bool SerializeChunk(const TArrayView<const T> values, size_t expected, bool exact)
-	{
-		_reader.SkipBytes(_reader.ReadValue<uint32_t>() * sizeof(T));
-		return true;
-	}
-};
-
-// For quickly writing chunks of data off into dynamic buffers.
-class DynamicWriteStream
-{
-	TArray<uint8_t> _array = {};
-public:
-	inline void Clear() { _array.Clear(); }
-	inline void Reset() { _array.Reset(); }
-	inline TArrayView<const uint8_t> GetView() const { return { Data(), Size() }; }
-	inline size_t Size() const { return _array.Size(); }
-	inline const uint8_t* Data() const { return _array.Data(); }
-
-	void WriteBytes(const TArrayView<const uint8_t> bytes)
-	{
-		for (auto byte : bytes)
-			_array.Push(byte);
-	}
-	void WriteString(const FString& value)
-	{
-		WriteArray<char>({ value.GetChars(), value.Len() });
-	}
-	template<typename T>
-	void WriteValue(T value)
-	{
-		WriteBytes({ (uint8_t*)&T, sizeof(T) });
-	}
-	template<typename T>
-	void WriteType(const T& value)
-	{
-		WriteBytes({ (uint8_t*)&T, sizeof(T) });
-	}
-	template<typename T>
-	void WriteArray(const TArrayView<const T> data)
-	{
-		const uint16_t size = data.Size();
-		WriteValue<uint16_t>(size);
-		WriteBytes({ (uint8_t*)data.Data(), size * sizeof(T) });
-	}
-	template<typename T>
-	void WriteChunk(const TArrayView<const T> data)
-	{
-		const uint32_t size = data.Size();
-		WriteValue<uint32_t>(size);
-		WriteBytes({ (uint8_t*)data.Data(), size * sizeof(T) });
-	}
-};
-
-// Storage to a static buffer of any size that the object itself has
-// ownership of. Makes TArrayViews into dynamic arrays significantly safer.
-class StaticReadBuffer
-{
-	size_t _curPos = 0u;
-	TArray<uint8_t> _array = {};
-public:
-	StaticReadBuffer() = default;
-	StaticReadBuffer(const TArray<uint8_t>& array) : _array(array) {}
-	StaticReadBuffer(const TArrayView<const uint8_t> data)
-	{
-		for (size_t i = 0u; i < data.Size(); ++i)
-			_array.Push(data[i]);
-	}
-
-	inline void Reset() { _curPos = 0u; }
-	inline size_t GetReadBytes() const { return _curPos; }
-	inline TArrayView<const uint8_t> GetView() const { return { Data(), Size() }; }
-	inline TArrayView<const uint8_t> GetReadData() const { return { Data(), _curPos }; }
-	inline TArrayView<const uint8_t> GetRemainingData() const { return { &_array[_curPos], Size() - _curPos }; }
-	inline size_t Size() const { return _array.Size(); }
-	inline const uint8_t* Data() const { return _array.Data(); }
-
-	void SkipBytes(size_t bytes)
-	{
-		assert(_curPos + bytes < Size());
-		_curPos += bytes;
-	}
-	TArrayView<const uint8_t> ReadBytes(size_t bytes)
-	{
-		if (_curPos + bytes >= Size())
-			return { nullptr, 0u };
-
-		const TArrayView<const uint8_t> data = { &_array[_curPos], bytes };
-		SkipBytes(bytes);
-		return data;
-	}
-	void ReadString(FString& value)
-	{
-		const auto data = ReadArray<char>();
-		value = FString(data.Data(), data.Size());
-	}
-	template<typename T>
-	T ReadValue()
-	{
-		return *(T*)ReadBytes(sizeof(T)).Data();
-	}
-	template<typename T>
-	void ReadType(T& value)
-	{
-		value = *(T*)ReadBytes(sizeof(T)).Data();
-	}
-	template<typename T>
-	TArrayView<const T> ReadArray()
-	{
-		const uint16_t size = ReadValue<uint16_t>();
-		return { (const T*)ReadBytes(size * sizeof(T)).Data(), size };
-	}
-	template<typename T>
-	TArrayView<const T> ReadChunk()
-	{
-		const uint32_t size = ReadValue<uint32_t>();
-		return { (const T*)ReadBytes(size * sizeof(T)).Data(), size };
-	}
-};
 
 #define REGISTER_NETPACKET(cls)																						\
 		if (NetPacketFactory.CheckKey(cls::Type) != nullptr)														\
@@ -667,18 +58,18 @@ public:
 			cls() : parentCls(id, argCount) {}
 
 // Easy setup macros for base packet types.
-#define DEFINE_NETPACKET_EMPTY(cls, id)		class cls : public EmptyPacket { DEFINE_NETPACKET(cls, EmptyPacket, id, 0) }
-#define DEFINE_NETPACKET_INT8(cls, id)		class cls : public Int8Packet { DEFINE_NETPACKET(cls, Int8Packet, id, 1) public: cls(int8_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_UINT8(cls, id)		class cls : public UInt8Packet { DEFINE_NETPACKET(cls, UInt8Packet, id, 1) public: cls(uint8_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_INT16(cls, id)		class cls : public Int16Packet { DEFINE_NETPACKET(cls, Int16Packet, id, 1) public: cls(int16_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_UINT16(cls, id)	class cls : public UInt16Packet { DEFINE_NETPACKET(cls, UInt16Packet, id, 1) public: cls(uint16_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_INT32(cls, id)		class cls : public Int32Packet { DEFINE_NETPACKET(cls, Int32Packet, id, 1) public: cls(int32_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_UINT32(cls, id)	class cls : public UInt32Packet { DEFINE_NETPACKET(cls, UInt32Packet, id, 1) public: cls(uint32_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_INT64(cls, id)		class cls : public Int64Packet { DEFINE_NETPACKET(cls, Int64Packet, id, 1) public: cls(int64_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_UINT64(cls, id)	class cls : public UInt64Packet { DEFINE_NETPACKET(cls, UInt64Packet, id, 1) public: cls(uint64_t value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_FLOAT(cls, id)		class cls : public FloatPacket { DEFINE_NETPACKET(cls, FloatPacket, id, 1) public: cls(float value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_DOUBLE(cls, id)	class cls : public DoublePacket { DEFINE_NETPACKET(cls, DoublePacket, id, 1) public: cls(double value) : cls() { Value = value; } }
-#define DEFINE_NETPACKET_STRING(cls, id)	class cls : public StringPacket { DEFINE_NETPACKET(cls, StringPacket, id, 1) public: cls(const FString& value) : cls() { Value = value; } }
+#define DEFINE_NETPACKET_EMPTY(cls,	id)		class cls : public EmptyPacket	{ DEFINE_NETPACKET(cls, EmptyPacket,	id, 0)	}
+#define DEFINE_NETPACKET_INT8(cls,	id)		class cls : public Int8Packet	{ DEFINE_NETPACKET(cls, Int8Packet,		id, 1)	public: cls(int8_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT8(cls, id)		class cls : public UInt8Packet	{ DEFINE_NETPACKET(cls, UInt8Packet,	id, 1)	public: cls(uint8_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT16(cls, id)		class cls : public Int16Packet	{ DEFINE_NETPACKET(cls, Int16Packet,	id, 1)	public: cls(int16_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT16(cls, id)	class cls : public UInt16Packet	{ DEFINE_NETPACKET(cls, UInt16Packet,	id, 1)	public: cls(uint16_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT32(cls, id)		class cls : public Int32Packet	{ DEFINE_NETPACKET(cls, Int32Packet,	id, 1)	public: cls(int32_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT32(cls, id)	class cls : public UInt32Packet { DEFINE_NETPACKET(cls, UInt32Packet,	id, 1)	public: cls(uint32_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_INT64(cls, id)		class cls : public Int64Packet	{ DEFINE_NETPACKET(cls, Int64Packet,	id, 1)	public: cls(int64_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_UINT64(cls, id)	class cls : public UInt64Packet { DEFINE_NETPACKET(cls, UInt64Packet,	id, 1)	public: cls(uint64_t value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_FLOAT(cls, id)		class cls : public FloatPacket	{ DEFINE_NETPACKET(cls, FloatPacket,	id, 1)	public: cls(float value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_DOUBLE(cls, id)	class cls : public DoublePacket { DEFINE_NETPACKET(cls, DoublePacket,	id, 1)	public: cls(double value)			: cls() { Value = value; } }
+#define DEFINE_NETPACKET_STRING(cls, id)	class cls : public StringPacket { DEFINE_NETPACKET(cls, StringPacket,	id, 1)	public: cls(const FString& value)	: cls() { Value = value; } }
 
 #define NETPACKET_EXECUTE(cls)			\
 		bool cls::Execute(int player)
@@ -717,7 +108,18 @@ public:
 				value = u8Value;					\
 		} while (0)
 
-#define SERIALIZE_BOOL(value)	SERIALIZE_UINT8(value)
+#define SERIALIZE_BOOL(value)					\
+		do										\
+		{										\
+			bool bValue;						\
+			if (Stream::IsWriting)				\
+				bValue = (bool)value;			\
+			if (!stream.SerializeBool(bValue))	\
+				return false;					\
+			++argCount;							\
+			if (Stream::IsReading)				\
+				value = bValue;					\
+		} while (0)
 
 #define SERIALIZE_INT16(value)						\
 		do											\
@@ -797,51 +199,46 @@ public:
 				value = u64Value;					\
 		} while (0)
 
-#define SERIALIZE_FLOAT(value)						\
-		do											\
-		{											\
-			union {									\
-				float f;							\
-				uint32_t u;							\
-			} temp;									\
-			if (Stream::IsWriting)					\
-				temp.f = (float)value;				\
-			if (!stream.SerializeUInt32(temp.u))	\
-				return false;						\
-			++argCount;								\
-			if (Stream::IsReading)					\
-				value = temp.f;						\
+#define SERIALIZE_FLOAT(value)					\
+		do										\
+		{										\
+			float fValue;						\
+			if (Stream::IsWriting)				\
+				fValue = (float)value;			\
+			if (!stream.SerializeFloat(fValue))	\
+				return false;					\
+			++argCount;							\
+			if (Stream::IsReading)				\
+				value = fValue;					\
 		} while (0)
 
 #define SERIALIZE_DOUBLE(value)						\
 		do											\
 		{											\
-			union {									\
-				double d;							\
-				uint64_t u;							\
-			} temp;									\
+			double dValue;							\
 			if (Stream::IsWriting)					\
-				temp.d = (double)value;				\
-			if (!stream.SerializeUInt64(temp.u))	\
+				dValue = (double)value;				\
+			if (!stream.SerializeDouble(dValue))	\
 				return false;						\
 			++argCount;								\
 			if (Stream::IsReading)					\
-				value = temp.d;						\
+				value = dValue;						\
 		} while (0)
 
-#define SERIALIZE_STRING(value)									\
-		do														\
-		{														\
-			TArrayView<const char> str;							\
-			if (Stream::Writing)								\
-				str = { value.GetChars(), value.Len() };		\
-			if (!stream.SerializeArray<char>(str, 0u, false))	\
-				return false;									\
-			++argCount;											\
-			if (Stream::Reading)								\
-				value = FString(str.Data(), str.Size());		\
+#define SERIALIZE_STRING(value)					\
+		do										\
+		{										\
+			FString str;						\
+			if (Stream::Writing)				\
+				str = value;					\
+			if (!stream.SerializeString(str))	\
+				return false;					\
+			++argCount;							\
+			if (Stream::Reading)				\
+				value = str;					\
 		} while (0)
 
+// Boon TODO: This definitely needs to be fixed lol
 #define SERIALIZE_NAME(value)									\
 		do														\
 		{														\
@@ -858,12 +255,17 @@ public:
 				value = FString(str.Data(), str.Size());		\
 		} while (0)
 
-#define SERIALIZE_TYPE(type, value)					\
-		do											\
-		{											\
-			if (!stream.SerializeType<type>(value))	\
-				return false;						\
-			++argCount;								\
+#define SERIALIZE_TYPE(type, value)						\
+		do												\
+		{												\
+			type tValue;								\
+			if (Stream::IsWriting)						\
+				tValue = (type)value;					\
+			if (!stream.SerializeType<type>(tValue))	\
+				return false;							\
+			++argCount;									\
+			if (Stream::IsReading)						\
+				value = tValue;							\
 		} while (0)
 
 #define SERIALIZE_ARRAY(type, data)								\
