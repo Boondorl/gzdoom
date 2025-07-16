@@ -26,6 +26,7 @@
 #include "d_player.h"
 #include "i_interface.h"
 #include "gi.h"
+#include "m_cheat.h"
 
 void InitializeDoomPackets()
 {
@@ -35,9 +36,9 @@ void InitializeDoomPackets()
 	REGISTER_NETPACKET(RevertCameraPacket);
 }
 
-EDemoCommand GetPacketType(const TArrayView<const uint8_t> stream)
+EDemoCommand GetPacketType(const ReadStream& stream)
 {
-	return stream.Size() ? static_cast<EDemoCommand>(stream[0]) : DEM_INVALID;
+	return stream.Size() ? static_cast<EDemoCommand>(stream.PeekValue<uint8_t>()) : DEM_INVALID;
 }
 
 static bool ValidClass(const FString& cls, FName type = NAME_Actor)
@@ -78,6 +79,7 @@ NETPACKET_EXECUTE(UseAllPacket)
 			item = next;
 		}
 	}
+	return true;
 }
 
 NETPACKET_EXECUTE(ChangeMusicPacket)
@@ -104,11 +106,11 @@ NETPACKET_EXECUTE(GiveCheatPacket)
 		return true; // Non-fatal, just means someone is about to desync.
 	}
 
-	cht_Give(&players[pNum], ItemCls, Amount);
-	if (pNum != consoleplayer)
+	cht_Give(&players[player], ItemCls, Amount);
+	if (player != consoleplayer)
 	{
 		FString message = GStrings.GetString("TXT_X_CHEATS");
-		message.Substitute("%s", players[pNum].userinfo.GetName());
+		message.Substitute("%s", players[player].userinfo.GetName());
 		Printf("%s: give %s\n", message.GetChars(), ItemCls.GetChars());
 	}
 	return true;

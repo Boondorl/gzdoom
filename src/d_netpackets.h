@@ -114,6 +114,8 @@ DEFINE_NETPACKET_EMPTY(ConversationNullPacket, DEM_CONVNULL);
 DEFINE_NETPACKET_EMPTY(PausePacket, DEM_PAUSE);
 
 DEFINE_NETPACKET_UINT8(KickPacket, DEM_KICK);
+DEFINE_NETPACKET_UINT8(AddControllerPacket, DEM_ADDCONTROLLER);
+DEFINE_NETPACKET_UINT8(RemoveControllerPacket, DEM_DELCONTROLLER);
 
 DEFINE_NETPACKET_INT16(ChangeSkillPacket, DEM_CHANGESKILL);
 
@@ -292,7 +294,7 @@ public:
 	}
 };
 
-EDemoCommand GetPacketType(const TArrayView<const uint8_t> stream);
+EDemoCommand GetPacketType(const ReadStream& stream);
 void InitializeDoomPackets();
 
 #endif // __D_NETPACKET__

@@ -2231,10 +2231,10 @@ static int RemoveClass(FLevelLocals *Level, const PClass *cls)
 //		have already been read, and the stream is positioned
 //		at the beginning of the command's actual data.
 
-void Net_SkipCommands(TArrayView<const uint8_t>& stream)
+void Net_SkipCommands(ReadStream& stream)
 {
 	EDemoCommand cmd;
-	while ((cmd = GetPacketType(stream)) != DEM_USERCMD && cmd != DEM_EMPTYUSERCMD)
+	while ((cmd = GetPacketType(stream.GetRemainingData())) != DEM_USERCMD && cmd != DEM_EMPTYUSERCMD)
 		SkipPacket(*CreatePacket(cmd), stream);
 }
 

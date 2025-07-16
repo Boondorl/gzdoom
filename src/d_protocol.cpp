@@ -88,7 +88,7 @@ void SkipUserCommand(TArrayView<const uint8_t>& stream)
 	}
 }
 
-void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic)
+void ReadUserCommand(ReadStream& stream, int player, int tic)
 {
 	const int ticMod = tic % BACKUPTICS;
 

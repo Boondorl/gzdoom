@@ -91,12 +91,9 @@ class ByteReader
 	const TArrayView<const uint8_t> _buffer = { nullptr, 0u };
 	size_t _curPos = 0u;
 
-	TArrayView<const uint8_t> InternalReadBytes(size_t bytes, bool skip)
+	TArrayView<const uint8_t> InternalReadBytes(size_t bytes) const
 	{
-		const TArrayView<const uint8_t> view = bytes ? TArrayView{ &_buffer[_curPos], bytes } : TArrayView<const uint8_t>{ nullptr, 0u };
-		if (skip)
-			SkipBytes(bytes);
-		return view;
+		return bytes ? TArrayView{ &_buffer[_curPos], bytes } : TArrayView<const uint8_t>{ nullptr, 0u };
 	}
 public:
 	ByteReader(const TArrayView<const uint8_t> buffer) : _buffer(buffer) {}
@@ -119,7 +116,9 @@ public:
 	}
 	TArrayView<const uint8_t> ReadBytes(size_t bytes)
 	{
-		return InternalReadBytes(bytes, true);
+		const auto data = InternalReadBytes(bytes);
+		SkipBytes(bytes);
+		return data;
 	}
 	template<typename T>
 	T ReadValue()
@@ -133,18 +132,18 @@ public:
 		static_assert(std::is_trivially_copyable_v<T>);
 		value = *(T*)ReadBytes(sizeof(T)).Data();
 	}
-	TArrayView<const uint8_t> PeekBytes(size_t bytes)
+	TArrayView<const uint8_t> PeekBytes(size_t bytes) const
 	{
-		return InternalReadBytes(bytes, false);
+		return InternalReadBytes(bytes);
 	}
 	template<typename T>
-	T PeekValue()
+	T PeekValue() const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		return *(T*)PeekBytes(sizeof(T)).Data();
 	}
 	template<typename T>
-	void PeekType(T& value)
+	void PeekType(T& value) const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		value = *(T*)PeekBytes(sizeof(T)).Data();
@@ -327,7 +326,7 @@ class ReadStream
 		return len ? { (T*)_reader.ReadBytes(len * sizeof(T)).Data(), len } : { nullptr, 0u };
 	}
 	template<typename T, typename Size>
-	TArrayView<const T> PeekRange()
+	TArrayView<const T> PeekRange() const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		const Size len = _reader.PeekValue<Size>();
@@ -406,38 +405,38 @@ public:
 	}
 
 	// Peeking API.
-	FString PeekString()
+	FString PeekString() const
 	{
 		const auto data = PeekChunk<char>();
 		return FString(data.Data(), data.Size());
 	}
 	template<typename T>
-	T PeekValue()
+	T PeekValue() const
 	{
 		return _reader.PeekValue<T>();
 	}
 	template<typename T>
-	void PeekType(T& value)
+	void PeekType(T& value) const
 	{
 		_reader.PeekType<T>(value);
 	}
 	template<typename T>
-	TArrayView<const T> PeekSmallArray()
+	TArrayView<const T> PeekSmallArray() const
 	{
 		return PeekRange<T, uint8_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekArray()
+	TArrayView<const T> PeekArray() const
 	{
 		return PeekRange<T, uint16_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekLargeArray()
+	TArrayView<const T> PeekLargeArray() const
 	{
 		return PeekRange<T, uint32_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekChunk()
+	TArrayView<const T> PeekChunk() const
 	{
 		return PeekRange<T, uint64_t>();
 	}
@@ -784,21 +783,18 @@ class StaticReadBuffer
 		return size ? { (const T*)ReadBytes(size * sizeof(T)).Data(), size } : { nullptr, 0u };
 	}
 	template<typename T, typename Size>
-	TArrayView<const T> PeekRange()
+	TArrayView<const T> PeekRange() const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		const Size size = PeekValue<Size>();
 		return size ? { (const T*)(PeekBytes(sizeof(Size) + size * sizeof(T)).Data() + sizeof(Size)), size } : { nullptr, 0u };
 	}
-	TArrayView<const uint8_t> InternalReadBytes(size_t bytes, bool skip)
+	TArrayView<const uint8_t> InternalReadBytes(size_t bytes) const
 	{
 		if (!bytes || _curPos + bytes >= Size())
 			return { nullptr, 0u };
 
-		const TArrayView<const uint8_t> data = { &_array[_curPos], bytes };
-		if (skip)
-			SkipBytes(bytes);
-		return data;
+		return { &_array[_curPos], bytes };
 	}
 public:
 	StaticReadBuffer() = default;
@@ -824,7 +820,9 @@ public:
 	}
 	TArrayView<const uint8_t> ReadBytes(size_t bytes)
 	{
-		return InternalReadBytes(bytes, true);
+		const auto data = InternalReadBytes(bytes);
+		SkipBytes(bytes);
+		return data;
 	}
 	void ReadString(FString& value)
 	{
@@ -863,44 +861,44 @@ public:
 	{
 		return ReadRange<T, uint64_t>();
 	}
-	TArrayView<const uint8_t> PeekBytes(size_t bytes)
+	TArrayView<const uint8_t> PeekBytes(size_t bytes) const
 	{
-		return InternalReadBytes(bytes, false);
+		return InternalReadBytes(bytes);
 	}
-	void PeekString(FString& value)
+	void PeekString(FString& value) const
 	{
 		const auto data = PeekChunk<char>();
 		value = FString(data.Data(), data.Size());
 	}
 	template<typename T>
-	T PeekValue()
+	T PeekValue() const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		return *(T*)PeekBytes(sizeof(T)).Data();
 	}
 	template<typename T>
-	void PeekType(T& value)
+	void PeekType(T& value) const
 	{
 		static_assert(std::is_trivially_copyable_v<T>);
 		value = *(T*)PeekBytes(sizeof(T)).Data();
 	}
 	template<typename T>
-	TArrayView<const T> PeekSmallArray()
+	TArrayView<const T> PeekSmallArray() const
 	{
 		return PeekRange<T, uint8_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekArray()
+	TArrayView<const T> PeekArray() const
 	{
 		return PeekRange<T, uint16_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekLargeArray()
+	TArrayView<const T> PeekLargeArray() const
 	{
 		return PeekRange<T, uint32_t>();
 	}
 	template<typename T>
-	TArrayView<const T> PeekChunk()
+	TArrayView<const T> PeekChunk() const
 	{
 		return PeekRange<T, uint64_t>();
 	}
