@@ -104,12 +104,13 @@
 #define NETPACKET_CONDITION(cls)		\
 		bool cls::ShouldWrite() const
 
-#define NETPACKET_SERIALIZE()																													\
-		protected:																																\
-			bool Serialize(WriteStream& stream, size_t& argCount)	override { return SerializeInternal<WriteStream>(stream, argCount);		}	\
-			bool Serialize(ReadStream& stream, size_t& argCount)	override { return SerializeInternal<ReadStream>(stream, argCount);		}	\
-			bool Serialize(MeasureStream& stream, size_t& argCount)	override { return SerializeInternal<MeasureStream>(stream, argCount);	}	\
-			template<typename Stream>																											\
+#define NETPACKET_SERIALIZE()																																\
+		protected:																																			\
+			bool Serialize(WriteStream& stream, size_t& argCount)			override { return SerializeInternal<WriteStream>(stream, argCount);			}	\
+			bool Serialize(DynamicWriteStream& stream, size_t& argCount)	override { return SerializeInternal<DynamicWriteStream>(stream, argCount);	}	\
+			bool Serialize(ReadStream& stream, size_t& argCount)			override { return SerializeInternal<ReadStream>(stream, argCount);			}	\
+			bool Serialize(MeasureStream& stream, size_t& argCount)			override { return SerializeInternal<MeasureStream>(stream, argCount);		}	\
+			template<typename Stream>																														\
 			bool SerializeInternal(Stream& stream, size_t& argCount)
 
 #define IF_WRITING()		if constexpr(Stream::IsWriting)
@@ -343,6 +344,7 @@ class NetPacket
 {
 protected:
 	virtual bool Serialize(WriteStream& stream, size_t& argCount) = 0;
+	virtual bool Serialize(DynamicWriteStream& stream, size_t& argCount) = 0;
 	virtual bool Serialize(ReadStream& stream, size_t& argCount) = 0;
 	virtual bool Serialize(MeasureStream& stream, size_t& argCount) = 0;
 public:
@@ -355,9 +357,10 @@ public:
 	virtual bool Execute(int player) = 0;
 	virtual bool ShouldWrite() const { return true; }
 
-	bool Read(const TArrayView<const uint8_t>& stream, size_t& read);
-	bool Write(const TArrayView<uint8_t>& stream, size_t& written);
-	bool Skip(const TArrayView<const uint8_t>& stream, size_t& skipped);
+	bool Read(ReadStream& stream);
+	bool Write(WriteStream& stream);
+	bool Write(DynamicWriteStream& stream);
+	bool Skip(ReadStream& stream);
 };
 
 // Common packet types for easier defining.
@@ -506,8 +509,9 @@ protected:
 extern TMap<uint8_t, std::unique_ptr<NetPacket>(*)()> NetPacketFactory;
 
 std::unique_ptr<NetPacket> CreatePacket(uint8_t type);
-void ReadPacket(NetPacket& packet, TArrayView<const uint8_t>& stream, int pNum = -1);
-void WritePacket(NetPacket& packet, TArrayView<uint8_t>& stream);
-void SkipPacket(NetPacket& packet, TArrayView<const uint8_t>& stream);
+void ReadPacket(NetPacket& packet, ReadStream& stream, int pNum = -1);
+void WritePacket(NetPacket& packet, WriteStream& stream);
+void WritePacket(NetPacket& packet, DynamicWriteStream& stream);
+void SkipPacket(NetPacket& packet, ReadStream& stream);
 
 #endif //__I_PROTOCOL_H__

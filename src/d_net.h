@@ -187,10 +187,10 @@ void TryRunTics (void);
 void Net_NewClientTic();
 void Net_Initialize();
 void Net_WritePacket(NetPacket& packet);
-EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
+EDemoCommand GetPacketType(ReadStream& stream);
 
-void Net_SkipCommands(TArrayView<const uint8_t>& stream);
-void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream);
+void Net_SkipCommands(ReadStream& stream);
+void Net_ReadCommands(int player, ReadStream& stream);
 
 void Net_PlayerReadiedUp(int player);
 bool Net_CheckCutsceneReady();

@@ -58,7 +58,7 @@ FSerializer& Serialize(FSerializer& arc, const char* key, usercmd_t& cmd, usercm
 	return arc;
 }
 
-void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, TArrayView<uint8_t>& stream)
+void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, WriteStream& stream)
 {
 	auto p = UserCommandPacket(cmd, basis);
 	if (!p.HasCommand())
@@ -74,7 +74,7 @@ void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, TArrayView<uint8_t
 
 // Reads through the user command without actually setting any of its info. Used to get the size
 // of the command when getting the length of the stream.
-void SkipUserCommand(TArrayView<const uint8_t>& stream)
+void SkipUserCommand(ReadStream& stream)
 {
 	if (GetPacketType(stream) == DEM_EMPTYUSERCMD)
 	{
@@ -95,13 +95,13 @@ void ReadUserCommand(ReadStream& stream, int player, int tic)
 	auto& curTic = ClientStates[player].Tics[ticMod];
 	usercmd_t& ticCmd = curTic.Command;
 
-	const auto start = stream;
-
 	// Skip until we reach the player command. Event data will get read off once the
 	// tick is actually executed.
+	stream.StartMeasuring();
 	Net_SkipCommands(stream);
+	curTic.Data.WriteBytes(stream.GetMeasuredData());
+	stream.ClearMeasurement();
 
-	curTic.Data.WriteBytes({ start.Data(), start.Size() - stream.Size() });
 	auto basis = tic > 0 ? &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command : nullptr;
 	if (GetPacketType(stream) == DEM_EMPTYUSERCMD)
 	{
@@ -124,8 +124,8 @@ void RunPlayerEventData(int player, int tic)
 	auto& data = ClientStates[player].Tics[tic % BACKUPTICS].Data;
 	if (data.Size())
 	{
-		TArrayView<const uint8_t> stream = { data.Data(), data.Size() };
-		Net_ReadCommands(player, stream);
+		ReadStream r = { data.GetView() };
+		Net_ReadCommands(player, r);
 		if (!IsRecordingDemo())
 			data.Clear();
 	}
@@ -136,38 +136,22 @@ void RunPlayerEventData(int player, int tic)
 void WriteDemoChunk(int32_t id, const TArrayView<const uint8_t> data, DynamicWriteStream& stream)
 {
 	stream.WriteValue<int32_t>(id);
+	// TArrays can't go beyond 32-bit unsigned for ZScript compat so
+	// writing this out as a chunk is pointless.
 	stream.WriteLargeArray<uint8_t>(data);
 	if (data.Size() & 1)
 		stream.WriteValue<uint8_t>(0u);
 }
 
-TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, TArrayView<const uint8_t>& stream)
+TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, ReadStream& stream)
 {
-	ReadStream r = { stream };
-	if (!r.SerializeInt32(id))
+	if (!stream.SerializeInt32(id))
 		return { nullptr, 0u };
 	TArrayView<const uint8_t> data = { nullptr, 0u };
-	if (!r.SerializeLargeArray<uint8_t>(data, 0u, false))
+	if (!stream.SerializeLargeArray<uint8_t>(data, 0u, false))
 		return { nullptr, 0u };
 	uint8_t pad = 0u;
-	if ((data.Size() & 1) && !r.SerializeUInt8(pad))
+	if ((data.Size() & 1) && !stream.SerializeUInt8(pad))
 		return { nullptr, 0u };
-	stream = r.GetRemainingData();
 	return data;
-}
-
-void SkipDemoChunk(TArrayView<const uint8_t>& stream)
-{
-	MeasureStream m = { stream };
-	m.SkipValue<int32_t>();
-	m.SkipLargeArray<uint8_t>();
-	if (m.GetSkippedBytes() & 1)
-		m.SkipValue<int8_t>();
-
-	// Skipping does zero checking so we need to make sure we don't
-	// end up outside the stream after doing so.
-	if (m.GetSkippedBytes() > stream.Size())
-		I_Error("Malformed chunk found in demo file");
-	else
-		stream = { stream.Data() + m.GetSkippedBytes(), stream.Size() - m.GetSkippedBytes() };
 }

@@ -37,50 +37,61 @@
 
 TMap<uint8_t, std::unique_ptr<NetPacket>(*)()> NetPacketFactory = {};
 
-bool NetPacket::Read(const TArrayView<const uint8_t>& stream, size_t& read)
+bool NetPacket::Read(ReadStream& stream)
 {
-	read = 0u;
-	ReadStream r = { stream };
 	uint8_t type = 0u;
-	if (!r.SerializeUInt8(type) || type != NetCommand)
+	if (!stream.SerializeUInt8(type) || type != NetCommand)
 		return false;
 
 	uint8_t argC = 0u;
-	if (!r.SerializeUInt8(argC) || argC != ArgCount)
+	if (!stream.SerializeUInt8(argC) || argC != ArgCount)
 		return false;
 
 	size_t parsedArgs = 0u;
-	if (!Serialize(r, parsedArgs) || parsedArgs != ArgCount)
+	if (!Serialize(stream, parsedArgs) || parsedArgs != ArgCount)
 		return false;
 
-	read = r.GetReadBytes();
 	return true;
 }
 
-bool NetPacket::Write(const TArrayView<uint8_t>& stream, size_t& written)
+// Boon TODO: Probably template this
+bool NetPacket::Write(WriteStream& stream)
 {
-	written = 0u;
 	if (!ShouldWrite())
 		return true;
 
-	WriteStream w = { stream };
-	if (!w.SerializeUInt8(NetCommand))
+	if (!stream.SerializeUInt8(NetCommand))
 		return false;
-	if (!w.SerializeUInt8(ArgCount))
+	if (!stream.SerializeUInt8(ArgCount))
 		return false;
 
 	size_t parsedArgs = 0u;
-	if (!Serialize(w, parsedArgs) || parsedArgs != ArgCount)
+	if (!Serialize(stream, parsedArgs) || parsedArgs != ArgCount)
 		return false;
 
-	written = w.GetWrittenBytes();
 	return true;
 }
 
-bool NetPacket::Skip(const TArrayView<const uint8_t>& stream, size_t& skipped)
+bool NetPacket::Write(DynamicWriteStream& stream)
 {
-	skipped = 0u;
-	MeasureStream m = { stream };
+	if (!ShouldWrite())
+		return true;
+
+	if (!stream.SerializeUInt8(NetCommand))
+		return false;
+	if (!stream.SerializeUInt8(ArgCount))
+		return false;
+
+	size_t parsedArgs = 0u;
+	if (!Serialize(stream, parsedArgs) || parsedArgs != ArgCount)
+		return false;
+
+	return true;
+}
+
+bool NetPacket::Skip(ReadStream& stream)
+{
+	MeasureStream m = { stream.GetRemainingData() };
 	if (!m.SerializeUInt8(NetCommand))
 		return false;
 	if (!m.SerializeUInt8(ArgCount))
@@ -90,8 +101,7 @@ bool NetPacket::Skip(const TArrayView<const uint8_t>& stream, size_t& skipped)
 	if (!Serialize(m, parsedArgs) || parsedArgs != ArgCount)
 		return false;
 
-	skipped = m.GetSkippedBytes();
-	return skipped <= stream.Size();
+	return stream.SkipBytes(m.GetSkippedBytes());
 }
 
 std::unique_ptr<NetPacket> CreatePacket(uint8_t type)
@@ -107,34 +117,29 @@ std::unique_ptr<NetPacket> CreatePacket(uint8_t type)
 	return p;
 }
 
-void ReadPacket(NetPacket& packet, TArrayView<const uint8_t>& stream, int pNum)
+void ReadPacket(NetPacket& packet, ReadStream& stream, int pNum)
 {
-	size_t bytes = 0u;
-	if (!packet.Read({ stream.Data(), stream.Size() }, bytes))
+	if (!packet.Read(stream))
 		I_Error("Failed to read net command %u", packet.NetCommand);
-
-	assert(bytes <= stream.Size());
-	stream = { stream.Data() + bytes, stream.Size() - bytes };
 
 	if (pNum >= 0 && pNum < MaxClients && !packet.Execute(pNum))
 		I_Error("Failed to execute net command %u", packet.NetCommand);
 }
 
-void WritePacket(NetPacket& packet, TArrayView<uint8_t>& stream)
+void WritePacket(NetPacket& packet, WriteStream& stream)
 {
-	size_t bytes = 0u;
-	if (!packet.Write(stream, bytes))
+	if (!packet.Write(stream))
 		I_Error("Failed to write net command %u", packet.NetCommand);
-
-	assert(bytes <= stream.Size());
-	stream = { stream.Data() + bytes, stream.Size() - bytes };
 }
 
-void SkipPacket(NetPacket& packet, TArrayView<const uint8_t>& stream)
+void WritePacket(NetPacket& packet, DynamicWriteStream& stream)
 {
-	size_t bytes = 0u;
-	if (!packet.Skip(stream, bytes))
-		I_Error("Malformed net command %u", packet.NetCommand);
+	if (!packet.Write(stream))
+		I_Error("Failed to write net command %u", packet.NetCommand);
+}
 
-	stream = { stream.Data() + bytes, stream.Size() - bytes };
+void SkipPacket(NetPacket& packet, ReadStream& stream)
+{
+	if (!packet.Skip(stream))
+		I_Error("Malformed net command %u", packet.NetCommand);
 }

@@ -79,7 +79,7 @@ enum
 // These should never actually get executed. If they do, throw an error.
 class EmptyUserCommandPacket : public EmptyPacket
 {
-	DEFINE_NETPACKET(EmptyUserCommandPacket, EmptyPacket, DEM_EMPTYUSERCMD, 0)
+	DEFINE_NETPACKET(EmptyUserCommandPacket, EmptyPacket, DEM_EMPTYUSERCMD, 0);
 public:
 	EmptyUserCommandPacket(usercmd_t& cmd, const usercmd_t* basis) : EmptyUserCommandPacket()
 	{
@@ -97,7 +97,7 @@ NETPACKET_EXECUTE(EmptyUserCommandPacket)
 
 class UserCommandPacket : public NetPacket
 {
-	DEFINE_NETPACKET(UserCommandPacket, NetPacket, DEM_USERCMD, 1)
+	DEFINE_NETPACKET(UserCommandPacket, NetPacket, DEM_USERCMD, 1);
 	static constexpr size_t CommandSize = 17u; // Normally can't be bigger than this, so error out if it was.
 	static constexpr usercmd_t Blank = {};
 	usercmd_t* _cmd = nullptr;
@@ -110,6 +110,15 @@ class UserCommandPacket : public NetPacket
 		return true;
 	}
 	bool Serialize(WriteStream& stream, size_t& argCount) override
+	{
+		return SerializeWrite<WriteStream>(stream, argCount);
+	}
+	bool Serialize(DynamicWriteStream& stream, size_t& argCount) override
+	{
+		return SerializeWrite<DynamicWriteStream>(stream, argCount);
+	}
+	template<typename Stream>
+	bool SerializeWrite(Stream& stream, size_t& argCount)
 	{
 		if (_basis == nullptr)
 			_basis = &Blank;
@@ -254,13 +263,12 @@ NETPACKET_EXECUTE(UserCommandPacket)
 	return false;
 }
 
-void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, TArrayView<uint8_t>& stream);
-void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic);
-void SkipUserCommand(TArrayView<const uint8_t>& stream);
+void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, WriteStream& stream);
+void ReadUserCommand(ReadStream& stream, int player, int tic);
+void SkipUserCommand(ReadStream& stream);
 
 void WriteDemoChunk(int32_t id, const TArrayView<const uint8_t> data, DynamicWriteStream& stream);
-TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, TArrayView<const uint8_t>& stream);
-void SkipDemoChunk(TArrayView<const uint8_t>& stream);
+TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, ReadStream& stream);
 
 void RunPlayerEventData(int player, int tic);
 

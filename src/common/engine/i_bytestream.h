@@ -90,6 +90,7 @@ class ByteReader
 {
 	const TArrayView<const uint8_t> _buffer = { nullptr, 0u };
 	size_t _curPos = 0u;
+	size_t _measurePos = 0u;
 
 	TArrayView<const uint8_t> InternalReadBytes(size_t bytes) const
 	{
@@ -105,9 +106,22 @@ public:
 	inline const uint8_t* Data() const { return _buffer.Data(); }
 	inline size_t Size() const { return _buffer.Size(); }
 
+	void StartMeasuring()
+	{
+		_measurePos = _curPos;
+	}
+	void ClearMeasurement()
+	{
+		_measurePos = 0u;
+	}
+	TArrayView<const uint8_t> GetMeasuredData() const
+	{
+		return InternalReadBytes(_curPos - _measurePos);
+	}
+
 	void Reset()
 	{
-		_curPos = 0u;
+		_curPos = _measurePos = 0u;
 	}
 	void SkipBytes(size_t bytes)
 	{
@@ -366,6 +380,17 @@ public:
 	inline TArrayView<const uint8_t> GetRemainingData() const { return _reader.GetRemainingData(); }
 	inline size_t Size() const { return _reader.Size(); }
 	inline const uint8_t* Data() const { return _reader.Data(); }
+	inline void StartMeasuring() { _reader.StartMeasuring(); }
+	inline void ClearMeasurement() { _reader.ClearMeasurement(); }
+	inline TArrayView<const uint8_t> GetMeasuredData() const { return _reader.GetMeasuredData(); }
+
+	bool SkipBytes(size_t bytes)
+	{
+		if (_reader.WouldReadPastEnd(bytes))
+			return false;
+		_reader.SkipBytes(bytes);
+		return true;
+	}
 
 	// Direct read API. This has no safety checking so use with extreme caution.
 	FString ReadString()
@@ -718,7 +743,27 @@ class DynamicWriteStream
 		if (l)
 			WriteBytes({ (uint8_t*)data.Data(), l * sizeof(T) });
 	}
+	template<typename T, typename Size>
+	bool SerializeRange(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		static_assert(std::is_trivially_copyable_v<T>);
+		const size_t len = values.Size();
+		if (len > std::numeric_limits<Size>::max() || (expected && ((!exact && len > expected) || (exact && len != expected))))
+			return false;
+		const size_t size = len * sizeof(T);
+		const Size l = (Size)len;
+		WriteValue<Size>(l);
+		if (size)
+		{
+			const TArrayView<const uint8_t> bytes = { (const uint8_t*)values.Data(), size };
+			WriteBytes(bytes);
+		}
+		return true;
+	}
 public:
+	enum { IsWriting = 1 };
+	enum { IsReading = 0 };
+
 	inline void Clear() { _array.Clear(); }
 	inline void Reset() { _array.Reset(); }
 	inline TArrayView<const uint8_t> GetView() const { return { Data(), Size() }; }
@@ -765,6 +810,101 @@ public:
 	void WriteChunk(const TArrayView<const T> data)
 	{
 		WriteRange<T, uint64_t>(data);
+	}
+
+	// Network API.
+	bool SerializeInt8(int8_t value)
+	{
+		WriteValue<int8_t>(value);
+		return true;
+	}
+	bool SerializeUInt8(uint8_t value)
+	{
+		WriteValue<uint8_t>(value);
+		return true;
+	}
+	bool SerializeInt16(int16_t value)
+	{
+		WriteValue<int16_t>(value);
+		return true;
+	}
+	bool SerializeUInt16(uint16_t value)
+	{
+		WriteValue<uint16_t>(value);
+		return true;
+	}
+	bool SerializeInt32(int32_t value)
+	{
+		WriteValue<int32_t>(value);
+		return true;
+	}
+	bool SerializeUInt32(uint32_t value)
+	{
+		WriteValue<uint32_t>(value);
+		return true;
+	}
+	bool SerializeInt64(int64_t value)
+	{
+		WriteValue<int64_t>(value);
+		return true;
+	}
+	bool SerializeUInt64(uint64_t value)
+	{
+		WriteValue<uint64_t>(value);
+		return true;
+	}
+	// Wrappers for easier writing.
+	bool SerializeBool(bool value)
+	{
+		return SerializeUInt8((uint8_t)value);
+	}
+	bool SerializeFloat(float value)
+	{
+		union {
+			float f;
+			uint32_t u;
+		} temp;
+		temp.f = value;
+		return SerializeUInt32(temp.u);
+	}
+	bool SerializeDouble(double value)
+	{
+		union {
+			double d;
+			uint64_t u;
+		} temp;
+		temp.d = value;
+		return SerializeUInt64(temp.u);
+	}
+	bool SerializeString(const FString& str)
+	{
+		return SerializeArray<char>({ str.GetChars(), str.Len() }, 0u, false);
+	}
+	template<typename T>
+	bool SerializeType(const T& value)
+	{
+		WriteType<T>(value);
+		return true;
+	}
+	template<typename T>
+	bool SerializeSmallArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint8_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint16_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeLargeArray(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint32_t>(values, expected, exact);
+	}
+	template<typename T>
+	bool SerializeChunk(const TArrayView<const T> values, size_t expected, bool exact)
+	{
+		return SerializeRange<T, uint64_t>(values, expected, exact);
 	}
 };
 
