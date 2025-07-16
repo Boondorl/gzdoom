@@ -35,12 +35,16 @@ void InitializeDoomPackets()
 	REGISTER_NETPACKET(RevertCameraPacket);
 }
 
-EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream)
+EDemoCommand GetPacketType(const TArrayView<const uint8_t> stream)
 {
 	return stream.Size() ? static_cast<EDemoCommand>(stream[0]) : DEM_INVALID;
 }
 
-// Data-typed packets for easier one-liners.
+static bool ValidClass(const FString& cls, FName type = NAME_Actor)
+{
+	auto cls = PClass::FindActor(cls);
+	return cls != nullptr && cls->IsDescendantOf(type);
+}
 
 NETPACKET_EXECUTE(EndScreenRunnerPacket)
 {
@@ -80,6 +84,63 @@ NETPACKET_EXECUTE(ChangeMusicPacket)
 {
 	S_ChangeMusic(Value.GetChars());
 	return true;
+}
+
+NETPACKET_CONDITION(CheatPacket)
+{
+	if (!ValidClass())
+	{
+		Printf("No Inventory of type %s exists", ItemCls.GetChars());
+		return false;
+	}
+	return true;
+}
+
+NETPACKET_EXECUTE(GiveCheatPacket)
+{
+	if (!ValidClass())
+	{
+		Printf("%s [%d] spawned invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
+		return true; // Non-fatal, just means someone is about to desync.
+	}
+
+	cht_Give(&players[pNum], ItemCls, Amount);
+	if (pNum != consoleplayer)
+	{
+		FString message = GStrings.GetString("TXT_X_CHEATS");
+		message.Substitute("%s", players[pNum].userinfo.GetName());
+		Printf("%s: give %s\n", message.GetChars(), ItemCls.GetChars());
+	}
+	return true;
+}
+
+NETPACKET_EXECUTE(TakeCheatPacket)
+{
+	if (!ValidClass())
+	{
+		Printf("%s [%d] took invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
+		return true; // Non-fatal, just means someone is about to desync.
+	}
+
+	cht_Take(&players[pNum], ItemCls, Amount);
+	return true;
+}
+
+NETPACKET_EXECUTE(SetCheatPacket)
+{
+	if (!ValidClass())
+	{
+		Printf("%s [%d] set invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
+		return true; // Non-fatal, just means someone is about to desync.
+	}
+
+	cht_SetInv(&players[player], ItemCls, Amount, _bPastMax);
+	return true;
+}
+
+NETPACKET_CONDITION(SayPacket)
+{
+	return _message.IsNotEmpty();
 }
 
 NETPACKET_EXECUTE(SayPacket)
@@ -123,121 +184,14 @@ NETPACKET_EXECUTE(SayPacket)
 	return true;
 }
 
+NETPACKET_CONDITION(RunSpecialPacket)
+{
+	return _special > 0;
+}
+
 NETPACKET_EXECUTE(RunSpecialPacket)
 {
 	if (!CheckCheatmode(player == consoleplayer))
 		P_ExecuteSpecial(players[player].mo->Level, _special, nullptr, players[player].mo, false, _args[0], _args[1], _args[2], _args[3], _args[4]);
 	return true;
 }
-
-class CheatPacket : public NetPacket
-{
-	DEFINE_NETPACKET_BASE(NetPacket)
-protected:
-	FString ItemCls = {};
-	int32_t Amount = 0;
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_STRING(ItemCls);
-		SERIALIZE_INT32(Amount);
-		return true;
-	}
-public:
-	bool ShouldWrite() const override
-	{
-		if (Amount <= 0)
-			return false;
-
-		auto cls = PClass::FindActor(ItemCls);
-		if (cls == nullptr || !cls->IsDescendantOf(NAME_Inventory))
-		{
-			Printf("No Inventory of type %s exists", ItemCls.GetChars());
-			return false;
-		}
-		return true;
-	}
-};
-
-class GiveCheatPacket : public CheatPacket
-{
-	DEFINE_NETPACKET(GiveCheatPacket, CheatPacket, DEM_GIVECHEAT, 2)
-public:
-	bool Execute(int pNum) override
-	{
-		cht_Give(&players[pNum], ItemCls, Amount);
-		if (pNum != consoleplayer)
-		{
-			FString message = GStrings.GetString("TXT_X_CHEATS");
-			message.Substitute("%s", players[pNum].userinfo.GetName());
-			Printf("%s: give %s\n", message.GetChars(), ItemCls.GetChars());
-		}
-		return true;
-	}
-};
-
-class TakeCheatPacket : public CheatPacket
-{
-	DEFINE_NETPACKET(TakeCheatPacket, CheatPacket, DEM_TAKECHEAT, 2)
-public:
-	bool Execute(int pNum) override
-	{
-		cht_Take(&players[pNum], ItemCls, Amount);
-		return true;
-	}
-};
-
-class SetCheatPacket : public CheatPacket
-{
-	DEFINE_NETPACKET(SetCheatPacket, CheatPacket, DEM_TAKECHEAT, 3)
-		bool _bPastMax = false;
-public:
-	bool Read(TArrayView<uint8_t>& stream) override
-	{
-		bool passed = Super::Read(stream);
-		if (passed)
-			_bPastMax = ReadInt8(stream);
-		return passed;
-	}
-	bool Write(TArrayView<uint8_t>& stream) override
-	{
-		bool passed = Super::Read(stream);
-		if (passed)
-			WriteInt8(_bPastMax, stream);
-		return passed;
-	}
-	bool Execute(int pNum) override
-	{
-		cht_SetInv(&players[pNum], ItemCls, Amount, _bPastMax);
-		return true;
-	}
-};
-
-class NetCommandPacket : public NetPacket
-{
-	DEFINE_NETPACKET(NetCommandPacket, NetPacket, DEM_ZSC_CMD, 2)
-	FName _command = NAME_None;
-	TArray<uint8_t> _buffer = {}; // Make sure the command is completely sandboxed.
-	DEFINE_NETPACKET_SERIALIZER()
-	{
-		SERIALIZE_NAME(_command);
-		TArray<const uint8_t> data = { _buffer.Data(), _buffer.Size() };
-		SERIALIZE_ARRAY(uint8_t, data);
-		if (Stream::Reading)
-		{
-			_buffer.Clear();
-			for (size_t i = 0u; i < data.Size(); ++i)
-				_buffer.Push(data[i]);
-		}
-	}
-public:
-	NetCommandPacket(FName command, const TArrayView<const uint8_t>& data) : NetCommandPacket()
-	{
-		_command = command;
-	}
-	bool Execute(int pNum) override
-	{
-		FNetworkCommand netCmd = { pNum, _command, _buffer };
-		players[pNum].mo->Level->localEventManager->NetCommand(netCmd);
-		return true;
-	}
-};

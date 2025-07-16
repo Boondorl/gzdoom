@@ -218,8 +218,7 @@ private:
 	bool bInitialized = false;
 	int CurrentClientTic = 0;
 	size_t CurrentStream = 0u;
-	TArray<uint8_t> Streams[BACKUPTICS] = {}; // Make this dynamic since otherwise it would eat a ton of memory.
-	uint8_t WriteBuffer[MAX_EVENTLEN] = {};
+	DynamicWriteStream Streams[BACKUPTICS] = {};
 
 public:
 	// Boot up does some faux network events so we need to wait until after
@@ -246,23 +245,15 @@ public:
 		Streams[CurrentStream].Clear();
 	}
 
-	void AddData(const TArrayView<const uint8_t>& data)
+	void AddData(const TArrayView<const uint8_t> data)
 	{
-		if (!bInitialized)
-			return;
-
-		for (size_t i = 0u; i < data.Size(); ++i)
-			Streams[CurrentStream].Push(data[i]);
-	}
-
-	TArrayView<uint8_t> GetWriteBuffer()
-	{
-		return { WriteBuffer, std::size(WriteBuffer) };
+		if (bInitialized)
+			Streams[CurrentStream].WriteBytes(data);
 	}
 
 	TArrayView<const uint8_t> GetCurrentStreamData() const
 	{
-		return { Streams[CurrentStream].Data(), Streams[CurrentStream].Size() };
+		return Streams[CurrentStream].GetView();
 	}
 } NetEvents;
 
@@ -328,7 +319,7 @@ void Net_ClearBuffers()
 
 bool Net_IsPlayerReady(int player)
 {
-	if (DemoPlayback || net_cutscenereadytype != RT_VOTE)
+	if (IsPlayingDemo() || net_cutscenereadytype != RT_VOTE)
 		return false;
 
 	if (cutscene.runner)
@@ -347,7 +338,7 @@ bool Net_IsPlayerReady(int player)
 // Check if every client is ready to move on from the current cutscene.
 void Net_PlayerReadiedUp(int player)
 {
-	if (!netgame || DemoPlayback)
+	if (!netgame || IsPlayingDemo())
 		return;
 
 	// Allow unreadying in case a player needs to leave momentarily.
@@ -359,7 +350,7 @@ void Net_PlayerReadiedUp(int player)
 
 void Net_StartCutscene()
 {
-	CutsceneCountdown = netgame && !DemoPlayback && net_cutscenecountdown > 0.0f ? static_cast<int>(ceil(net_cutscenecountdown * TICRATE)) : 0;
+	CutsceneCountdown = netgame && !IsPlayingDemo() && net_cutscenecountdown > 0.0f ? static_cast<int>(ceil(net_cutscenecountdown * TICRATE)) : 0;
 }
 
 // Allow the game to automatically start after a set amount of time.
@@ -456,7 +447,7 @@ void Net_ResetCommands(bool midTic)
 
 void Net_SetWaiting()
 {
-	if (netgame && !DemoPlayback && NetworkClients.Size() > 1)
+	if (netgame && !IsPlayingDemo() && NetworkClients.Size() > 1)
 		LevelStartStatus = LST_WAITING;
 }
 
@@ -532,7 +523,7 @@ static size_t GetNetBufferSize()
 static void HSendPacket(int client, size_t size)
 {
 	// This data already exists locally in the demo file, so don't write it out.
-	if (DemoPlayback)
+	if (IsPlayingDemo())
 		return;
 
 	RemoteClient = client;
@@ -554,7 +545,7 @@ static void HSendPacket(int client, size_t size)
 // Returns false if no packet is waiting
 static bool HGetPacket()
 {
-	if (DemoPlayback)
+	if (IsPlayingDemo())
 		return false;
 
 	if (LocalNetBufferSize)
@@ -639,7 +630,8 @@ static void ClientQuit(int clientNum, int newHost)
 	if (clientNum == Net_Arbitrator)
 		SetArbitrator(newHost >= 0 ? newHost : NetworkClients[0]);
 
-	if (RecordingDemo)
+	// Boon TODO: Write this into the demo file
+	if (IsRecordingDemo())
 		G_EndDemo();
 }
 
@@ -1065,7 +1057,7 @@ static int16_t CalculateConsistency(int client, uint32_t seed)
 // check, not just the player's x position like BOOM.
 static void MakeConsistencies()
 {
-	if (!netgame || DemoPlayback || (gametic % TicDup) || !IsMapLoaded())
+	if (!netgame || IsPlayingDemo() || (gametic % TicDup) || !IsMapLoaded())
 		return;
 
 	const uint32_t rngSum = StaticSumSeeds();
@@ -1080,7 +1072,7 @@ static void MakeConsistencies()
 
 static bool Net_UpdateStatus()
 {
-	if (!netgame || DemoPlayback || NetworkClients.Size() <= 1)
+	if (!netgame || IsPlayingDemo() || NetworkClients.Size() <= 1)
 		return true;
 
 	if (LevelStartStatus == LST_WAITING || LevelStartDelay > 0)
@@ -1245,7 +1237,7 @@ void NetUpdate(int tics)
 	if (tics <= 0)
 		return;
 
-	if (netgame && !DemoPlayback)
+	if (netgame && !IsPlayingDemo())
 	{
 		// If a tic has passed, always send out a heartbeat packet (also doubles as
 		// a latency measurement tool).
@@ -1864,7 +1856,7 @@ void D_QuitNetGame()
 ADD_STAT(network)
 {
 	FString out = {};
-	if (!netgame || DemoPlayback)
+	if (!netgame || IsPlayingDemo())
 	{
 		out.AppendFormat("No network stats available.");
 		return out;
@@ -2257,10 +2249,6 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 
 		switch (cmd)
 		{
-		case DEM_CENTERPRINT:
-			C_MidPrint(nullptr, ReadString(stream).GetChars());
-			break;
-
 		case DEM_UINFCHANGED:
 			D_ReadUserInfoStrings(player, stream, true);
 			break;
@@ -2684,10 +2672,6 @@ void Net_ReadCommands(int player, TArrayView<const uint8_t>& stream)
 			primaryLevel->localEventManager->Console(player, s, arg[0], arg[1], arg[2], manual, false);
 		}
 		break;
-
-		case DEM_READIED:
-			
-			break;
 
 		case DEM_CHANGESKILL:
 			NextSkill = ReadInt32(stream);

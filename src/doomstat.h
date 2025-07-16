@@ -132,6 +132,7 @@ extern	int				consoleplayer;
 // DEMO playback/recording related stuff.
 // No demo, there is a human player in charge?
 // Disable save/end game?
+// Boon TODO: Move this
 enum EDemoState : uint8_t
 {
 	DEMO_NONE,
@@ -145,6 +146,7 @@ extern	FString			NewDemoFileName;
 extern	FString			NewDemoMap;
 bool IsPlayingDemo();
 bool IsRecordingDemo();
+void ClearDemoState();
 
 // Quit after playing a demo from cmdline.
 extern	bool			SingleDemoPlayback; 	

@@ -35,7 +35,7 @@
 #define __D_PROTOCOL_H__
 
 #include "doomtype.h"
-#include "i_protocol.h"
+#include "d_netpackets.h"
 
 // The IFF routines here all work with big-endian IDs, even if the host
 // system is little-endian.
@@ -76,11 +76,12 @@ enum
 	UCMDF_ROLL			= 0x40,
 };
 
+// These should never actually get executed. If they do, throw an error.
 class EmptyUserCommandPacket : public EmptyPacket
 {
 	DEFINE_NETPACKET(EmptyUserCommandPacket, EmptyPacket, DEM_EMPTYUSERCMD, 0)
 public:
-	EmptyUserCommandPacket(usercmd_t& cmd, const usercmd_t* const basis) : EmptyUserCommandPacket()
+	EmptyUserCommandPacket(usercmd_t& cmd, const usercmd_t* basis) : EmptyUserCommandPacket()
 	{
 		if (basis != nullptr)
 			memcpy(&cmd, basis, sizeof(usercmd_t));
@@ -89,33 +90,31 @@ public:
 	}
 };
 
+NETPACKET_EXECUTE(EmptyUserCommandPacket)
+{
+	return false;
+}
+
 class UserCommandPacket : public NetPacket
 {
 	DEFINE_NETPACKET(UserCommandPacket, NetPacket, DEM_USERCMD, 1)
-	static constexpr size_t CommandSize = 17u;
+	static constexpr size_t CommandSize = 17u; // Normally can't be bigger than this, so error out if it was.
 	static constexpr usercmd_t Blank = {};
 	usercmd_t* _cmd = nullptr;
 	const usercmd_t* _basis = nullptr;
-	DEFINE_NETPACKET_SERIALIZER()
+	// This requires some special handling, so split the reading and writing operations entirely.
+	bool Serialize(MeasureStream& stream, size_t& argCount)	override
 	{
-		if constexpr (Stream::IsWriting)
-			return WriteCommand<Stream>(stream, argCount);
-		else if constexpr (Stream::IsReading)
-			return ReadCommand<Stream>(stream, argCount);
-		// If we're skipping just get the length of the data.
-		TArray<const uint8_t> data;
-		SERIALIZE_ARRAY_EXPECTING(uint8_t, data, CommandSize, false);
+		TArrayView<const uint8_t> temp;
+		SERIALIZE_SMALL_ARRAY_EXPECTING(temp, CommandSize, false);
 		return true;
 	}
-	// This requires some special handling, so split the reading and writing operations entirely.
-	template<typename Stream>
-	bool WriteCommand(Stream& stream, size_t& argCount)
+	bool Serialize(WriteStream& stream, size_t& argCount) override
 	{
 		if (_basis == nullptr)
 			_basis = &Blank;
 
-		uint8_t buffer[CommandSize] = {};
-		WriteStream w = { { &buffer[1], CommandSize - 1 } };
+		DynamicWriteStream w;
 		const uint32_t buttonDelta = _cmd->buttons ^ _basis->buttons;
 		if (buttonDelta)
 		{
@@ -128,19 +127,19 @@ class UserCommandPacket : public NetPacket
 										uint8_t((_cmd->buttons >> 14) & 0x7F),
 										uint8_t((_cmd->buttons >> 21) & 0xFF) };
 			// Boon TODO: Clean this up a bit.
-			w.SerializeUInt8(buttons[0]);
+			w.WriteValue<uint8_t>(buttons[0]);
 			if (buttonDelta & 0xFFFFFF80)
 			{
 				buffer[1] |= MoreButtons;
-				w.SerializeUInt8(buttons[1]);
+				w.WriteValue<uint8_t>(buttons[1]);
 				if (buttonDelta & 0xFFFFC000)
 				{
 					buffer[2] |= MoreButtons;
-					w.SerializeUInt8(buttons[2]);
+					w.WriteValue<uint8_t>(buttons[2]);
 					if (buttonDelta & 0xFFE00000)
 					{
 						buffer[3] |= MoreButtons;
-						w.SerializeUInt8(buttons[3]);
+						w.WriteValue<uint8_t>(buttons[3]);
 					}
 				}
 			}
@@ -148,59 +147,57 @@ class UserCommandPacket : public NetPacket
 		if (_cmd->pitch != _basis->pitch)
 		{
 			buffer[0] |= UCMDF_PITCH;
-			w.SerializeInt16(_cmd->pitch);
+			w.WriteValue<int16_t>(_cmd->pitch);
 		}
 		if (cmd->yaw != basis->yaw)
 		{
 			buffer[0] |= UCMDF_YAW;
-			w.SerializeInt16(_cmd->yaw);
+			w.WriteValue<int16_t>(_cmd->yaw);
 		}
 		if (cmd->forwardmove != basis->forwardmove)
 		{
 			buffer[0] |= UCMDF_FORWARDMOVE;
-			w.SerializeInt16(_cmd->forwardmove);
+			w.WriteValue<int16_t>(_cmd->forwardmove);
 		}
 		if (cmd->sidemove != basis->sidemove)
 		{
 			buffer[0] |= UCMDF_SIDEMOVE;
-			w.SerializeInt16(_cmd->sidemove);
+			w.WriteValue<int16_t>(_cmd->sidemove);
 		}
 		if (cmd->upmove != basis->upmove)
 		{
 			buffer[0] |= UCMDF_UPMOVE;
-			w.SerializeInt16(_cmd->upmove);
+			w.WriteValue<int16_t>(_cmd->upmove);
 		}
 		if (cmd->roll != basis->roll)
 		{
 			buffer[0] |= UCMDF_ROLL;
-			w.SerializeInt16(_cmd->roll);
+			w.WriteValue<int16_t>(_cmd->roll);
 		}
 
 		// Rather than using dynamic write commands, send this out as an array so it can
 		// be properly size checked on the other side.
-		TArrayView<const uint8_t> data = { buffer, w.GetWrittenBytes() + 1u };
-		SERIALIZE_ARRAY_EXPECTING(uint8_t, data, CommandSize, false);
+		SERIALIZE_SMALL_ARRAY_EXPECTING(w.GetView(), CommandSize, false);
 		return true;
 	}
-	template<typename Stream>
-	bool ReadCommand(Stream& stream, size_t& argCount)
+	bool Serialize(ReadStream& stream, size_t& argCount)
 	{
-		TArrayView<const uint8_t> data = { nullptr, 0u };
-		SERIALIZE_ARRAY_EXPECTING(uint8_t, data, CommandSize, false);
+		TArrayView<const uint8_t> data;
+		SERIALIZE_SMALL_ARRAY_EXPECTING(data, CommandSize, false);
 		if (!data.Size()) // Flags should always be present here.
 			return false;
 
 		assert(data[0] != 0);
 		ReadStream r = { data };
 		// Boon TODO: This probably breaks with demos? (What doesn't)
-		if (_basis != nullptr && &_cmd != _basis)
+		if (_basis != nullptr && _cmd != _basis)
 			memcpy(&_cmd, _basis, sizeof(usercmd_t));
 
 		if (data[0] & UCMDF_BUTTONS)
 		{
 			uint8_t in = 0u;
 			r.SerializeUInt8(in);
-			uint32_t buttons = (_cmd.buttons & ~0x7F) | (in & 0x7F);
+			uint32_t buttons = (_cmd->buttons & ~0x7F) | (in & 0x7F);
 			if (in & MoreButtons)
 			{
 				r.SerializeUInt8(in);
@@ -216,24 +213,24 @@ class UserCommandPacket : public NetPacket
 					}
 				}
 			}
-			_cmd.buttons = buttons;
+			_cmd->buttons = buttons;
 		}
 		if (data[0] & UCMDF_PITCH)
-			r.SerializeInt16(_cmd.pitch);
+			r.SerializeInt16(_cmd->pitch);
 		if (data[0] & UCMDF_YAW)
-			r.SerializeInt16(_cmd.yaw);
+			r.SerializeInt16(_cmd->yaw);
 		if (data[0] & UCMDF_FORWARDMOVE)
-			r.SerializeInt16(_cmd.forwardmove);
+			r.SerializeInt16(_cmd->forwardmove);
 		if (data[0] & UCMDF_SIDEMOVE)
-			r.SerializeInt16(_cmd.sidemove);
+			r.SerializeInt16(_cmd->sidemove);
 		if (data[0] & UCMDF_UPMOVE)
-			r.SerializeInt16(_cmd.upmove);
+			r.SerializeInt16(_cmd->upmove);
 		if (data[0] & UCMDF_ROLL)
-			r.SerializeInt16(_cmd.roll);
+			r.SerializeInt16(_cmd->roll);
 		return true;
 	}
 public:
-	UserCommandPacket(usercmd_t& cmd, const usercmd_t* const basis) : UserCommandPacket()
+	UserCommandPacket(usercmd_t& cmd, const usercmd_t* basis) : UserCommandPacket()
 	{
 		_cmd = &cmd;
 		_basis = basis;
@@ -251,6 +248,11 @@ public:
 			|| _cmd->forwardmove != _basis->forwardmove || _cmd->sidemove != _basis->sidemove || _cmd->upmove != _basis->upmove;
 	}
 };
+
+NETPACKET_EXECUTE(UserCommandPacket)
+{
+	return false;
+}
 
 void WriteUserCommand(usercmd_t& cmd, const usercmd_t* basis, TArrayView<uint8_t>& stream);
 void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic);

@@ -124,6 +124,149 @@ public:
 	auto end() {return _obj.rend();}
 };
 
+// A wrapper to externally stored data.
+// I would have expected something for this in the stl, but std::span is only in C++20.
+template <class T>
+class TArrayView
+{
+public:
+
+	typedef TIterator<T>                       iterator;
+	typedef TIterator<const T>                 const_iterator;
+	using reverse_iterator = std::reverse_iterator<iterator>;
+	using const_reverse_iterator = std::reverse_iterator<const_iterator>;
+	typedef T                                  value_type;
+
+	iterator begin()
+	{
+		return &Array[0];
+	}
+	const_iterator begin() const
+	{
+		return &Array[0];
+	}
+	const_iterator cbegin() const
+	{
+		return &Array[0];
+	}
+
+	iterator end()
+	{
+		return &Array[Count];
+	}
+	const_iterator end() const
+	{
+		return &Array[Count];
+	}
+	const_iterator cend() const
+	{
+		return &Array[Count];
+	}
+
+	reverse_iterator rbegin()
+	{
+		return reverse_iterator(end());
+	}
+	const_reverse_iterator rbegin() const
+	{
+		return const_reverse_iterator(end());
+	}
+	const_reverse_iterator crbegin() const
+	{
+		return const_reverse_iterator(cend());
+	}
+
+	reverse_iterator rend()
+	{
+		return reverse_iterator(begin());
+	}
+	const_reverse_iterator rend() const
+	{
+		return const_reverse_iterator(begin());
+	}
+	const_reverse_iterator crend() const
+	{
+		return const_reverse_iterator(cbegin());
+	}
+
+
+	////////
+	TArrayView() = default;	// intended to keep this type trivial.
+	TArrayView(T* data, unsigned count = 0)
+	{
+		Count = count;
+		Array = data;
+	}
+	TArrayView(const TArrayView<T>& other) = default;
+	TArrayView<T>& operator= (const TArrayView<T>& other) = default;
+
+	// Check equality of two arrays
+	bool operator==(const TArrayView<T>& other) const
+	{
+		if (Count != other.Count)
+		{
+			return false;
+		}
+		for (unsigned int i = 0; i < Count; ++i)
+		{
+			if (Array[i] != other.Array[i])
+			{
+				return false;
+			}
+		}
+		return true;
+	}
+	// Return a reference to an element
+	T& operator[] (size_t index) const
+	{
+		assert(index < Count);
+		return Array[index];
+	}
+	// Returns a reference to the last element
+	T& Last() const
+	{
+		assert(Count > 0);
+		return Array[Count - 1];
+	}
+
+	// returns address of first element
+	T* Data() const
+	{
+		return Array;
+	}
+
+	unsigned Size() const
+	{
+		return Count;
+	}
+
+	unsigned int Find(const T& item) const
+	{
+		unsigned int i;
+		for (i = 0; i < Count; ++i)
+		{
+			if (Array[i] == item)
+				break;
+		}
+		return i;
+	}
+
+	void Set(T* data, unsigned count)
+	{
+		Array = data;
+		Count = count;
+	}
+
+	void Clear()
+	{
+		Count = 0;
+		Array = nullptr;
+	}
+private:
+	T* Array;
+	unsigned int Count;
+};
+
 
 // TArray -------------------------------------------------------------------
 
@@ -358,6 +501,11 @@ public:
 		return &Array[index];
 	}
 
+	TArrayView<T> View(size_t index = 0u) const
+	{
+		return Size() ? TArrayView{ Data(index), Size() - index } : TArrayView<T>{ nullptr, 0u };
+	}
+
 	unsigned IndexOf(const T& elem) const
 	{
 		return &elem - Array;
@@ -588,6 +736,14 @@ public:
 			}
 		}
 		return start;
+	}
+
+	unsigned AppendView(const TArrayView<T> view)
+	{
+		unsigned end = Size();
+		for (size_t i = 0u; i < view.Size(); ++i)
+			end = Push(view[i]);
+		return end;
 	}
 
 	unsigned AddUnique(const T& obj)
@@ -2087,149 +2243,6 @@ public:
 	{
 		return sizeof(bytes);
 	}
-};
-
-// A wrapper to externally stored data.
-// I would have expected something for this in the stl, but std::span is only in C++20.
-template <class T>
-class TArrayView
-{
-public:
-
-	typedef TIterator<T>                       iterator;
-	typedef TIterator<const T>                 const_iterator;
-    using reverse_iterator       =             std::reverse_iterator<iterator>;
-    using const_reverse_iterator =             std::reverse_iterator<const_iterator>;
-	typedef T                                  value_type;
-
-	iterator begin()
-	{
-		return &Array[0];
-	}
-	const_iterator begin() const
-	{
-		return &Array[0];
-	}
-	const_iterator cbegin() const
-	{
-		return &Array[0];
-	}
-
-	iterator end()
-	{
-		return &Array[Count];
-	}
-	const_iterator end() const
-	{
-		return &Array[Count];
-	}
-	const_iterator cend() const
-	{
-		return &Array[Count];
-	}
-
-	reverse_iterator rbegin()
-	{
-		return reverse_iterator(end());
-	}
-	const_reverse_iterator rbegin() const
-	{
-		return const_reverse_iterator(end());
-	}
-	const_reverse_iterator crbegin() const
-	{
-		return const_reverse_iterator(cend());
-	}
-
-	reverse_iterator rend()
-	{
-		return reverse_iterator(begin());
-	}
-	const_reverse_iterator rend() const
-	{
-		return const_reverse_iterator(begin());
-	}
-	const_reverse_iterator crend() const
-	{
-		return const_reverse_iterator(cbegin());
-	}
-
-
-	////////
-	TArrayView() = default;	// intended to keep this type trivial.
-	TArrayView(T *data, unsigned count = 0)
-	{
-		Count = count;
-		Array = data;
-	}
-	TArrayView(const TArrayView<T> &other) = default;
-	TArrayView<T> &operator= (const TArrayView<T> &other) = default;
-
-	// Check equality of two arrays
-	bool operator==(const TArrayView<T> &other) const
-	{
-		if (Count != other.Count)
-		{
-			return false;
-		}
-		for (unsigned int i = 0; i < Count; ++i)
-		{
-			if (Array[i] != other.Array[i])
-			{
-				return false;
-			}
-		}
-		return true;
-	}
-	// Return a reference to an element
-	T &operator[] (size_t index) const
-	{
-		assert(index < Count);
-		return Array[index];
-	}
-	// Returns a reference to the last element
-	T &Last() const
-	{
-		assert(Count > 0);
-		return Array[Count - 1];
-	}
-
-	// returns address of first element
-	T *Data() const
-	{
-		return Array;
-	}
-
-	unsigned Size() const
-	{
-		return Count;
-	}
-
-	unsigned int Find(const T& item) const
-	{
-		unsigned int i;
-		for (i = 0; i < Count; ++i)
-		{
-			if (Array[i] == item)
-				break;
-		}
-		return i;
-	}
-
-	void Set(T *data, unsigned count)
-	{
-		Array = data;
-		Count = count;
-	}
-
-	void Clear()
-	{
-		Count = 0;
-		Array = nullptr;
-	}
-private:
-	T *Array;
-	unsigned int Count;
 };
 
 #if !__has_include("m_alloc.h")

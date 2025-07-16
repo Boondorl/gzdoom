@@ -801,7 +801,7 @@ void G_BuildTiccmd (usercmd_t *cmd)
 	if (sendpause)
 	{
 		sendpause = false;
-		Net_WriteInt8 (DEM_PAUSE);
+		Net_WritePacket(*CreatePacket(DEM_PAUSE));
 	}
 	if (sendsave)
 	{
@@ -2671,6 +2671,14 @@ UNSAFE_CCMD(timedemo)
 //	them would be too big a security concern.
 bool G_VerifyDemoHeader(FString& map, TArrayView<const uint8_t> fileData)
 {
+	TMap<int, bool> VerifiedIDs = {};
+	VerifiedIDs[ZDHD_ID] = false;
+	VerifiedIDs[VARS_ID] = false;
+	VerifiedIDs[UINF_ID] = false;
+	VerifiedIDs[WEAP_ID] = false;
+	VerifiedIDs[BODY_ID] = false;
+	VerifiedIDs[COMP_ID] = false;
+
 	int32_t id = 0;
 	auto data = ReadDemoChunk(id, fileData);
 	if (id != FORM_ID || !data.Size())
@@ -2690,9 +2698,6 @@ bool G_VerifyDemoHeader(FString& map, TArrayView<const uint8_t> fileData)
 	// buffer, that way it can be uncompressed properly.
 	uint32_t compressed = 0u;
 	TArrayView<const uint8_t> bodyData = { nullptr, 0u };
-	// Try to prevent data duplication. This should never happen outside of players, so if it does
-	// that likely means someone has a malformed demo file, intentional or not.
-	TArray<int> parsedIds = {};
 	memset(playeringame, 0, std::size(playeringame));
 	size_t totalPlayers = 0u;
 	while (data.Size())
@@ -2701,11 +2706,15 @@ bool G_VerifyDemoHeader(FString& map, TArrayView<const uint8_t> fileData)
 		if (!r.Size())
 			return false;
 
+		auto iKey = VerifiedIDs.CheckKey(id);
+		if (iKey == nullptr)
+			return false;
+
 		if (id != UINF_ID)
 		{
-			if (parsedIds.Find(id) < parsedIds.Size())
+			if (*iKey)
 				return false;
-			parsedIds.Push(id);
+			*iKey = true;
 		}
 
 		switch (id)
@@ -2787,8 +2796,15 @@ bool G_VerifyDemoHeader(FString& map, TArrayView<const uint8_t> fileData)
 
 	// We can allow all the chunks to be shifted around, but we still need to make sure we
 	// hit all of them, otherwise the file is malformed.
-	if (parsedIds.Size() < 5 || !totalPlayers || compressed <= bodyData.Size())
+	if (!totalPlayers || compressed <= bodyData.Size())
 		return false;
+	TMap<int, bool>::ConstIterator it = { VerifiedIDs };
+	TMap<int, bool>::ConstPair* pair = nullptr;
+	while (it.NextPair(pair))
+	{
+		if (pair->Key != UINF_ID && !pair->Value)
+			return false;
+	}
 
 	if (compressed)
 	{
@@ -2837,7 +2853,7 @@ void G_DoPlayDemo()
 		const size_t len = fr.GetLength();
 		temp.Resize(len);
 		if (fr.Read(temp.Data(), len) != len)
-			I_Error("Unable to read demo '%s'", DeferredDemoName.GetChars());
+			I_FatalError("Unable to read demo '%s'", DeferredDemoName.GetChars());
 	}
 
 	FString map = {};
@@ -2878,8 +2894,8 @@ void G_TimeDemo(const char* demoName)
 	nodrawers = !!Args->CheckParm("-nodraw");
 	noblit = !!Args->CheckParm("-noblit");
 	BenchmarkDemo = true;
-
 	DeferredDemoName = demoName;
+	singletics = true;
 	gameaction = (gameaction == ga_loadgame) ? ga_loadgameplaydemo : ga_playdemo;
 }
 

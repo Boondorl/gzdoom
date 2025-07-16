@@ -34,17 +34,17 @@
 
 enum EDemoCommand : uint8_t
 {
-	DEM_INVALID,	//  0 Intentionally has no packet
+	xx(INVALID, void),	// Intentionally has no packet
 	DEM_USERCMD,		//  1 Player inputs
 	DEM_EMPTYUSERCMD,	//  2 Equivalent to [DEM_USERCMD, 0]
 	xx(MUSICCHANGE, ChangeMusicPacket),	//  4 String: music name
-	DEM_STOP,			//  7 End of demo
+	xx(STOP, void),			//  Special end-of-demo command that gets written directly. Like INVALID, not a real packet.
 	DEM_UINFCHANGED,	//  8 User info changed
 	DEM_SINFCHANGED,	//  9 Server/Host info changed
 	DEM_GENERICCHEAT,	// 10 Int8: cheat
-	DEM_GIVECHEAT,		// 11 String: item to give, Int32: quantity
+	xx(GIVECHEAT, GiveCheatPacket),		// 11 String: item to give, Int32: quantity
 	xx(SAY, SayPacket),			// 12 Int8: who to talk to, String: message
-	DEM_CHANGEMAP,		// 14 String: name of map
+	xx(CHANGEMAP, ChangeMapPacket),		// 14 String: name of map
 	DEM_SUICIDE,		// 15 
 	DEM_ADDBOT,			// 16 Int8: botshift, String: userinfo for bot, Type: botskill_t
 	DEM_KILLBOTS,		// 17 
@@ -69,7 +69,7 @@ enum EDemoCommand : uint8_t
 	DEM_DOAUTOSAVE,		// 42 
 	DEM_MORPHEX,		// 43 String: the class to morph to
 	DEM_SUMMONFOE,		// 44 String: thing to fabricate
-	DEM_TAKECHEAT,		// 47 String: item class, Int32: quantity
+	xx(TAKECHEAT, TakeCheatPacket),		// 47 String: item class, Int32: quantity
 	DEM_ADDCONTROLLER,	// 48 Int8: player
 	DEM_DELCONTROLLER,	// 49 Int8: player
 	DEM_KILLCLASSCHEAT,	// 50 String: class to kill
@@ -92,7 +92,7 @@ enum EDemoCommand : uint8_t
 	DEM_FINISHGAME,		// 69 
 	xx(NETEVENT, NetEventPacket),		// 70 String: event name, Int8: Arg count; each arg is an Int32, Int8: manual
 	DEM_MDK,			// 71 String: damage type
-	DEM_SETINV,			// 72 String: item name, Int32: amount, Int8: allow beyond max
+	xx(SETINV, SetCheatPacket),			// 72 String: item name, Int32: amount, Int8: allow beyond max
 	DEM_ENDSCREENJOB,	// 73 
 	DEM_ZSC_CMD,		// 74 String: command, Int16: Byte size of command
 	DEM_CHANGESKILL,	// 75 Int32: Skill
@@ -108,15 +108,28 @@ DEFINE_NETPACKET_EMPTY(EndScreenRunnerPacket, DEM_ENDSCREENJOB);
 DEFINE_NETPACKET_EMPTY(PlayerReadyPacket, DEM_READIED);
 DEFINE_NETPACKET_EMPTY(UseAllPacket, DEM_INVUSEALL);
 DEFINE_NETPACKET_EMPTY(RevertCameraPacket, DEM_REVERTCAMERA);
+DEFINE_NETPACKET_EMPTY(FinishGamePacket, DEM_FINISHGAME);
+DEFINE_NETPACKET_EMPTY(ConversationClosePacket, DEM_CONVCLOSE);
+DEFINE_NETPACKET_EMPTY(ConversationNullPacket, DEM_CONVNULL);
+DEFINE_NETPACKET_EMPTY(PausePacket, DEM_PAUSE);
+
+DEFINE_NETPACKET_UINT8(KickPacket, DEM_KICK);
+
+DEFINE_NETPACKET_INT16(ChangeSkillPacket, DEM_CHANGESKILL);
+
+DEFINE_NETPACKET_STRING(ChangeMusicPacket, DEM_MUSICCHANGE);
+DEFINE_NETPACKET_STRING(MDKPacket, DEM_MDK);
+DEFINE_NETPACKET_STRING(RemovePacket, DEM_REMOVE);
+DEFINE_NETPACKET_STRING(ChangeMapPacket, DEM_CHANGEMAP);
 
 class SayPacket : public NetPacket
 {
-	DEFINE_NETPACKET(SayPacket, NetPacket, DEM_SAY, 2)
+	DEFINE_NETPACKET_CONDITIONAL(SayPacket, NetPacket, DEM_SAY, 2)
 	uint8_t _flags = 0u;
 	FString _message = {};
 	static constexpr uint8_t MSG_TEAM = 1u;
 	static constexpr uint8_t MSG_BOLD = 2u;
-	DEFINE_NETPACKET_SERIALIZER()
+	NETPACKET_SERIALIZE()
 	{
 		SERIALIZE_UINT8(_flags);
 		SERIALIZE_STRING(_message);
@@ -128,18 +141,14 @@ public:
 		_flags = flags;
 		_message = message;
 	}
-	bool ShouldWrite() const override
-	{
-		return _message.IsNotEmpty();
-	}
 };
 
 class RunSpecialPacket : public NetPacket
 {
-	DEFINE_NETPACKET(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2)
+	DEFINE_NETPACKET_CONDITIONAL(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2)
 	int16_t _special = 0;
 	int32_t _args[5] = {};
-	DEFINE_NETPACKET_SERIALIZER()
+	NETPACKET_SERIALIZE()
 	{
 		SERIALIZE_INT16(_special);
 		size_t len = std::size(_args);
@@ -165,10 +174,6 @@ public:
 		_special = special;
 		memcpy(_args, args.Data(), min<size_t>(args.Size(), std::size(_args)));
 	}
-	bool ShouldWrite() const override
-	{
-		return _special > 0;
-	}
 };
 
 class NetEventPacket : public NetPacket
@@ -177,7 +182,7 @@ class NetEventPacket : public NetPacket
 	FString _event = {};
 	int32_t _args[3] = {};
 	bool _bManual = true;
-	DEFINE_NETPACKET_SERIALIZER()
+	NETPACKET_SERIALIZE()
 	{
 		SERIALIZE_STRING(_event);
 		size_t len = std::size(args);
@@ -196,6 +201,7 @@ class NetEventPacket : public NetPacket
 		IF_READING()
 			memcpy(_args, data.Data(), data.Size());
 		SERIALIZE_BOOL(_bManual);
+		return true;
 	}
 public:
 	NetEventPacket(const FString& event, int32_t arg0, int32_t arg1, int32_t arg2, bool bManual) : NetEventPacket()
@@ -208,9 +214,85 @@ public:
 	}
 };
 
-DEFINE_NETPACKET_STRING(ChangeMusicPacket, DEM_MUSICCHANGE);
+class NetCommandPacket : public NetPacket
+{
+	DEFINE_NETPACKET(NetCommandPacket, NetPacket, DEM_ZSC_CMD, 2)
+	FName _command = NAME_None;
+	TArray<const uint8_t> _buffer = {}; // Make sure the command is completely sandboxed.
+	NETPACKET_SERIALIZE()
+	{
+		SERIALIZE_NAME(_command);
+		auto data = _buffer.View();
+		SERIALIZE_ARRAY(data);
+		IF_READING()
+		{
+			_buffer.Clear();
+			_buffer.AppendView(data);
+		}
+	}
+public:
+	NetCommandPacket(FName command, const TArrayView<const uint8_t> data) : NetCommandPacket()
+	{
+		_command = command;
+	}
+};
 
-EDemoCommand GetPacketType(const TArrayView<const uint8_t>& stream);
+class CheatPacket : public NetPacket
+{
+	DEFINE_NETPACKET_BASE_CONDITIONAL(NetPacket)
+protected:
+	FString ItemCls = {};
+	int32_t Amount = 0;
+	NETPACKET_SERIALIZE()
+	{
+		SERIALIZE_STRING(ItemCls);
+		SERIALIZE_INT32(Amount);
+		return true;
+	}
+};
+
+class GiveCheatPacket : public CheatPacket
+{
+	DEFINE_NETPACKET(GiveCheatPacket, CheatPacket, DEM_GIVECHEAT, 2)
+public:
+	GiveCheatPacket(const FString& itemCls, int amount) : GiveCheatPacket()
+	{
+		ItemCls = itemCls;
+		Amount = amount;
+	}
+};
+
+class TakeCheatPacket : public CheatPacket
+{
+	DEFINE_NETPACKET(TakeCheatPacket, CheatPacket, DEM_TAKECHEAT, 2)
+public:
+	TakeCheatPacket(const FString& itemCls, int amount) : TakeCheatPacket()
+	{
+		ItemCls = itemCls;
+		Amount = amount;
+	}
+};
+
+class SetCheatPacket : public CheatPacket
+{
+	DEFINE_NETPACKET(SetCheatPacket, CheatPacket, DEM_SETINV, 3)
+	bool _bPastMax = false;
+	NETPACKET_SERIALIZE()
+	{
+		SUPER_SERIALIZE();
+		SERIALIZE_BOOL(_bPastMax);
+		return true;
+	}
+public:
+	SetCheatPacket(const FString& itemCls, int amount, bool bPastMax) : SetCheatPacket()
+	{
+		ItemCls = itemCls;
+		Amount = amount;
+		_bPastMax = bPastMax;
+	}
+};
+
+EDemoCommand GetPacketType(const TArrayView<const uint8_t> stream);
 void InitializeDoomPackets();
 
 #endif // __D_NETPACKET__

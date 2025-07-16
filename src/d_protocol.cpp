@@ -106,12 +106,12 @@ void ReadUserCommand(TArrayView<const uint8_t>& stream, int player, int tic)
 	if (GetPacketType(stream) == DEM_EMPTYUSERCMD)
 	{
 		auto p = EmptyUserCommandPacket(ticCmd, basis);
-		ReadPacket(p, stream, -1);
+		ReadPacket(p, stream);
 	}
 	else
 	{
 		auto p = UserCommandPacket(ticCmd, basis);
-		ReadPacket(p, stream, -1);
+		ReadPacket(p, stream);
 	}
 }
 
@@ -136,7 +136,7 @@ void RunPlayerEventData(int player, int tic)
 void WriteDemoChunk(int32_t id, const TArrayView<const uint8_t> data, DynamicWriteStream& stream)
 {
 	stream.WriteValue<int32_t>(id);
-	stream.WriteChunk<uint8_t>(data);
+	stream.WriteLargeArray<uint8_t>(data);
 	if (data.Size() & 1)
 		stream.WriteValue<uint8_t>(0u);
 }
@@ -147,7 +147,7 @@ TArrayView<const uint8_t> ReadDemoChunk(int32_t& id, TArrayView<const uint8_t>& 
 	if (!r.SerializeInt32(id))
 		return { nullptr, 0u };
 	TArrayView<const uint8_t> data = { nullptr, 0u };
-	if (!r.SerializeChunk<uint8_t>(data, 0u, false))
+	if (!r.SerializeLargeArray<uint8_t>(data, 0u, false))
 		return { nullptr, 0u };
 	uint8_t pad = 0u;
 	if ((data.Size() & 1) && !r.SerializeUInt8(pad))
@@ -160,7 +160,7 @@ void SkipDemoChunk(TArrayView<const uint8_t>& stream)
 {
 	MeasureStream m = { stream };
 	m.SkipValue<int32_t>();
-	m.SkipChunk<uint8_t>();
+	m.SkipLargeArray<uint8_t>();
 	if (m.GetSkippedBytes() & 1)
 		m.SkipValue<int8_t>();
 
