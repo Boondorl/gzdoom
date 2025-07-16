@@ -194,6 +194,14 @@ public:
 	inline size_t Size() const { return _writer.Size(); }
 	inline uint8_t* Data() const { return _writer.Data(); }
 
+	// This is mainly here since the manual readers also assume 64-bit unsigned string sizes.
+	// This shouldn't be used for actual networking since strings at this size couldn't
+	// be sent out anyway.
+	bool WriteString(const FString& value)
+	{
+		return SerializeChunk<char>({ value.GetChars(), value.Len() }, 0u, false);
+	}
+
 	bool SerializeInt8(int8_t value)
 	{
 		if (_writer.WouldWritePastEnd(sizeof(int8_t)))
@@ -363,7 +371,7 @@ public:
 	// Direct read API. This has no safety checking so use with extreme caution.
 	FString ReadString()
 	{
-		const auto data = ReadArray<char>();
+		const auto data = ReadChunk<char>();
 		return FString(data.Data(), data.Size());
 	}
 	template<typename T>
@@ -400,7 +408,7 @@ public:
 	// Peeking API.
 	FString PeekString()
 	{
-		const auto data = PeekArray<char>();
+		const auto data = PeekChunk<char>();
 		return FString(data.Data(), data.Size());
 	}
 	template<typename T>
@@ -589,7 +597,7 @@ public:
 	// Direct skipping API.
 	void SkipString()
 	{
-		SkipArray<char>();
+		SkipChunk<char>();
 	}
 	template<typename T>
 	void SkipValue()
@@ -725,7 +733,7 @@ public:
 	}
 	void WriteString(const FString& value)
 	{
-		WriteArray<char>({ value.GetChars(), value.Len() });
+		WriteChunk<char>({ value.GetChars(), value.Len() });
 	}
 	template<typename T>
 	void WriteValue(T value)
@@ -820,7 +828,7 @@ public:
 	}
 	void ReadString(FString& value)
 	{
-		const auto data = ReadArray<char>();
+		const auto data = ReadChunk<char>();
 		value = FString(data.Data(), data.Size());
 	}
 	template<typename T>
@@ -861,7 +869,7 @@ public:
 	}
 	void PeekString(FString& value)
 	{
-		const auto data = PeekArray<char>();
+		const auto data = PeekChunk<char>();
 		value = FString(data.Data(), data.Size());
 	}
 	template<typename T>
