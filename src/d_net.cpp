@@ -32,7 +32,6 @@
 #include "version.h"
 #include "menu.h"
 #include "i_video.h"
-#include "i_net.h"
 #include "g_game.h"
 #include "c_console.h"
 #include "d_netinf.h"
@@ -71,7 +70,7 @@
 #include "screenjob.h"
 #include "d_main.h"
 #include "savegamemanager.h"
-#include "d_netpackets.h"
+#include "i_interface.h"
 
 void P_RunClientsideLogic();
 
@@ -652,11 +651,11 @@ static void CheckLevelStart(int client, int delayTics)
 		if (consoleplayer == Net_Arbitrator && client != consoleplayer)
 		{
 			// Someone might've missed the previous packet, so resend it just in case.
-			WriteStream w = { NetBufferView };
+			WriteStream w = { NetBufferWriteView };
 			w.SerializeUInt8(NCMD_LEVELREADY);
 			w.SerializeUInt8(CurrentLobbyID);
 			if (NetMode == NET_PacketServer)
-				w.SerializeInt16(0);
+				w.SerializeUInt16(0u);
 
 			HSendPacket(client, w.GetWrittenBytes());
 		}
@@ -686,7 +685,7 @@ static void CheckLevelStart(int client, int delayTics)
 		// Beyond this point a player is likely lagging out anyway.
 		constexpr uint16_t LatencyCap = 500u;
 
-		WriteStream w = { NetBufferView };
+		WriteStream w = { NetBufferWriteView };
 		w.SerializeUInt8(NCMD_LEVELREADY);
 		w.SerializeUInt8(CurrentLobbyID);
 		uint16_t highestAvg = 0u;
@@ -718,7 +717,7 @@ static void CheckLevelStart(int client, int delayTics)
 				if (client != Net_Arbitrator)
 					delay = int(floor((highestAvg - min<uint16_t>(ClientStates[client].AverageLatency, LatencyCap)) * MS2Sec * TICRATE));
 
-				w.SerializeInt16(delay);
+				w.SerializeUInt16(delay);
 			}
 
 			HSendPacket(client, w.GetWrittenBytes());
@@ -741,25 +740,28 @@ struct FLatencyAck
 //
 static void GetPackets()
 {
+	ReadStream r = NetBufferReadView;
 	TArray<FLatencyAck> latencyAcks = {};
 	while (HGetPacket())
 	{
 		const int clientNum =  RemoteClient;
 		auto& clientState = ClientStates[clientNum];
 
-		if (NetBuffer[0] & NCMD_EXIT)
+		r.Reset();
+		const NetFlags flags = r.ReadValue<NetFlags::EnumType>();
+		if (flags & NCMD_EXIT)
 		{
-			ClientQuit(clientNum, NetMode == NET_PacketServer && clientNum == Net_Arbitrator ? NetBuffer[1] : -1);
+			ClientQuit(clientNum, NetMode == NET_PacketServer && clientNum == Net_Arbitrator ? r.ReadValue<uint8_t>() : -1);
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_SETUP)
+		if (flags & NCMD_SETUP)
 		{
 			HandleIncomingConnection();
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_LATENCY)
+		if (flags & NCMD_LATENCY)
 		{
 			size_t i = 0u;
 			for (; i < latencyAcks.Size(); ++i)
@@ -769,14 +771,14 @@ static void GetPackets()
 			}
 
 			if (i >= latencyAcks.Size())
-				latencyAcks.Push({ clientNum, NetBuffer[1] });
+				latencyAcks.Push({ clientNum, r.ReadValue<uint8_t>() });
 
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_LATENCYACK)
+		if (flags & NCMD_LATENCYACK)
 		{
-			if (NetBuffer[1] == clientState.CurrentLatency)
+			if (r.ReadValue<uint8_t>() == clientState.CurrentLatency)
 			{
 				clientState.RecvTime[clientState.CurrentLatency++ % MAXSENDTICS] = I_msTime();
 				clientState.bNewLatency = true;
@@ -785,13 +787,13 @@ static void GetPackets()
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_LEVELREADY)
+		if (flags & NCMD_LEVELREADY)
 		{
-			if (NetBuffer[1] == CurrentLobbyID)
+			if (r.ReadValue<uint8_t>() == CurrentLobbyID)
 			{
 				int delay = 0;
 				if (NetMode == NET_PacketServer && clientNum == Net_Arbitrator)
-					delay = (NetBuffer[2] << 8) | NetBuffer[3];
+					delay = r.ReadValue<uint16_t>();
 
 				CheckLevelStart(clientNum, delay);
 			}
@@ -799,51 +801,52 @@ static void GetPackets()
 			continue;
 		}
 
-		if (NetBuffer[0] & NCMD_RETRANSMIT)
+		const int id = r.ReadValue<uint8_t>();
+		if (flags & NCMD_RETRANSMIT)
 		{
-			clientState.ResendID = NetBuffer[1];
+			clientState.ResendID = id;
 			clientState.Flags |= CF_RETRANSMIT;
 		}
 
-		const bool validID = NetBuffer[1] == CurrentLobbyID;
+		const bool validID = id == CurrentLobbyID;
+		const int seq = r.ReadValue<int32_t>();
 		if (validID)
 		{
 			clientState.Flags |= CF_UPDATED;
-			clientState.SequenceAck = (NetBuffer[2] << 24) | (NetBuffer[3] << 16) | (NetBuffer[4] << 8) | NetBuffer[5];
+			clientState.SequenceAck = seq;
 		}
 
-		const int consistencyAck = (NetBuffer[6] << 24) | (NetBuffer[7] << 16) | (NetBuffer[8] << 8) | NetBuffer[9];
+		const int consistencyAck = r.ReadValue<int32_t>();
 
-		int curByte = 10;
-		if (NetBuffer[0] & NCMD_QUITTERS)
+		if (flags & NCMD_QUITTERS)
 		{
-			int numPlayers = NetBuffer[curByte++];
-			for (int i = 0; i < numPlayers; ++i)
-				DisconnectClient(NetBuffer[curByte++]);
+			const auto data = r.ReadSmallArray<uint8_t>();
+			for (auto pNum : data)
+				DisconnectClient(pNum);
 		}
 
-		const int playerCount = NetBuffer[curByte++];
+		const int playerCount = r.ReadValue<uint8_t>();
 
 		int baseSequence = -1;
-		const int totalTics = NetBuffer[curByte++];
+		const int totalTics = r.ReadValue<uint8_t>();
 		if (totalTics > 0)
-			baseSequence = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+			baseSequence = r.ReadValue<int32_t>();
 
 		int baseConsistency = -1;
-		const int ranTics = NetBuffer[curByte++];
+		const int ranTics = r.ReadValue<uint8_t>();
 		if (ranTics > 0)
-			baseConsistency = (NetBuffer[curByte++] << 24) | (NetBuffer[curByte++] << 16) | (NetBuffer[curByte++] << 8) | NetBuffer[curByte++];
+			baseConsistency = r.ReadValue<int32_t>();
 
 		if (NetMode == NET_PacketServer)
 		{
+			const int netStatus = r.ReadValue<uint8_t>();
 			if (validID)
 			{
 				if (clientNum == Net_Arbitrator)
-					CommandsAhead = NetBuffer[curByte];
+					CommandsAhead = netStatus;
 				else if (consoleplayer == Net_Arbitrator)
-					clientState.StabilityBuffer = NetBuffer[curByte];
+					clientState.StabilityBuffer = netStatus;
 			}
-			++curByte;
 		}
 		
 		for (int p = 0; p < playerCount; ++p)
@@ -900,7 +903,7 @@ static void GetPackets()
 				const int ofs = NetBuffer[curByte++];
 
 				TArrayView<uint8_t> skipper = TArrayView(&NetBuffer[curByte], MAX_MSGLEN - curByte);
-				SkipUserCmdMessage(skipper);
+				SkipUserCommand(skipper);
 
 				TArrayView<uint8_t> packet = TArrayView(&NetBuffer[curByte], skipper.Data() - &NetBuffer[curByte]);
 				data.Insert(ofs, packet);
@@ -1403,7 +1406,7 @@ void NetUpdate(int tics)
 	}
 
 	const int newestTic = ClientTic / TicDup;
-	if (DemoPlayback)
+	if (IsPlayingDemo())
 	{
 		// Don't touch net command data while playing a demo, as it'll already exist.
 		for (auto client : NetworkClients)
@@ -1722,44 +1725,50 @@ const char* Net_GetClientName(int client, unsigned int charLimit = 0u)
 	return players[client].userinfo.GetName(charLimit);
 }
 
-void Net_SetUserInfo(int client, TArrayView<uint8_t>& stream)
+void Net_SetUserInfo(int client, WriteStream& stream)
 {
-	auto str = D_GetUserInfoStrings(client, true);
-	WriteString(str, stream);
+	if (!stream.SerializeString(D_GetUserInfoStrings(client, true)))
+		I_Error("Failed to write out user info for %s [%d]", Net_GetClientName(client), client);
 }
 
-void Net_ReadUserInfo(int client, TArrayView<uint8_t>& stream)
+void Net_ReadUserInfo(int client, ReadStream& stream)
 {
-	D_ReadUserInfoStrings(client, stream, false);
+	FString info = {};
+	if (!stream.SerializeString(info))
+		I_Error("Failed to read user info from %d", client);
+	D_ReadUserInfoStrings(client, info, false);
 }
 
-void Net_SetGameInfo(TArrayView<uint8_t>& stream)
+void Net_SetGameInfo(WriteStream& stream)
 {
-	WriteString(startmap, stream);
-	WriteInt32(rngseed, stream);
+	if (!stream.SerializeString(startmap))
+		return;
+	if (!stream.SerializeUInt32(rngseed))
+		return;
 	C_WriteCVars(stream, CVAR_SERVERINFO, true);
 
 	auto load = Args->CheckValue("-loadgame");
 	if (load != nullptr)
 	{
-		WriteInt8(1, stream);
-		WriteString(load, stream);
+		stream.SerializeBool(true);
+		stream.SerializeString(load);
 	}
 	else
 	{
-		WriteInt8(0, stream);
+		stream.SerializeBool(false);
 	}
 }
 
-void Net_ReadGameInfo(TArrayView<uint8_t>& stream)
+void Net_ReadGameInfo(ReadStream& stream)
 {
-	startmap = ReadString(stream);
-	rngseed = ReadInt32(stream);
+	stream.SerializeString(startmap);
+	stream.SerializeUInt32(rngseed);
 	C_ReadCVars(stream);
 
-	if (ReadInt8(stream))
+	if (stream.ReadValue<bool>())
 	{
-		auto load = ReadString(stream);
+		FString load = {};
+		stream.SerializeString(load);
 		// Don't override the existing argument in case they need to use
 		// a custom savefile name.
 		if (!Args->CheckParm("-loadgame"))
@@ -3023,10 +3032,16 @@ static void Net_ChangeSettingsControllers(const TArray<int>& cNums, bool add)
 		{
 			Printf("Client %d is already not a settings controller\n", cNum);
 		}
+		else if (add)
+		{
+			// Boon TODO: I think we have to mark this shit as const because this method is just too annoying
+			auto p = AddControllerPacket(cNum);
+			Net_WritePacket(p);
+		}
 		else
 		{
-			Net_WriteInt8(add ? DEM_ADDCONTROLLER : DEM_DELCONTROLLER);
-			Net_WriteInt8(cNum);
+			auto p = RemoveControllerPacket(cNum);
+			Net_WritePacket(p);
 		}
 	}
 }

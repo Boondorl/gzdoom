@@ -119,6 +119,7 @@ public:
 	inline size_t GetReadBytes() const { return _curPos; }
 	inline TArrayView<const uint8_t> GetReadData() const { return { Data(), _curPos }; }
 	inline TArrayView<const uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
+	inline TArrayView<const uint8_t> GetMeasuredData() const { return _curPos > _measurePos ? TArrayView{ &_buffer[_measurePos], _curPos - _measurePos } : TArrayView<const uint8_t>{ nullptr, 0u }; }
 	inline const uint8_t* Data() const { return _buffer.Data(); }
 	inline size_t Size() const { return _buffer.Size(); }
 
@@ -126,13 +127,9 @@ public:
 	{
 		_measurePos = _curPos;
 	}
-	void ClearMeasurement()
+	void StopMeasuring()
 	{
 		_measurePos = 0u;
-	}
-	TArrayView<const uint8_t> GetMeasuredData() const
-	{
-		return InternalReadBytes(_curPos - _measurePos);
 	}
 
 	void Reset()
@@ -411,7 +408,7 @@ public:
 	inline size_t Size() const { return _reader.Size(); }
 	inline const uint8_t* Data() const { return _reader.Data(); }
 	inline void StartMeasuring() { _reader.StartMeasuring(); }
-	inline void ClearMeasurement() { _reader.ClearMeasurement(); }
+	inline void StopMeasuring() { _reader.StopMeasuring(); }
 	inline TArrayView<const uint8_t> GetMeasuredData() const { return _reader.GetMeasuredData(); }
 
 	bool SkipBytes(size_t bytes)
@@ -959,6 +956,7 @@ public:
 class StaticReadBuffer
 {
 	size_t _curPos = 0u;
+	size_t _measurePos = 0u;
 	TArray<uint8_t> _array = {};
 
 	template<typename T, typename Size>
@@ -996,8 +994,18 @@ public:
 	inline TArrayView<const uint8_t> GetView() const { return { Data(), Size() }; }
 	inline TArrayView<const uint8_t> GetReadData() const { return { Data(), _curPos }; }
 	inline TArrayView<const uint8_t> GetRemainingData() const { return { &_array[_curPos], Size() - _curPos }; }
+	inline TArrayView<const uint8_t> GetMeasuredData() const { return _curPos > _measurePos ? TArrayView<const uint8_t>{ &_array[_measurePos], _curPos - _measurePos } : TArrayView<const uint8_t>{ nullptr, 0u }; }
 	inline size_t Size() const { return _array.Size(); }
 	inline const uint8_t* Data() const { return _array.Data(); }
+
+	void StartMeasuring()
+	{
+		_measurePos = _curPos;
+	}
+	void StopMeasuring()
+	{
+		_measurePos = 0u;
+	}
 
 	void SkipBytes(size_t bytes)
 	{
