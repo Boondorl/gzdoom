@@ -502,24 +502,24 @@ static size_t GetNetBufferSize()
 	if (NetBufferLength < totalBytes + playerCount * padding)
 		return totalBytes + playerCount * padding;
 
-	TArrayView<uint8_t> skipper = TArrayView(&NetBuffer[totalBytes], MAX_MSGLEN - totalBytes);
+	ReadStream skipper = { { &NetBuffer[totalBytes], std::size(NetBuffer) - totalBytes } };
 	for (int p = 0; p < playerCount; ++p)
 	{
-		AdvanceStream(skipper, 1);
+		skipper.SkipBytes(1);
 		if (NetMode == NET_PacketServer && RemoteClient == Net_Arbitrator)
-			AdvanceStream(skipper, 2);
+			skipper.SkipBytes(2);
 
 		for (int i = 0; i < ranTics; ++i)
-			AdvanceStream(skipper, 3);
+			skipper.SkipBytes(3);
 
 		for (int i = 0; i < numTics; ++i)
 		{
-			AdvanceStream(skipper, 1);
-			SkipUserCmdMessage(skipper);
+			skipper.SkipBytes(1);
+			SkipUserCommand(skipper);
 		}
 	}
 
-	return int(skipper.Data() - NetBuffer);
+	return totalBytes + skipper.GetReadBytes();
 }
 
 //
@@ -569,7 +569,7 @@ static bool HGetPacket()
 	if (RemoteClient == -1)
 		return false;
 
-	size_t sizeCheck = GetNetBufferSize();
+	const size_t sizeCheck = GetNetBufferSize();
 	if (NetBufferLength != sizeCheck)
 	{
 		Printf("Incorrect packet size %d (expected %d)\n", NetBufferLength, sizeCheck);
@@ -652,15 +652,13 @@ static void CheckLevelStart(int client, int delayTics)
 		if (consoleplayer == Net_Arbitrator && client != consoleplayer)
 		{
 			// Someone might've missed the previous packet, so resend it just in case.
-			NetBuffer[0] = NCMD_LEVELREADY;
-			NetBuffer[1] = CurrentLobbyID;
+			WriteStream w = { NetBufferView };
+			w.SerializeUInt8(NCMD_LEVELREADY);
+			w.SerializeUInt8(CurrentLobbyID);
 			if (NetMode == NET_PacketServer)
-			{
-				NetBuffer[2] = 0;
-				NetBuffer[3] = 0;
-			}
+				w.SerializeInt16(0);
 
-			HSendPacket(client, NetMode == NET_PacketServer ? 4 : 2);
+			HSendPacket(client, w.GetWrittenBytes());
 		}
 
 		return;
@@ -686,10 +684,11 @@ static void CheckLevelStart(int client, int delayTics)
 	if ((LevelStartAck & mask) == mask && IsMapLoaded())
 	{
 		// Beyond this point a player is likely lagging out anyway.
-		constexpr uint16_t LatencyCap = 350u;
+		constexpr uint16_t LatencyCap = 500u;
 
-		NetBuffer[0] = NCMD_LEVELREADY;
-		NetBuffer[1] = CurrentLobbyID;
+		WriteStream w = { NetBufferView };
+		w.SerializeUInt8(NCMD_LEVELREADY);
+		w.SerializeUInt8(CurrentLobbyID);
 		uint16_t highestAvg = 0u;
 		if (NetMode == NET_PacketServer)
 		{
@@ -710,6 +709,7 @@ static void CheckLevelStart(int client, int delayTics)
 		}
 
 		constexpr double MS2Sec = 1.0 / 1000.0;
+		w.SetUnwindPos();
 		for (auto client : NetworkClients)
 		{
 			if (NetMode == NET_PacketServer)
@@ -718,12 +718,13 @@ static void CheckLevelStart(int client, int delayTics)
 				if (client != Net_Arbitrator)
 					delay = int(floor((highestAvg - min<uint16_t>(ClientStates[client].AverageLatency, LatencyCap)) * MS2Sec * TICRATE));
 
-				NetBuffer[2] = (delay << 8);
-				NetBuffer[3] = delay;
+				w.SerializeInt16(delay);
 			}
 
-			HSendPacket(client, NetMode == NET_PacketServer ? 4 : 2);
+			HSendPacket(client, w.GetWrittenBytes());
+			w.Unwind();
 		}
+		w.ClearUnwindPos();
 	}
 }
 

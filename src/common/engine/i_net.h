@@ -24,7 +24,7 @@ enum ENetCommand
 	CMD_GET,
 };
 
-enum ENetFlags
+enum ENetFlags : uint8_t
 {
 	NCMD_EXIT = 0x80,		// Client has left the game
 	NCMD_RETRANSMIT = 0x40,		// 
@@ -64,6 +64,7 @@ extern int Net_Arbitrator;
 extern FClientStack NetworkClients;
 extern ENetMode NetMode;
 extern uint8_t NetBuffer[MAX_MSGLEN];
+extern TArrayView<uint8_t> NetBufferView;
 extern size_t NetBufferLength;
 extern uint8_t TicDup;
 extern int RemoteClient;

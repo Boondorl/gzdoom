@@ -167,6 +167,8 @@ int	MaxClients = 1;
 int RemoteClient = -1;
 size_t NetBufferLength = 0u;
 uint8_t NetBuffer[MAX_MSGLEN] = {};
+// So it can be passed to write/read streams easily.
+TArrayView<uint8_t> NetBufferView = { NetBuffer, std::size(NetBuffer) };
 
 static FRandom		GameIDGen = {};
 static uint8_t		GameID[8] = {};

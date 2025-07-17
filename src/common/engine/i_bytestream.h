@@ -45,6 +45,7 @@ class ByteWriter
 {
 	const TArrayView<uint8_t> _buffer = { nullptr, 0u };
 	size_t _curPos = 0u;
+	size_t _unwindPos = ~0u;
 public:
 	ByteWriter(const TArrayView<uint8_t> buffer) : _buffer(buffer) {}
 
@@ -52,12 +53,27 @@ public:
 	inline size_t GetWrittenBytes() const { return _curPos; }
 	inline TArrayView<uint8_t> GetWrittenData() const { return { Data(), _curPos }; }
 	inline TArrayView<uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
+	inline TArrayView<uint8_t> GetUnwindData() const { return _unwindPos < _curPos ? TArrayView{ &_buffer[_unwindPos], _curPos - _unwindPos } : TArrayView<uint8_t>{ nullptr, 0u }; }
 	inline uint8_t* Data() const { return _buffer.Data(); }
 	inline size_t Size() const { return _buffer.Size(); }
 
 	void Reset()
 	{
 		_curPos = 0u;
+		_unwindPos = ~0u;
+	}
+	void SetUnwindPos()
+	{
+		_unwindPos = _curPos;
+	}
+	void Unwind()
+	{
+		if (_unwindPos < _curPos)
+			_curPos = _unwindPos;
+	}
+	void ClearUnwindPos()
+	{
+		_unwindPos = ~0u;
 	}
 	void SkipBytes(size_t bytes)
 	{
@@ -204,8 +220,22 @@ public:
 	inline size_t GetWrittenBytes() const { return _writer.GetWrittenBytes(); }
 	inline TArrayView<uint8_t> GetWrittenData() const { return _writer.GetWrittenData(); }
 	inline TArrayView<uint8_t> GetRemainingData() const { return _writer.GetRemainingData(); }
+	inline TArrayView<uint8_t> GetUnwindData() const { return _writer.GetUnwindData(); }
 	inline size_t Size() const { return _writer.Size(); }
 	inline uint8_t* Data() const { return _writer.Data(); }
+
+	void SetUnwindPos()
+	{
+		_writer.SetUnwindPos();
+	}
+	void Unwind()
+	{
+		_writer.Unwind();
+	}
+	void ClearUnwindPos()
+	{
+		_writer.ClearUnwindPos();
+	}
 
 	// This is mainly here since the manual readers also assume 64-bit unsigned string sizes.
 	// This shouldn't be used for actual networking since strings at this size couldn't
@@ -730,6 +760,7 @@ public:
 class DynamicWriteStream
 {
 	TArray<uint8_t> _array = {};
+	size_t _unwindPos = ~0u;
 
 	template<typename T, typename Size>
 	void WriteRange(const TArrayView<const T> data)
@@ -764,11 +795,26 @@ public:
 	enum { IsWriting = 1 };
 	enum { IsReading = 0 };
 
-	inline void Clear() { _array.Clear(); }
-	inline void Reset() { _array.Reset(); }
+	inline void Clear() { _array.Clear(); _unwindPos = ~0u; }
+	inline void Reset() { _array.Reset(); _unwindPos = ~0u; }
 	inline TArrayView<const uint8_t> GetView() const { return { Data(), Size() }; }
+	inline TArrayView<const uint8_t> GetUnwindData() const { return _unwindPos < Size() ? TArrayView<const uint8_t>{ &_array[_unwindPos], Size() - _unwindPos } : TArrayView<const uint8_t>{ nullptr, 0u }; }
 	inline size_t Size() const { return _array.Size(); }
 	inline const uint8_t* Data() const { return _array.Data(); }
+
+	void SetUnwindPos()
+	{
+		_unwindPos = Size();
+	}
+	void Unwind()
+	{
+		if (_unwindPos < Size())
+			_array.Resize(_unwindPos);
+	}
+	void ClearUnwindPos()
+	{
+		_unwindPos = ~0u;
+	}
 
 	void WriteBytes(const TArrayView<const uint8_t> bytes)
 	{
