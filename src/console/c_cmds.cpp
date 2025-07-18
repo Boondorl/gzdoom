@@ -470,63 +470,56 @@ CCMD (take)
 
 CCMD(setinv)
 {
-	if (CheckCheatmode() || argv.argc() < 2)
+	if (argv.argc() < 2)
+	{
+		Printf("Usage: setinv <item> [amount] [ignore max]\nSet an inventory item to a specific amount, ignoring the item's max if needed\n");
 		return;
+	}
 
-	Net_WriteInt8(DEM_SETINV);
-	Net_WriteString(argv[1]);
-	if (argv.argc() > 2)
-		Net_WriteInt32(atoi(argv[2]));
-	else
-		Net_WriteInt32(0);
+	int amount = 0;
+	if (argv.argc() > 2 && !C_IsValidInt(argv[2], amount))
+	{
+		Printf("Invalid value for amount\n");
+		return;
+	}
+	bool ignoreMax = false;
+	if (argv.argc() > 3 && !C_IsValidBool(argv[3], ignoreMax))
+	{
+		Printf("Invalid value for ignore max\n");
+		return;
+	}
 
-	if (argv.argc() > 3)
-		Net_WriteInt8(!!atoi(argv[3]));
-	else
-		Net_WriteInt8(0);
-
+	Net_WritePacket(SetCheatPacket(argv[1], amount, ignoreMax));
 }
 
 
-CCMD (puke)
+CCMD(puke)
 {
-	int argc = argv.argc();
-
-	if (argc < 2 || argc > 6)
+	const int argC = argv.argc();
+	if (argC < 2 || argC > 6)
 	{
-		Printf ("Usage: puke <script> [arg1] [arg2] [arg3] [arg4]\n");
+		Printf("Usage: puke <script> [arg1] [arg2] [arg3] [arg4]\nExecutes an ACS script with the given script number. Use pukename for named scripts\n");
 	}
 	else
 	{
-		int script = atoi (argv[1]);
-
-		if (script == 0)
-		{ // Script 0 is reserved for Strife support. It is not pukable.
+		int script = 0;
+		if (!C_IsValidInt(argv[1], script))
+		{
+			Printf("Script numbers must be an index. Use pukename for named scripts\n");
 			return;
 		}
-		int arg[4] = { 0, 0, 0, 0 };
-		int argn = min<int>(argc - 2, countof(arg)), i;
-
-		for (i = 0; i < argn; ++i)
+		int args[4] = {};
+		const int totalArgs = min<int>(argC - 2, std::size(args));
+		for (size_t i = 0; i < totalArgs; ++i)
 		{
-			arg[i] = atoi (argv[2+i]);
+			if (!C_IsValidInt(argv[2u + i], args[i]))
+			{
+				Printf("Only integers can be passed as arguments\n");
+				return;
+			}
 		}
 
-		if (script > 0)
-		{
-			Net_WriteInt8 (DEM_RUNSCRIPT);
-			Net_WriteInt16 (script);
-		}
-		else
-		{
-			Net_WriteInt8 (DEM_RUNSCRIPT2);
-			Net_WriteInt16 (-script);
-		}
-		Net_WriteInt8 (argn);
-		for (i = 0; i < argn; ++i)
-		{
-			Net_WriteInt32 (arg[i]);
-		}
+		Net_WritePacket(ScriptCallPacket(abs(script), script < 0, args[0], args[1], args[2], args[3]));
 	}
 }
 
@@ -604,7 +597,7 @@ CCMD (special)
 				return;
 			}
 		}
-		Net_WriteInt8(DEM_RUNSPECIAL);
+		Net_WriteInt8(DEM_SPECIALCALL);
 		Net_WriteInt16(specnum);
 		Net_WriteInt8(argc - 2);
 		for (int i = 2; i < argc; ++i)

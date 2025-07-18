@@ -57,7 +57,7 @@ bool NetPacket::Read(ReadStream& stream)
 // Boon TODO: Probably template this
 bool NetPacket::Write(WriteStream& stream)
 {
-	if (!ShouldWrite())
+	if (!ShouldExecute(consoleplayer))
 		return true;
 
 	if (!stream.SerializeUInt8(NetCommand))
@@ -74,7 +74,7 @@ bool NetPacket::Write(WriteStream& stream)
 
 bool NetPacket::Write(DynamicWriteStream& stream)
 {
-	if (!ShouldWrite())
+	if (!ShouldExecute(consoleplayer))
 		return true;
 
 	if (!stream.SerializeUInt8(NetCommand))
@@ -102,6 +102,14 @@ bool NetPacket::Skip(ReadStream& stream)
 		return false;
 
 	return stream.SkipBytes(m.GetSkippedBytes());
+}
+
+bool NetPacket::Execute(int player)
+{
+	if (!ShouldExecute(player))
+		return true;
+
+	return DoExecute(player);
 }
 
 std::unique_ptr<NetPacket> CreatePacket(uint8_t type)

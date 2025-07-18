@@ -30,24 +30,30 @@
 
 #include "i_protocol.h"
 
+//==========================================================================
+//
+// Commands
+//
+//==========================================================================
+
 #define xx(cmd, packet) DEM_##cmd
 
 enum EDemoCommand : uint8_t
 {
-	xx(INVALID, void),	// Intentionally has no packet
-	DEM_USERCMD,		//  1 Player inputs
-	DEM_EMPTYUSERCMD,	//  2 Equivalent to [DEM_USERCMD, 0]
-	xx(MUSICCHANGE, ChangeMusicPacket),	//  4 String: music name
-	xx(STOP, void),			//  Special end-of-demo command that gets written directly. Like INVALID, not a real packet.
+	xx(INVALID, void),
+	xx(USERCMD, void),		// UserCommandPacket
+	xx(EMPTYUSERCMD, void),	// EmptyUserCommandPacket
+	xx(MUSICCHANGE, ChangeMusicPacket),
 	DEM_UINFCHANGED,	//  8 User info changed
 	DEM_SINFCHANGED,	//  9 Server/Host info changed
-	DEM_GENERICCHEAT,	// 10 Int8: cheat
+	xx(GENERICCHEAT, GenericCheatPacket),	// 10 Int8: cheat
 	xx(GIVECHEAT, GiveCheatPacket),		// 11 String: item to give, Int32: quantity
 	xx(SAY, SayPacket),			// 12 Int8: who to talk to, String: message
 	xx(CHANGEMAP, ChangeMapPacket),		// 14 String: name of map
-	DEM_SUICIDE,		// 15 
+	xx(SUICIDE, SuicidePacket),		// 15 
 	DEM_ADDBOT,			// 16 Int8: botshift, String: userinfo for bot, Type: botskill_t
-	DEM_KILLBOTS,		// 17 
+	xx(KILLBOTS, RemoveBotsPacket),		// 17 
+	xx(SCRIPTCALL, ScriptCallPacket),
 	DEM_INVUSEALL,		// 18 
 	DEM_INVUSE,			// 19 Int32: ID of item
 	DEM_PAUSE,			// 20 
@@ -83,7 +89,7 @@ enum EDemoCommand : uint8_t
 	DEM_CONVREPLY,		// 59 Int16: dialogue node, Int8: reply number
 	DEM_CONVCLOSE,		// 60
 	DEM_CONVNULL,		// 61
-	DEM_RUNSPECIAL,		// 62 Int16: special, Int8: Arg count, Int32s: Args
+	DEM_SPECIALCALL,		// 62 Int16: special, Int8: Arg count, Int32s: Args
 	DEM_SETPITCHLIMIT,	// 63 Int8: up limit, Int8: down limit (in degrees)
 	DEM_RUNNAMEDSCRIPT,	// 65 String: script name, Int8: Arg count + Always flag; each arg is an Int32
 	xx(REVERTCAMERA, RevertCameraPacket),	// 66 
@@ -104,6 +110,12 @@ enum EDemoCommand : uint8_t
 
 #undef xx
 
+//==========================================================================
+//
+// Packet types
+//
+//==========================================================================
+
 DEFINE_NETPACKET_EMPTY(EndScreenRunnerPacket, DEM_ENDSCREENJOB);
 DEFINE_NETPACKET_EMPTY(PlayerReadyPacket, DEM_READIED);
 DEFINE_NETPACKET_EMPTY(UseAllPacket, DEM_INVUSEALL);
@@ -112,10 +124,13 @@ DEFINE_NETPACKET_EMPTY(FinishGamePacket, DEM_FINISHGAME);
 DEFINE_NETPACKET_EMPTY(ConversationClosePacket, DEM_CONVCLOSE);
 DEFINE_NETPACKET_EMPTY(ConversationNullPacket, DEM_CONVNULL);
 DEFINE_NETPACKET_EMPTY(PausePacket, DEM_PAUSE);
+DEFINE_NETPACKET_EMPTY(SuicidePacket, DEM_SUICIDE);
+DEFINE_NETPACKET_EMPTY(RemoveBotsPacket, DEM_KILLBOTS);
 
 DEFINE_NETPACKET_UINT8(KickPacket, DEM_KICK);
 DEFINE_NETPACKET_UINT8(AddControllerPacket, DEM_ADDCONTROLLER);
 DEFINE_NETPACKET_UINT8(RemoveControllerPacket, DEM_DELCONTROLLER);
+DEFINE_NETPACKET_UINT8(GenericCheatPacket, DEM_GENERICCHEAT);
 
 DEFINE_NETPACKET_INT16(ChangeSkillPacket, DEM_CHANGESKILL);
 
@@ -123,6 +138,59 @@ DEFINE_NETPACKET_STRING(ChangeMusicPacket, DEM_MUSICCHANGE);
 DEFINE_NETPACKET_STRING(MDKPacket, DEM_MDK);
 DEFINE_NETPACKET_STRING(RemovePacket, DEM_REMOVE);
 DEFINE_NETPACKET_STRING(ChangeMapPacket, DEM_CHANGEMAP);
+DEFINE_NETPACKET_STRING(KillClassPacket, DEM_KILLCLASSCHEAT);
+
+// For packets that expect up to 5 argumens for specials to be passed.
+class SpecialArgsPacket : NetPacket
+{
+	DEFINE_NETPACKET_BASE(NetPacket);
+protected:
+	int32_t Args[5] = {};
+	NETPACKET_SERIALIZE()
+	{
+		size_t len = std::size(Args);
+		IF_WRITING()
+		{
+			int i = len - 1;
+			for (; i >= 0; --i)
+			{
+				if (Args[i])
+					break;
+			}
+			len = (size_t)(i + 1);
+		}
+		TArrayView<const int32_t> data = { Args, len }
+		SERIALIZE_SMALL_ARRAY_EXPECTING(data, std::size(Args), false);
+		IF_READING()
+			memcpy(Args, data.Data(), data.Size());
+		return true;
+	}
+};
+
+class ScriptCallPacket : public SpecialArgsPacket
+{
+	DEFINE_NETPACKET_CONDITIONAL(ScriptCallPacket, SpecialArgsPacket, DEM_SCRIPTCALL, 3);
+	int32_t _scriptNum = 0;
+	bool _bAlways = false;
+	NETPACKET_SERIALIZE()
+	{
+		SERIALIZE_INT32(_scriptNum);
+		SERIALIZE_BOOL(_bAlways);
+		SUPER_SERIALIZE();
+		return true;
+	}
+public:
+	ScriptCallPacket(int scriptNum, bool bAlways, int arg0, int arg1, int arg2, int arg3, int arg4) : ScriptCallPacket()
+	{
+		_scriptNum = scriptNum;
+		_bAlways = bAlways;
+		Args[0] = arg0;
+		Args[1] = arg1;
+		Args[2] = arg2;
+		Args[3] = arg3;
+		Args[4] = arg4;
+	}
+};
 
 class SayPacket : public NetPacket
 {
@@ -145,47 +213,37 @@ public:
 	}
 };
 
-class RunSpecialPacket : public NetPacket
+class RunSpecialPacket : public SpecialArgsPacket
 {
-	DEFINE_NETPACKET_CONDITIONAL(RunSpecialPacket, NetPacket, DEM_RUNSPECIAL, 2);
+	DEFINE_NETPACKET_CONDITIONAL(RunSpecialPacket, SpecialArgsPacket, DEM_SPECIALCALL, 2);
 	int16_t _special = 0;
-	int32_t _args[5] = {};
 	NETPACKET_SERIALIZE()
 	{
 		SERIALIZE_INT16(_special);
-		size_t len = std::size(_args);
-		IF_WRITING()
-		{
-			int i = len - 1;
-			for (; i >= 0; --i)
-			{
-				if (_args[i])
-					break;
-			}
-			len = (size_t)(i + 1);
-		}
-		TArrayView<const int32_t> data = { _args, len };
-		SERIALIZE_SMALL_ARRAY_EXPECTING(data, std::size(_args), false);
-		IF_READING()
-			memcpy(_args, data.Data(), data.Size());
+		SUPER_SERIALIZE();
 		return true;
 	}
 public:
-	RunSpecialPacket(int16_t special, const TArrayView<const int32_t>& args) : RunSpecialPacket()
+	RunSpecialPacket(int special, int arg0, int arg1, int arg2, int arg3, int arg4) : RunSpecialPacket()
 	{
 		_special = special;
-		memcpy(_args, args.Data(), min<size_t>(args.Size(), std::size(_args)));
+		Args[0] = arg0;
+		Args[1] = arg1;
+		Args[2] = arg2;
+		Args[3] = arg3;
+		Args[4] = arg4;
 	}
 };
 
 class NetEventPacket : public NetPacket
 {
 	DEFINE_NETPACKET(NetEventPacket, NetPacket, DEM_NETEVENT, 3);
+	bool _bManual = true;
 	FString _event = {};
 	int32_t _args[3] = {};
-	bool _bManual = true;
 	NETPACKET_SERIALIZE()
 	{
+		SERIALIZE_BOOL(_bManual);
 		SERIALIZE_STRING(_event);
 		size_t len = std::size(args);
 		IF_WRITING()
@@ -202,17 +260,16 @@ class NetEventPacket : public NetPacket
 		SERIALIZE_ARRAY_EXPECTING(int32_t, data, std::size(_args), false);
 		IF_READING()
 			memcpy(_args, data.Data(), data.Size());
-		SERIALIZE_BOOL(_bManual);
 		return true;
 	}
 public:
-	NetEventPacket(const FString& event, int32_t arg0, int32_t arg1, int32_t arg2, bool bManual) : NetEventPacket()
+	NetEventPacket(const FString& event, bool bManual, int arg0, int arg1, int arg2) : NetEventPacket()
 	{
 		_event = event;
+		_bManual = bManual;
 		_args[0] = arg0;
 		_args[1] = arg1;
 		_args[2] = arg2;
-		_bManual = bManual;
 	}
 };
 

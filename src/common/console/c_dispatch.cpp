@@ -206,6 +206,34 @@ bool C_IsValidFloat(const char* arg, double& value)
 	return chars_read == strlen(arg);
 }
 
+bool C_IsValidBool(const char* arg, bool& value)
+{
+	if (!stricmp(arg, "true"))
+	{
+		value = true;
+		return true;
+	}
+	if (!stricmp(arg, "false"))
+	{
+		value = false;
+		return true;
+	}
+	int i;
+	if (C_IsValidInt(arg, i))
+	{
+		value = !!i;
+		return true;
+	}
+	double d;
+	if (C_IsValidFloat(arg, d))
+	{
+		value = d != 0.0;
+		return true;
+	}
+	value = false;
+	return false;
+}
+
 void C_DoCommand (const char *cmd, int keynum)
 {
 	FConsoleCommand *com;

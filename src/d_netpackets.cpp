@@ -27,6 +27,9 @@
 #include "i_interface.h"
 #include "gi.h"
 #include "m_cheat.h"
+#include "g_levellocals.h"
+#include "gstrings.h"
+#include "p_lnspec.h"
 
 void InitializeDoomPackets()
 {
@@ -38,13 +41,31 @@ void InitializeDoomPackets()
 
 EDemoCommand GetPacketType(const ReadStream& stream)
 {
-	return stream.Size() ? static_cast<EDemoCommand>(stream.PeekValue<uint8_t>()) : DEM_INVALID;
+	return stream.Size() ? stream.PeekValue<EDemoCommand>() : DEM_INVALID;
 }
+
+//==========================================================================
+//
+// Packet functionality
+//
+//==========================================================================
+
+bool CheckCheatmode(bool printmsg, bool sponly);
 
 static bool ValidClass(const FString& cls, FName type = NAME_Actor)
 {
-	auto cls = PClass::FindActor(cls);
-	return cls != nullptr && cls->IsDescendantOf(type);
+	auto clss = PClass::FindActor(cls);
+	return clss != nullptr && clss->IsDescendantOf(type);
+}
+
+NETPACKET_CONDITION(ScriptCallPacket)
+{
+	return _scriptNum;
+}
+
+NETPACKET_EXECUTE(ScriptCallPacket)
+{
+	P_StartScript(players[player].mo->Level, players[player].mo, nullptr, _scriptNum, players[player].mo->Level->MapName.GetChars(), Args, std::size(Args), ACS_NET | _bAlways);
 }
 
 NETPACKET_EXECUTE(EndScreenRunnerPacket)
@@ -90,7 +111,7 @@ NETPACKET_EXECUTE(ChangeMusicPacket)
 
 NETPACKET_CONDITION(CheatPacket)
 {
-	if (!ValidClass())
+	if (!ValidClass(ItemCls, NAME_Inventory))
 	{
 		Printf("No Inventory of type %s exists", ItemCls.GetChars());
 		return false;
@@ -100,7 +121,7 @@ NETPACKET_CONDITION(CheatPacket)
 
 NETPACKET_EXECUTE(GiveCheatPacket)
 {
-	if (!ValidClass())
+	if (!ValidClass(ItemCls, NAME_Inventory))
 	{
 		Printf("%s [%d] spawned invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
 		return true; // Non-fatal, just means someone is about to desync.
@@ -118,19 +139,19 @@ NETPACKET_EXECUTE(GiveCheatPacket)
 
 NETPACKET_EXECUTE(TakeCheatPacket)
 {
-	if (!ValidClass())
+	if (!ValidClass(ItemCls, NAME_Inventory))
 	{
 		Printf("%s [%d] took invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
 		return true; // Non-fatal, just means someone is about to desync.
 	}
 
-	cht_Take(&players[pNum], ItemCls, Amount);
+	cht_Take(&players[player], ItemCls, Amount);
 	return true;
 }
 
 NETPACKET_EXECUTE(SetCheatPacket)
 {
-	if (!ValidClass())
+	if (!ValidClass(ItemCls, NAME_Inventory))
 	{
 		Printf("%s [%d] set invalid item %s", players[player].userinfo.GetName(), player, ItemCls.GetChars());
 		return true; // Non-fatal, just means someone is about to desync.
@@ -193,7 +214,7 @@ NETPACKET_CONDITION(RunSpecialPacket)
 
 NETPACKET_EXECUTE(RunSpecialPacket)
 {
-	if (!CheckCheatmode(player == consoleplayer))
-		P_ExecuteSpecial(players[player].mo->Level, _special, nullptr, players[player].mo, false, _args[0], _args[1], _args[2], _args[3], _args[4]);
+	if (!CheckCheatmode(player == consoleplayer, false))
+		P_ExecuteSpecial(players[player].mo->Level, _special, nullptr, players[player].mo, false, Args[0], Args[1], Args[2], Args[3], Args[4]);
 	return true;
 }

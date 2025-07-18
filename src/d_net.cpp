@@ -157,8 +157,6 @@ void D_ProcessEvents(void);
 void G_BuildTiccmd(usercmd_t *cmd);
 void D_DoAdvanceDemo(void);
 
-static void RunScript(TArrayView<uint8_t>& stream, AActor *pawn, int snum, int argn, int always);
-
 extern	bool	 AdvanceDemo;
 
 CVAR(Bool, vid_dontdowait, false, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
@@ -1702,7 +1700,7 @@ void NetUpdate(int tics)
 // from the frontend should be put in these, all backend handling should be
 // done in the core files.
 
-size_t Net_SetEngineInfo(uint8_t*& stream)
+size_t Net_SetEngineInfo(WriteStream& stream)
 {
 	stream[0] = VER_MAJOR % 256;
 	stream[1] = VER_MINOR % 256;
@@ -1710,9 +1708,11 @@ size_t Net_SetEngineInfo(uint8_t*& stream)
 	return 3u;
 }
 
-bool Net_VerifyEngine(uint8_t*& stream)
+bool Net_VerifyEngine(ReadStream& stream)
 {
-	return stream[0] == (VER_MAJOR % 256) && stream[1] == (VER_MINOR % 256) && stream[2] == (VER_REVISION % 256);
+	return stream.ReadValue<int8_t>() == (VER_MAJOR % 256)
+			&& stream.ReadValue<int8_t>() == (VER_MINOR % 256)
+			&& stream.ReadValue<int8_t>() == (VER_REVISION % 256);
 }
 
 void Net_SetupUserInfo()
@@ -2206,6 +2206,10 @@ void Net_WritePacket(NetPacket& p)
 {
 	WritePacket(p, NetEvents.GetCurrentStream());
 }
+void Net_WritePacket(NetPacket&& p)
+{
+	WritePacket(p, NetEvents.GetCurrentStream());
+}
 
 static int RemoveClass(FLevelLocals *Level, const PClass *cls)
 {
@@ -2520,7 +2524,7 @@ void Net_ReadCommands(int player, ReadStream& stream)
 		}
 		break;
 
-		case DEM_RUNSPECIAL:
+		case DEM_SPECIALCALL:
 		{
 			int snum = ReadInt16(stream);
 			int argn = ReadInt8(stream);
@@ -2711,24 +2715,6 @@ void Net_ReadCommands(int player, ReadStream& stream)
 	}
 }
 
-// Used by DEM_RUNSCRIPT, DEM_RUNSCRIPT2, and DEM_RUNNAMEDSCRIPT
-static void RunScript(TArrayView<uint8_t>& stream, AActor *pawn, int snum, int argn, int always)
-{
-	// Scripts can be invoked without a level loaded, e.g. via puke(name) CCMD in fullscreen console
-	if (pawn == nullptr)
-		return;
-
-	int arg[4] = {};
-	for (int i = 0; i < argn; ++i)
-	{
-		int argval = ReadInt32(stream);
-		if ((unsigned)i < countof(arg))
-			arg[i] = argval;
-	}
-
-	P_StartScript(pawn->Level, pawn, nullptr, snum, primaryLevel->MapName.GetChars(), arg, min<int>(countof(arg), argn), ACS_NET | always);
-}
-
 // This was taken out of shared_hud, because UI code shouldn't do low level calculations that may change if the backing implementation changes.
 int Net_GetLatency(int* localDelay, int* arbitratorDelay)
 {
@@ -2767,8 +2753,8 @@ DEFINE_ACTION_FUNCTION_NATIVE(_ScreenJobRunner, IsPlayerReady, IsPlayerReady)
 
 static void ReadyPlayer()
 {
-	if (netgame && !DemoPlayback)
-		Net_WriteInt8(DEM_READIED);
+	if (netgame && !IsPlayingDemo())
+		Net_WritePacket(*CreatePacket(DEM_READIED));
 }
 
 DEFINE_ACTION_FUNCTION_NATIVE(_ScreenJobRunner, ReadyPlayer, ReadyPlayer)
@@ -2856,14 +2842,9 @@ CCMD(kick)
 	for (auto cNum : cNums)
 	{
 		if (!NetworkClients.InGame(cNum))
-		{
 			Printf("Client %d is not in game\n", cNum);
-		}
 		else
-		{
-			Net_WriteInt8(DEM_KICK);
-			Net_WriteInt8(cNum);
-		}
+			Net_WritePacket(KickPacket(cNum));
 	}
 }
 
@@ -3034,14 +3015,11 @@ static void Net_ChangeSettingsControllers(const TArray<int>& cNums, bool add)
 		}
 		else if (add)
 		{
-			// Boon TODO: I think we have to mark this shit as const because this method is just too annoying
-			auto p = AddControllerPacket(cNum);
-			Net_WritePacket(p);
+			Net_WritePacket(AddControllerPacket(cNum));
 		}
 		else
 		{
-			auto p = RemoveControllerPacket(cNum);
-			Net_WritePacket(p);
+			Net_WritePacket(RemoveControllerPacket(cNum));
 		}
 	}
 }

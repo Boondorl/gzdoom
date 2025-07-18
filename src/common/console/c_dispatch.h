@@ -76,6 +76,7 @@ void C_ClearDelayedCommands();
 void C_DoCommand (const char *cmd, int keynum=0);
 bool C_IsValidInt(const char* arg, int& value, int base = 10);
 bool C_IsValidFloat(const char* arg, double& value);
+bool C_IsValidBool(const char* arg, bool& value);
 
 FExecList *C_ParseExecFile(const char *file, FExecList *source);
 void C_SearchForPullins(FExecList *exec, const char *file, class FCommandLine &args);

@@ -100,7 +100,7 @@ void ReadUserCommand(ReadStream& stream, int player, int tic)
 	stream.StartMeasuring();
 	Net_SkipCommands(stream);
 	curTic.Data.WriteBytes(stream.GetMeasuredData());
-	stream.ClearMeasurement();
+	stream.StopMeasuring();
 
 	auto basis = tic > 0 ? &ClientStates[player].Tics[(tic - 1) % BACKUPTICS].Command : nullptr;
 	if (GetPacketType(stream) == DEM_EMPTYUSERCMD)

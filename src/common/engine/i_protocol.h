@@ -48,16 +48,16 @@
 		private:								\
 			using Super = parentCls
 
-#define DEFINE_NETPACKET_BASE_CONDITIONAL(parentCls)	\
-		public:											\
-			bool ShouldWrite() const override;			\
+#define DEFINE_NETPACKET_BASE_CONDITIONAL(parentCls)		\
+		public:												\
+			bool ShouldExecute(int player) const override;	\
 		DEFINE_NETPACKET_BASE(parentCls)
 
 #define DEFINE_NETPACKET(cls, parentCls, id, argCount)		\
 		public:												\
 			static constexpr uint8_t Type = id;				\
 			static cls GetDefault() { return {}; }			\
-			bool Execute(int player) override;				\
+			bool DoExecute(int player) override;			\
 		private:											\
 			cls() : parentCls(id, argCount) {}				\
 			using Super = parentCls
@@ -65,7 +65,7 @@
 
 #define DEFINE_NETPACKET_CONDITIONAL(cls, parentCls, id, argCount)	\
 		public:														\
-			bool ShouldWrite() const override;						\
+			bool ShouldExecute(int player) const override;			\
 		DEFINE_NETPACKET(cls, parentCls, id, argCount)
 
 // Easy setup macros for base packet types.
@@ -99,10 +99,10 @@
 #define DEFINE_NETPACKET_STRING_CONDITIONAL(cls, id)	class cls : public StringPacket { DEFINE_NETPACKET_CONDITIONAL(cls, StringPacket,	id, 1);	public: cls(const FString& value)	: cls() { Value = value; } }
 
 #define NETPACKET_EXECUTE(cls)			\
-		bool cls::Execute(int player)
+		bool cls::DoExecute(int player)
 
-#define NETPACKET_CONDITION(cls)		\
-		bool cls::ShouldWrite() const
+#define NETPACKET_CONDITION(cls)					\
+		bool cls::ShouldExecute(int player) const
 
 #define NETPACKET_SERIALIZE()																																\
 		protected:																																			\
@@ -115,9 +115,9 @@
 
 #define IF_WRITING()		if constexpr(Stream::IsWriting)
 #define IF_READING()		if constexpr(Stream::IsReading)
-#define SUPER_SERIALIZE()	if (!Super::Serialize(stream, argCount)) return false
-#define SUPER_CONDITION()	if (!Super::ShouldWrite())		return false
-#define SUPER_EXECUTE()		if (!Super::Execute(player))	return false
+#define SUPER_SERIALIZE()	if (!Super::Serialize(stream, argCount))	return false
+#define SUPER_CONDITION()	if (!Super::ShouldExecute(player))			return false
+#define SUPER_EXECUTE()		if (!Super::DoExecute(player))				return false
 
 #define SERIALIZE_INT8(value)						\
 		do											\
@@ -354,9 +354,10 @@ public:
 
 	NetPacket(uint8_t netCommand, uint8_t argCount) : NetCommand(netCommand), ArgCount(argCount) {}
 	virtual ~NetPacket() = default;
-	virtual bool Execute(int player) = 0;
-	virtual bool ShouldWrite() const { return true; }
+	virtual bool DoExecute(int player) = 0;
+	virtual bool ShouldExecute(int player) const { return true; }
 
+	bool Execute(int player);
 	bool Read(ReadStream& stream);
 	bool Write(WriteStream& stream);
 	bool Write(DynamicWriteStream& stream);
