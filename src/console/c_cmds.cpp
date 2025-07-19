@@ -83,27 +83,28 @@ CVARD(Bool, show_messages, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG, "enable/disab
 CVAR(Bool, show_obituaries, true, CVAR_ARCHIVE)
 
 
-bool CheckCheatmode (bool printmsg, bool sponly)
+bool CheckCheatmode(bool printmsg, bool sponly)
 {
-	if (sponly && netgame)
+	if (sponly && multiplayer)
 	{
-		if (printmsg) Printf("Not in a singleplayer game.\n");
+		if (printmsg)
+			Printf("Command not available in multiplayer\n");
 		return true;
 	}
-	if ((G_SkillProperty(SKILLP_DisableCheats) || netgame || deathmatch) && (!sv_cheats))
+	else if (!sv_cheats && (multiplayer || deathmatch || G_SkillProperty(SKILLP_DisableCheats)))
 	{
-		if (printmsg) Printf ("sv_cheats must be true to enable this command.\n");
+		if (printmsg)
+			Printf("sv_cheats must enabled to use this command\n");
 		return true;
 	}
-	else if (cl_blockcheats != 0)
+	else if (cl_blockcheats)
 	{
-		if (printmsg && cl_blockcheats == 1) Printf ("cl_blockcheats is turned on and disabled this command.\n");
+		if (printmsg && cl_blockcheats == 1)
+			Printf("Command not available while cl_blockcheats is enabled\n");
 		return true;
 	}
-	else
-	{
-		return false;
-	}
+
+	return false;
 }
 
 /*

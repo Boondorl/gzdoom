@@ -49,8 +49,9 @@ class ByteWriter
 public:
 	ByteWriter(const TArrayView<uint8_t> buffer) : _buffer(buffer) {}
 
-	inline bool WouldWritePastEnd(size_t bytes) const { return _curPos + bytes >= Size(); }
+	inline bool WouldWritePastEnd(size_t bytes) const { return _curPos + bytes > Size(); }
 	inline size_t GetWrittenBytes() const { return _curPos; }
+	inline bool EndOfStream() const { return _curPos >= Size(); }
 	inline TArrayView<uint8_t> GetWrittenData() const { return { Data(), _curPos }; }
 	inline TArrayView<uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
 	inline TArrayView<uint8_t> GetUnwindData() const { return _unwindPos < _curPos ? TArrayView{ &_buffer[_unwindPos], _curPos - _unwindPos } : TArrayView<uint8_t>{ nullptr, 0u }; }
@@ -77,7 +78,7 @@ public:
 	}
 	void SkipBytes(size_t bytes)
 	{
-		assert(_curPos + bytes < Size());
+		assert(_curPos + bytes <= Size());
 		_curPos += bytes;
 	}
 	void WriteBytes(const TArrayView<const uint8_t> bytes)
@@ -115,8 +116,9 @@ class ByteReader
 public:
 	ByteReader(const TArrayView<const uint8_t> buffer) : _buffer(buffer) {}
 
-	inline bool WouldReadPastEnd(size_t bytes) const { return _curPos + bytes >= Size(); }
+	inline bool WouldReadPastEnd(size_t bytes) const { return _curPos + bytes > Size(); }
 	inline size_t GetReadBytes() const { return _curPos; }
+	inline bool EndOfStream() const { return _curPos >= Size(); }
 	inline TArrayView<const uint8_t> GetReadData() const { return { Data(), _curPos }; }
 	inline TArrayView<const uint8_t> GetRemainingData() const { return { &_buffer[_curPos], Size() - _curPos }; }
 	inline TArrayView<const uint8_t> GetMeasuredData() const { return _curPos > _measurePos ? TArrayView{ &_buffer[_measurePos], _curPos - _measurePos } : TArrayView<const uint8_t>{ nullptr, 0u }; }
@@ -138,7 +140,7 @@ public:
 	}
 	void SkipBytes(size_t bytes)
 	{
-		assert(_curPos + bytes < Size());
+		assert(_curPos + bytes <= Size());
 		_curPos += bytes;
 	}
 	TArrayView<const uint8_t> ReadBytes(size_t bytes)
@@ -215,6 +217,7 @@ public:
 
 	inline void Reset() { _writer.Reset(); }
 	inline size_t GetWrittenBytes() const { return _writer.GetWrittenBytes(); }
+	inline bool EndOfStream() const { return _writer.EndOfStream(); }
 	inline TArrayView<uint8_t> GetWrittenData() const { return _writer.GetWrittenData(); }
 	inline TArrayView<uint8_t> GetRemainingData() const { return _writer.GetRemainingData(); }
 	inline TArrayView<uint8_t> GetUnwindData() const { return _writer.GetUnwindData(); }
@@ -403,6 +406,7 @@ public:
 
 	inline void Reset() { _reader.Reset(); }
 	inline size_t GetReadBytes() const { return _reader.GetReadBytes(); }
+	inline bool EndOfStream() const { return _reader.EndOfStream(); }
 	inline TArrayView<const uint8_t> GetReadData() const { return _reader.GetReadData(); }
 	inline TArrayView<const uint8_t> GetRemainingData() const { return _reader.GetRemainingData(); }
 	inline size_t Size() const { return _reader.Size(); }
@@ -642,8 +646,10 @@ public:
 	MeasureStream(const TArrayView<const uint8_t> stream) : _reader(stream) {}
 
 	inline void Reset() { _reader.Reset(); }
+	inline bool EndOfStream() const { return _reader.EndOfStream(); }
 	inline size_t GetSkippedBytes() const { return _reader.GetReadBytes(); }
 	inline size_t Size() const { return _reader.Size(); }
+	inline const uint8_t* Data() const { return _reader.Data(); }
 
 	// Direct skipping API.
 	void SkipString()

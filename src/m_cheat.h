@@ -10,6 +10,8 @@ class FString;
 class player_t;
 class PClassActor;
 
+bool CheckCheatmode(bool printmsg = true, bool sponly = false);
+
 void cht_DoMDK(player_t *player, const FString& mod);
 void cht_DoCheat (player_t *player, int cheat);
 void cht_Give (player_t *player, const FString& item, int amount=1);

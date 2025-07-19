@@ -41,7 +41,7 @@ void InitializeDoomPackets()
 
 EDemoCommand GetPacketType(const ReadStream& stream)
 {
-	return stream.Size() ? stream.PeekValue<EDemoCommand>() : DEM_INVALID;
+	return stream.EndOfStream() ? DEM_INVALID : stream.PeekValue<EDemoCommand>();
 }
 
 //==========================================================================
@@ -50,12 +50,27 @@ EDemoCommand GetPacketType(const ReadStream& stream)
 //
 //==========================================================================
 
-bool CheckCheatmode(bool printmsg, bool sponly);
-
 static bool ValidClass(const FString& cls, FName type = NAME_Actor)
 {
 	auto clss = PClass::FindActor(cls);
 	return clss != nullptr && clss->IsDescendantOf(type);
+}
+
+NETPACKET_EXECUTE(WarpPacket)
+{
+	P_TeleportMove(players[player].mo, DVector3(_x, _y, _z), true);
+	return true;
+}
+
+NETPACKET_CONDITION(GenericCheatPacket)
+{
+	return CheckCheatmode(player == consoleplayer);
+}
+
+NETPACKET_EXECUTE(GenericCheatPacket)
+{
+	cht_DoCheat(&players[player], Value);
+	return true;
 }
 
 NETPACKET_CONDITION(ScriptCallPacket)
@@ -65,7 +80,13 @@ NETPACKET_CONDITION(ScriptCallPacket)
 
 NETPACKET_EXECUTE(ScriptCallPacket)
 {
-	P_StartScript(players[player].mo->Level, players[player].mo, nullptr, _scriptNum, players[player].mo->Level->MapName.GetChars(), Args, std::size(Args), ACS_NET | _bAlways);
+	P_StartScript(players[player].mo->Level, players[player].mo, nullptr, abs(_scriptNum), players[player].mo->Level->MapName.GetChars(), Args, std::size(Args), ACS_NET | ((_scriptNum < 0) * ACS_ALWAYS));
+}
+
+// Lock this one down to the host to prevent anything weird from happening.
+NETPACKET_CONDITION(EndScreenRunnerPacket)
+{
+	return player == Net_Arbitrator;
 }
 
 NETPACKET_EXECUTE(EndScreenRunnerPacket)

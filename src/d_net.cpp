@@ -2274,19 +2274,6 @@ void Net_ReadCommands(int player, ReadStream& stream)
 			D_DoServerInfoChange(stream, cmd == DEM_SINFCHANGEDXOR);
 			break;
 
-		case DEM_WARPCHEAT:
-		{
-			int x = ReadInt16(stream);
-			int y = ReadInt16(stream);
-			int z = ReadInt16(stream);
-			P_TeleportMove(players[player].mo, DVector3(x, y, z), true);
-		}
-		break;
-
-		case DEM_GENERICCHEAT:
-			cht_DoCheat(&players[player], ReadInt8(stream));
-			break;
-
 		case DEM_CHANGEMAP2:
 			pos = ReadInt8(stream);
 			[[fallthrough]];

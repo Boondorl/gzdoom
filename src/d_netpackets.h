@@ -116,7 +116,7 @@ enum EDemoCommand : uint8_t
 //
 //==========================================================================
 
-DEFINE_NETPACKET_EMPTY(EndScreenRunnerPacket, DEM_ENDSCREENJOB);
+DEFINE_NETPACKET_EMPTY_CONDITIONAL(EndScreenRunnerPacket, DEM_ENDSCREENJOB);
 DEFINE_NETPACKET_EMPTY(PlayerReadyPacket, DEM_READIED);
 DEFINE_NETPACKET_EMPTY(UseAllPacket, DEM_INVUSEALL);
 DEFINE_NETPACKET_EMPTY(RevertCameraPacket, DEM_REVERTCAMERA);
@@ -130,7 +130,7 @@ DEFINE_NETPACKET_EMPTY(RemoveBotsPacket, DEM_KILLBOTS);
 DEFINE_NETPACKET_UINT8(KickPacket, DEM_KICK);
 DEFINE_NETPACKET_UINT8(AddControllerPacket, DEM_ADDCONTROLLER);
 DEFINE_NETPACKET_UINT8(RemoveControllerPacket, DEM_DELCONTROLLER);
-DEFINE_NETPACKET_UINT8(GenericCheatPacket, DEM_GENERICCHEAT);
+DEFINE_NETPACKET_UINT8_CONDITIONAL(GenericCheatPacket, DEM_GENERICCHEAT);
 
 DEFINE_NETPACKET_INT16(ChangeSkillPacket, DEM_CHANGESKILL);
 
@@ -139,6 +139,26 @@ DEFINE_NETPACKET_STRING(MDKPacket, DEM_MDK);
 DEFINE_NETPACKET_STRING(RemovePacket, DEM_REMOVE);
 DEFINE_NETPACKET_STRING(ChangeMapPacket, DEM_CHANGEMAP);
 DEFINE_NETPACKET_STRING(KillClassPacket, DEM_KILLCLASSCHEAT);
+
+class WarpPacket : public NetPacket
+{
+	DEFINE_NETPACKET(WarpPacket, NetPacket, DEM_WARPCHEAT, 3);
+	int16_t _x = 0, _y = 0, _z = 0;
+	NETPACKET_SERIALIZE()
+	{
+		SERIALIZE_INT16(_x);
+		SERIALIZE_INT16(_y);
+		SERIALIZE_INT16(_z);
+		return true;
+	}
+public:
+	WarpPacket(int x, int y, int z) : WarpPacket()
+	{
+		_x = x;
+		_y = y;
+		_z = z;
+	}
+};
 
 // For packets that expect up to 5 argumens for specials to be passed.
 class SpecialArgsPacket : NetPacket
@@ -171,24 +191,20 @@ class ScriptCallPacket : public SpecialArgsPacket
 {
 	DEFINE_NETPACKET_CONDITIONAL(ScriptCallPacket, SpecialArgsPacket, DEM_SCRIPTCALL, 3);
 	int32_t _scriptNum = 0;
-	bool _bAlways = false;
 	NETPACKET_SERIALIZE()
 	{
 		SERIALIZE_INT32(_scriptNum);
-		SERIALIZE_BOOL(_bAlways);
 		SUPER_SERIALIZE();
 		return true;
 	}
 public:
-	ScriptCallPacket(int scriptNum, bool bAlways, int arg0, int arg1, int arg2, int arg3, int arg4) : ScriptCallPacket()
+	ScriptCallPacket(int scriptNum, int arg0, int arg1, int arg2, int arg3) : ScriptCallPacket()
 	{
 		_scriptNum = scriptNum;
-		_bAlways = bAlways;
 		Args[0] = arg0;
 		Args[1] = arg1;
 		Args[2] = arg2;
 		Args[3] = arg3;
-		Args[4] = arg4;
 	}
 };
 

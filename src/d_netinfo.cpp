@@ -581,7 +581,7 @@ void D_UserInfoChanged (FBaseCVar *cvar)
 	Net_WriteString (foo);
 }
 
-static const char *SetServerVar (char *name, ECVarType type, TArrayView<uint8_t>& stream, bool singlebit)
+static const char *SetServerVar (const char *name, ECVarType type, TArrayView<const uint8_t> stream, bool singlebit)
 {
 	FBaseCVar *var = FindCVar (name, NULL);
 	UCVarValue value;
@@ -657,34 +657,133 @@ static const char *SetServerVar (char *name, ECVarType type, TArrayView<uint8_t>
 
 EXTERN_CVAR (Float, sv_gravity)
 
-bool D_SendServerInfoChange (FBaseCVar *cvar, UCVarValue value, ECVarType type)
+struct FMarkedCVar
 {
-	if (gamestate != GS_STARTUP && !DemoPlayback && !savegamerestore)
+	const FBaseCVar* CVar = nullptr;
+	UCVarValue Value = {};
+};
+
+static TArray<FMarkedCVar> MarkedServerCVars = {};
+static TArray<FMarkedCVar> MarkedUserCVars = {};
+
+class ServerInfoPacket : public NetPacket
+{
+	DEFINE_NETPACKET(ServerInfoPacket, NetPacket, DEM_SINFCHANGED, 1);
+	DynamicWriteStream _buffer = {}; // Give the packet full ownership of this data.
+	NETPACKET_SERIALIZE()
 	{
-		if (netgame && !players[consoleplayer].settings_controller)
+		auto data = _buffer.GetView();
+		SERIALIZE_ARRAY(data);
+		IF_READING()
 		{
-			Printf("Only setting controllers can change server CVAR %s\n", cvar->GetName());
-			cvar->MarkSafe();
-			return true;
-		}
-		size_t namelen;
-
-		namelen = strlen(cvar->GetName());
-
-		Net_WriteInt8(DEM_SINFCHANGED);
-		Net_WriteInt8((uint8_t)(namelen | (type << 6)));
-		Net_WriteBytes((uint8_t*)cvar->GetName(), (int)namelen);
-		switch (type)
-		{
-		case CVAR_Bool:		Net_WriteInt8(value.Bool);		break;
-		case CVAR_Int:		Net_WriteInt32(value.Int);		break;
-		case CVAR_Float:	Net_WriteFloat(value.Float);	break;
-		case CVAR_String:	Net_WriteString(value.String);	break;
-		default: break; // Silence GCC
+			_buffer.Clear();
+			_buffer.WriteBytes(data);
 		}
 		return true;
 	}
-	return false;
+public:
+	ServerInfoPacket(const TArray<FMarkedCVar>& cvars) : ServerInfoPacket()
+	{
+		for (auto& marked : cvars)
+		{
+			_buffer.WriteSmallArray<char>({ marked.CVar->GetName(), strlen(marked.CVar->GetName()) });
+			switch (marked.CVar->GetRealType())
+			{
+			case CVAR_Bool:
+				_buffer.WriteValue<uint8_t>(marked.Value.Bool);
+				break;
+			case CVAR_Int:
+				_buffer.WriteValue<int32_t>(marked.Value.Int);
+				break;
+			case CVAR_Float:
+				_buffer.WriteValue<float>(marked.Value.Float);
+				break;
+			case CVAR_String:
+				_buffer.WriteString(marked.Value.String);
+				break;
+			default:
+				break; // Silence GCC
+			}
+		}
+	}
+};
+
+NETPACKET_EXECUTE(ServerInfoPacket)
+{
+	ReadStream r = _buffer.GetView();
+	const char* value = nullptr;
+	while (!r.EndOfStream())
+	{
+		// Boon TODO: Should we send the type anyway to verify this? We don't want someone
+		// messing with their own cvarinfo to create malformed cvars.
+		const auto nameChars = r.ReadSmallArray<char>();
+		const FString name = { nameChars.Data(), nameChars.Size() };
+		auto cvar = FindCVar(name.GetChars(), nullptr);
+
+		if ((value = SetServerVar(cvar->GetName(), cvar->GetRealType(), r.GetRemainingData(), singlebit)) && netgame)
+			Printf("%s changed to %s\n", name, value);
+	}
+	return true;
+}
+
+void SendMarkedCVars()
+{
+	if (MarkedServerCVars.Size())
+	{
+		Net_WritePacket(ServerInfoPacket(MarkedServerCVars));
+		MarkedServerCVars.Clear();
+	}
+}
+
+bool D_SendServerInfoChange(FBaseCVar *cvar, UCVarValue value, ECVarType type)
+{
+	if (gamestate == GS_STARTUP || savegamerestore || IsPlayingDemo())
+		return false;
+
+	if (netgame && !players[consoleplayer].settings_controller)
+	{
+		Printf("Only setting controllers can change server CVAR %s\n", cvar->GetName());
+		cvar->MarkSafe();
+		return true;
+	}
+	size_t i = 0u;
+	for (; i < MarkedServerCVars.Size(); ++i)
+	{
+		if (MarkedServerCVars[i].CVar == cvar)
+			break;
+	}
+	bool clearMark = false;
+	switch (type)
+	{
+	case CVAR_Bool:
+		clearMark = cvar->GetGenericRep(type).Bool == value.Bool;
+		break;
+	case CVAR_Int:
+		clearMark = cvar->GetGenericRep(type).Int == value.Int;
+		break;
+	case CVAR_Float:
+		clearMark = cvar->GetGenericRep(type).Float == value.Float;
+		break;
+	case CVAR_String:
+		clearMark = !strcmp(cvar->GetGenericRep(type).String, value.String);
+		break;
+	default:
+		break; // Silence GCC
+	}
+	// Avoid spamming cvar info packets if nothing was actually changed.
+	if (clearMark)
+	{
+		MarkedServerCVars.Delete(i);
+		cvar->MarkSafe();
+		return true;
+	}
+
+	if (i < MarkedServerCVars.Size())
+		MarkedServerCVars[i].Value = value;
+	else
+		MarkedServerCVars.Push({ cvar, value });
+
+	return true;
 }
 
 bool D_SendServerFlagChange (FBaseCVar *cvar, int bitnum, bool set, bool silent)
@@ -711,7 +810,7 @@ bool D_SendServerFlagChange (FBaseCVar *cvar, int bitnum, bool set, bool silent)
 	return false;
 }
 
-void D_DoServerInfoChange (TArrayView<uint8_t>& stream, bool singlebit)
+void D_DoServerInfoChange(TArrayView<uint8_t>& stream, bool singlebit)
 {
 	const char *value;
 	char name[64];
