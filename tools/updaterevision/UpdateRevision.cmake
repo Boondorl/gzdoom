@@ -19,7 +19,7 @@ function(query_repo_info)
 		set(Tag "$ENV{GIT_DESCRIBE}")
 	else()
 		execute_process(
-			COMMAND git describe --tags --dirty=-m --always
+			COMMAND git describe --tags --dirty=-m
 			RESULT_VARIABLE Error
 			OUTPUT_VARIABLE Tag
 			ERROR_QUIET
