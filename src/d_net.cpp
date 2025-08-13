@@ -1305,6 +1305,13 @@ static bool Net_UpdateStatus()
 			updated = true;
 			lowestDiff = CommandsAhead;
 			ClientStates[Net_Arbitrator].Flags &= ~CF_UPDATED;
+
+			// If we're consistently ahead of our reported latency, slow down as well since
+			// we should generally be in that ballpark.
+			const int diff = (ClientTic - gametic) / TicDup;
+			const int goal = static_cast<int>(ceil((double)ClientStates[consoleplayer].AverageLatency / TICRATE)) / TicDup + 1;
+			if (diff > goal)
+				lowestDiff = diff - goal;
 		}
 	}
 
