@@ -1014,6 +1014,10 @@ DEFINE_FIELD(DMenu, DontDim);
 DEFINE_FIELD(DMenu, DontBlur);
 DEFINE_FIELD(DMenu, AnimatedTransition);
 DEFINE_FIELD(DMenu, Animated);
+DEFINE_FIELD(DMenu, mCurrentTooltip)
+DEFINE_FIELD(DMenu, mTooltipScrollTimer)
+DEFINE_FIELD(DMenu, mTooltipScrollSpeed)
+DEFINE_FIELD(DMenu, mTooltipScrollOffset)
 
 DEFINE_FIELD(DMenuDescriptor, mMenuName)
 DEFINE_FIELD(DMenuDescriptor, mNetgameMessage)
@@ -1023,6 +1027,7 @@ DEFINE_FIELD(DMenuItemBase, mXpos)
 DEFINE_FIELD(DMenuItemBase, mYpos)
 DEFINE_FIELD(DMenuItemBase, mAction)
 DEFINE_FIELD(DMenuItemBase, mEnabled)
+DEFINE_FIELD(DMenuItemBase, mTooltip)
 
 DEFINE_FIELD(DListMenuDescriptor, mItems)
 DEFINE_FIELD(DListMenuDescriptor, mSelectedItem)

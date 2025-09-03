@@ -435,6 +435,14 @@ static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &s
 		{
 			desc->mCenterText = true;
 		}
+		else if (sc.Compare("Tooltip"))
+		{
+			if (!desc->mItems.Size())
+				sc.ScriptError("No previous list menu item defined for tooltip");
+
+			sc.MustGetString();
+			desc->mItems.Last()->mTooltip = sc.String;
+		}
 		else
 		{
 			// all item classes from which we know that they support sized scaling.
@@ -1065,6 +1073,14 @@ static void ParseOptionMenuBody(FScanner &sc, DOptionMenuDescriptor *desc, int i
 		else if (sc.Compare("DontBlur"))
 		{
 			desc->mDontBlur = true;
+		}
+		else if (sc.Compare("Tooltip"))
+		{
+			if (!desc->mItems.Size())
+				sc.ScriptError("No previous option menu item defined for tooltip");
+
+			sc.MustGetString();
+			desc->mItems.Last()->mTooltip = sc.String;
 		}
 		else
 		{
