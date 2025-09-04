@@ -328,12 +328,15 @@ class Menu : Object native ui version("2.4")
 		if (mCurrentTooltip.IsEmpty())
 			return;
 
-		BrokenLines bl = confont.BreakLines(StringTable.Localize(mCurrentTooltip), 300);
+		int w = Screen.GetWidth();
+		int h = Screen.GetHeight();
+		BrokenLines bl = ConFont.BreakLines(StringTable.Localize(mCurrentTooltip), (w / CleanXFac) - 20);
 		if (bl.Count() > 2)
 		{
+			int maxOffset = bl.Count() - 2;
 			double delta = GetDeltaTime();
 			if (mTooltipScrollTimer <= 0.0)
-				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + mTooltipScrollSpeed * delta, 0.0, bl.Count() - 2.0);
+				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + mTooltipScrollSpeed * delta, 0.0, maxOffset);
 
 			if (mTooltipScrollTimer > 0.0)
 			{
@@ -341,7 +344,7 @@ class Menu : Object native ui version("2.4")
 				if (mTooltipScrollTimer <= 0.0)
 					mTooltipScrollTimer = -SCROLL_DELAY;
 			}
-			else if (mTooltipScrollTimer < 0.0 && mTooltipScrollOffset >= bl.Count() - 2.0)
+			else if (mTooltipScrollTimer < 0.0 && mTooltipScrollOffset >= maxOffset)
 			{
 				mTooltipScrollTimer += delta;
 				if (mTooltipScrollTimer >= 0.0)
@@ -352,13 +355,24 @@ class Menu : Object native ui version("2.4")
 			}
 		}
 
-		int height = confont.GetHeight();
-		double curY = 200.0 - (mTooltipScrollOffset + 2.0) * height;
+		int height = ConFont.GetHeight() * CleanYFac;
+		int xOfs = 10 * CleanXFac;
+		int yOfs = 5 * CleanYFac;
+
+		Screen.Dim(0u, 0.5, xOfs / 2, h - yOfs - height * 2 - yOfs / 2, w - xOfs, height * 2 + yOfs);
+
+		let [cx, cy, cw, ch] = Screen.GetClipRect();
+		Screen.SetClipRect(xOfs, h - yOfs - height * 2, w - xOfs * 2, height * 2);
+
+		int curY = h - yOfs - int((mTooltipScrollOffset + 2.0) * height);
 		for (int i; i < bl.Count(); ++i)
 		{
-			Screen.DrawText(confont, Font.CR_UNTRANSLATED, 10.0, curY, bl.StringAt(i), DTA_Clean, true);
+			int xPos = xOfs + (w - bl.StringWidth(i) * CleanXFac) / 2;
+			Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, xPos, curY, bl.StringAt(i), DTA_CleanNoMove, true);
 			curY += height;
 		}
+
+		Screen.SetClipRect(cx, cy, cw, ch);
 	}
 
 	//=============================================================================
