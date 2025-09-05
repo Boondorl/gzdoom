@@ -142,9 +142,6 @@ struct ScreenArea
 
 class Menu : Object native ui version("2.4")
 {
-	const SCROLL_DELAY = 9.0; // Number of seconds to wait
-	const SCROLL_SPEED = 1.0 / 3.0; // Lines per second
-
 	enum EMenuKey
 	{
 		MKEY_Up,
@@ -193,10 +190,8 @@ class Menu : Object native ui version("2.4")
 
 	native string mCurrentTooltip;
 	native double mTooltipScrollTimer;
-	native double mTooltipScrollSpeed;
 	native double mTooltipScrollOffset;
 	native Font mTooltipFont;
-	native int mTooltipLines;
 
 	native static int MenuTime();
 	native static Menu GetCurrentMenu();
@@ -222,10 +217,8 @@ class Menu : Object native ui version("2.4")
 		AnimatedTransition = false;
 		Animated = false;
 		mTooltipFont = NewConsoleFont;
-		mTooltipLines = 3;
 		mCurrentTooltip = "";
-		mTooltipScrollTimer = SCROLL_DELAY;
-		mTooltipScrollSpeed = SCROLL_SPEED;
+		mTooltipScrollTimer = m_tooltip_delay;
 		mTooltipScrollOffset = 0.0;
 	}
 
@@ -335,9 +328,21 @@ class Menu : Object native ui version("2.4")
 	{
 		int xPad = 10 * CleanXFac;
 		int yPad = 5 * CleanYFac;
-		int textHeight = mTooltipFont.GetHeight() * mTooltipLines * CleanYFac;
+		int textHeight = mTooltipFont.GetHeight() * m_tooltip_lines * CleanYFac;
 
-		body.SetArea(xPad, Screen.GetHeight() - textHeight - yPad * 3, Screen.GetWidth() - xPad * 2, textHeight + yPad * 2);
+		int w = Screen.GetWidth();
+		int h = Screen.GetHeight();
+		if (m_tooltip_capwidth && double(w) / h > 16.0 / 9.0)
+		{
+			// Cap it to 16:9 to prevent it from stretching to the far corners of the screen.
+			int width = int(h * 16.0 / 9.0) - xPad * 2;
+			body.SetArea((w - width) / 2, h - textHeight - yPad * 3, width, textHeight + yPad * 2);
+		}
+		else
+		{
+			body.SetArea(xPad, h - textHeight - yPad * 3, w - xPad * 2, textHeight + yPad * 2);
+		}
+		
 		if (text)
 			text.SetArea(body.x + xPad, body.y + yPad, body.width - xPad * 2, body.height - yPad * 2);
 	}
@@ -350,7 +355,7 @@ class Menu : Object native ui version("2.4")
 
 		mCurrentTooltip = tooltip;
 		mTooltipScrollOffset = 0.0;
-		mTooltipScrollTimer = SCROLL_DELAY;
+		mTooltipScrollTimer = m_tooltip_delay;
 	}
 
 	virtual void DrawTooltip()
@@ -363,18 +368,18 @@ class Menu : Object native ui version("2.4")
 
 		BrokenLines bl = mTooltipFont.BreakLines(StringTable.Localize(mCurrentTooltip), text.width / CleanXFac);
 		int maxOffset;
-		if (bl.Count() > mTooltipLines)
+		if (bl.Count() > m_tooltip_lines)
 		{
-			maxOffset = bl.Count() - mTooltipLines;
+			maxOffset = bl.Count() - m_tooltip_lines;
 			double delta = GetDeltaTime();
 			if (mTooltipScrollTimer <= 0.0)
-				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + mTooltipScrollSpeed * delta, 0.0, maxOffset);
+				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + (1.0 / m_tooltip_speed) * delta, 0.0, maxOffset);
 
 			if (mTooltipScrollTimer > 0.0)
 			{
 				mTooltipScrollTimer -= delta;
 				if (mTooltipScrollTimer <= 0.0)
-					mTooltipScrollTimer = -SCROLL_DELAY;
+					mTooltipScrollTimer = -m_tooltip_delay;
 			}
 			else if (mTooltipScrollTimer < 0.0 && mTooltipScrollOffset >= maxOffset)
 			{
@@ -382,7 +387,7 @@ class Menu : Object native ui version("2.4")
 				if (mTooltipScrollTimer >= 0.0)
 				{
 					mTooltipScrollOffset = 0.0;
-					mTooltipScrollTimer = SCROLL_DELAY;
+					mTooltipScrollTimer = m_tooltip_delay;
 				}
 			}
 		}
@@ -408,7 +413,7 @@ class Menu : Object native ui version("2.4")
 			int xPos = box.x + box.width - mTooltipFont.StringWidth(".") * CleanXFac;
 			int yPos = text.y - height / 2;
 			for (int i = 0; i < 3; ++i)
-				Screen.DrawText(mTooltipFont, Font.CR_UNTRANSLATED, xPos, yPos + height / 2 * i, ".", DTA_CleanNoMove, true);
+				Screen.DrawText(mTooltipFont, Font.CR_UNTRANSLATED, xPos, yPos + height / 3 * i, ".", DTA_CleanNoMove, true);
 		}
 	}
 

@@ -69,7 +69,23 @@ CVAR(Int, m_show_backbutton, 0, CVAR_ARCHIVE|CVAR_GLOBALCONFIG)
 CVAR(Bool, m_cleanscale, false, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
 // Option Search
 CVAR(Bool, os_isanyof, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
-
+// Tooltip
+CVAR(Bool, m_tooltip_capwidth, true, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+CUSTOM_CVAR(Int, m_tooltip_lines, 3, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self < 1)
+		self = 1;
+}
+CUSTOM_CVAR(Float, m_tooltip_delay, 9.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self <= 0.0f)
+		self = 0.1f;
+}
+CUSTOM_CVAR(Float, m_tooltip_speed, 3.0f, CVAR_ARCHIVE | CVAR_GLOBALCONFIG)
+{
+	if (self <= 0.0f)
+		self = 0.1f;
+}
 
 static DMenu *GetCurrentMenu()
 {
@@ -265,9 +281,7 @@ DMenu::DMenu(DMenu *parent)
 	mBackbuttonSelected = false;
 	DontDim = false;
 	mTooltipFont = nullptr;
-	mTooltipLines = 0;
 	mTooltipScrollOffset = 0.0;
-	mTooltipScrollSpeed = 0.0;
 	mTooltipScrollTimer = 0.0;
 	mCurrentTooltip = "";
 	GC::WriteBarrier(this, parent);
@@ -1022,9 +1036,7 @@ DEFINE_FIELD(DMenu, AnimatedTransition);
 DEFINE_FIELD(DMenu, Animated);
 DEFINE_FIELD(DMenu, mCurrentTooltip)
 DEFINE_FIELD(DMenu, mTooltipScrollTimer)
-DEFINE_FIELD(DMenu, mTooltipScrollSpeed)
 DEFINE_FIELD(DMenu, mTooltipScrollOffset)
-DEFINE_FIELD(DMenu, mTooltipLines)
 DEFINE_FIELD(DMenu, mTooltipFont)
 
 DEFINE_FIELD(DMenuDescriptor, mMenuName)

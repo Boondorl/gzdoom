@@ -121,10 +121,8 @@ class OptionMenu : Menu
 		AnimatedTransition = desc.mAnimatedTransition;
 		Animated = desc.mAnimated;
 		mTooltipFont = NewConsoleFont;
-		mTooltipLines = 3;
 		mCurrentTooltip = "";
-		mTooltipScrollTimer = SCROLL_DELAY;
-		mTooltipScrollSpeed = SCROLL_SPEED;
+		mTooltipScrollTimer = m_tooltip_delay;
 		mTooltipScrollOffset = 0.0;
 
 		ScrollSound = ! Cvar.FindCVar("silence_menu_scroll").getInt();

@@ -241,9 +241,7 @@ public:
 	bool AnimatedTransition;
 	FString mCurrentTooltip;
 	double mTooltipScrollTimer;
-	double mTooltipScrollSpeed;
 	double mTooltipScrollOffset;
-	int mTooltipLines;
 	FFont* mTooltipFont;
 	static int InMenu;
 
