@@ -221,7 +221,7 @@ class Menu : Object native ui version("2.4")
 		DontBlur = false;
 		AnimatedTransition = false;
 		Animated = false;
-		mTooltipFont = ConFont;
+		mTooltipFont = NewConsoleFont;
 		mTooltipLines = 3;
 		mCurrentTooltip = "";
 		mTooltipScrollTimer = SCROLL_DELAY;
@@ -362,9 +362,10 @@ class Menu : Object native ui version("2.4")
 		GetTooltipArea(box, text);
 
 		BrokenLines bl = mTooltipFont.BreakLines(StringTable.Localize(mCurrentTooltip), text.width / CleanXFac);
+		int maxOffset;
 		if (bl.Count() > mTooltipLines)
 		{
-			int maxOffset = bl.Count() - mTooltipLines;
+			maxOffset = bl.Count() - mTooltipLines;
 			double delta = GetDeltaTime();
 			if (mTooltipScrollTimer <= 0.0)
 				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + mTooltipScrollSpeed * delta, 0.0, maxOffset);
@@ -401,6 +402,14 @@ class Menu : Object native ui version("2.4")
 		}
 
 		Screen.SetClipRect(cx, cy, cw, ch);
+
+		if (mTooltipScrollOffset < maxOffset)
+		{
+			int xPos = box.x + box.width - mTooltipFont.StringWidth(".") * CleanXFac;
+			int yPos = text.y - height / 2;
+			for (int i = 0; i < 3; ++i)
+				Screen.DrawText(mTooltipFont, Font.CR_UNTRANSLATED, xPos, yPos + height / 2 * i, ".", DTA_CleanNoMove, true);
+		}
 	}
 
 	//=============================================================================

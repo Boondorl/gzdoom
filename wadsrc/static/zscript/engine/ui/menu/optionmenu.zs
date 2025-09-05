@@ -120,7 +120,7 @@ class OptionMenu : Menu
 		DontBlur = desc.mDontBlur;
 		AnimatedTransition = desc.mAnimatedTransition;
 		Animated = desc.mAnimated;
-		mTooltipFont = ConFont;
+		mTooltipFont = NewConsoleFont;
 		mTooltipLines = 3;
 		mCurrentTooltip = "";
 		mTooltipScrollTimer = SCROLL_DELAY;
