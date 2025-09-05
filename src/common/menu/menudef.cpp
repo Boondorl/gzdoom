@@ -275,9 +275,11 @@ static bool CheckSkipOptionBlock(FScanner &sc)
 
 static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &sizecompatible, int insertIndex)
 {
+	bool isValidTooltip = false;
 	sc.MustGetStringName("{");
 	while (!sc.CheckString("}"))
 	{
+		bool foundWidget = false;
 		sc.MustGetString();
 		if (sc.Compare("else"))
 		{
@@ -437,8 +439,8 @@ static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &s
 		}
 		else if (sc.Compare("Tooltip"))
 		{
-			if (!desc->mItems.Size())
-				sc.ScriptError("No previous list menu item defined for tooltip");
+			if (!isValidTooltip)
+				sc.ScriptError("Tooltips can only be defined after a list menu widget");
 
 			sc.MustGetString();
 			desc->mItems.Last()->mTooltip = sc.String;
@@ -622,6 +624,7 @@ static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &s
 						if (desc->mSelectedItem == -1) desc->mSelectedItem = desc->mItems.Size() - 1;
 					}
 					success = true;
+					foundWidget = true;
 				}
 			}
 			if (!success)
@@ -629,6 +632,7 @@ static void DoParseListMenuBody(FScanner &sc, DListMenuDescriptor *desc, bool &s
 				sc.ScriptError("Unknown keyword '%s'", sc.String);
 			}
 		}
+		isValidTooltip = foundWidget;
 	}
 	for (auto &p : desc->mItems)
 	{
@@ -991,9 +995,11 @@ static void ParseOptionSettings(FScanner &sc)
 
 static void ParseOptionMenuBody(FScanner &sc, DOptionMenuDescriptor *desc, int insertIndex)
 {
+	bool isValidTooltip = false;
 	sc.MustGetStringName("{");
 	while (!sc.CheckString("}"))
 	{
+		bool foundWidget = false;
 		sc.MustGetString();
 		if (sc.Compare("else"))
 		{
@@ -1076,8 +1082,8 @@ static void ParseOptionMenuBody(FScanner &sc, DOptionMenuDescriptor *desc, int i
 		}
 		else if (sc.Compare("Tooltip"))
 		{
-			if (!desc->mItems.Size())
-				sc.ScriptError("No previous option menu item defined for tooltip");
+			if (!isValidTooltip)
+				sc.ScriptError("Tooltips can only be defined after an option menu widget");
 
 			sc.MustGetString();
 			desc->mItems.Last()->mTooltip = sc.String;
@@ -1231,6 +1237,7 @@ static void ParseOptionMenuBody(FScanner &sc, DOptionMenuDescriptor *desc, int i
 					}
 
 					success = true;
+					foundWidget = true;
 				}
 			}
 			if (!success)
@@ -1238,6 +1245,7 @@ static void ParseOptionMenuBody(FScanner &sc, DOptionMenuDescriptor *desc, int i
 				sc.ScriptError("Unknown keyword '%s'", sc.String);
 			}
 		}
+		isValidTooltip = foundWidget;
 	}
 	for (auto &p : desc->mItems)
 	{
