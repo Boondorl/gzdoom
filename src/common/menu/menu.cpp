@@ -264,6 +264,12 @@ DMenu::DMenu(DMenu *parent)
 	mMouseCapture = false;
 	mBackbuttonSelected = false;
 	DontDim = false;
+	mTooltipFont = nullptr;
+	mTooltipLines = 0;
+	mTooltipScrollOffset = 0.0;
+	mTooltipScrollSpeed = 0.0;
+	mTooltipScrollTimer = 0.0;
+	mCurrentTooltip = "";
 	GC::WriteBarrier(this, parent);
 }
 
@@ -1018,6 +1024,8 @@ DEFINE_FIELD(DMenu, mCurrentTooltip)
 DEFINE_FIELD(DMenu, mTooltipScrollTimer)
 DEFINE_FIELD(DMenu, mTooltipScrollSpeed)
 DEFINE_FIELD(DMenu, mTooltipScrollOffset)
+DEFINE_FIELD(DMenu, mTooltipLines)
+DEFINE_FIELD(DMenu, mTooltipFont)
 
 DEFINE_FIELD(DMenuDescriptor, mMenuName)
 DEFINE_FIELD(DMenuDescriptor, mNetgameMessage)

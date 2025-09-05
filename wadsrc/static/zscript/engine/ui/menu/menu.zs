@@ -126,10 +126,24 @@ struct JoystickConfig native version("2.4")
 	native void Reset();
 }
 
+struct ScreenArea
+{
+	int x, y;
+	int width, height;
+
+	void SetArea(int xPos, int yPos, int w, int h)
+	{
+		x = xPos;
+		y = yPos;
+		width = w;
+		height = h;
+	}
+}
+
 class Menu : Object native ui version("2.4")
 {
-	const SCROLL_DELAY = 4.0; // Number of seconds to wait
-	const SCROLL_SPEED = 2.0; // Lines per second
+	const SCROLL_DELAY = 9.0; // Number of seconds to wait
+	const SCROLL_SPEED = 1.0 / 3.0; // Lines per second
 
 	enum EMenuKey
 	{
@@ -176,10 +190,13 @@ class Menu : Object native ui version("2.4")
 	native bool DontBlur;
 	native bool AnimatedTransition;
 	native bool Animated;
+
 	native string mCurrentTooltip;
 	native double mTooltipScrollTimer;
 	native double mTooltipScrollSpeed;
 	native double mTooltipScrollOffset;
+	native Font mTooltipFont;
+	native int mTooltipLines;
 
 	native static int MenuTime();
 	native static Menu GetCurrentMenu();
@@ -204,6 +221,8 @@ class Menu : Object native ui version("2.4")
 		DontBlur = false;
 		AnimatedTransition = false;
 		Animated = false;
+		mTooltipFont = ConFont;
+		mTooltipLines = 3;
 		mCurrentTooltip = "";
 		mTooltipScrollTimer = SCROLL_DELAY;
 		mTooltipScrollSpeed = SCROLL_SPEED;
@@ -312,6 +331,17 @@ class Menu : Object native ui version("2.4")
 		return false;
 	}
 
+	virtual void GetTooltipArea(ScreenArea body, ScreenArea text = null)
+	{
+		int xPad = 10 * CleanXFac;
+		int yPad = 5 * CleanYFac;
+		int textHeight = mTooltipFont.GetHeight() * mTooltipLines * CleanYFac;
+
+		body.SetArea(xPad, Screen.GetHeight() - textHeight - yPad * 3, Screen.GetWidth() - xPad * 2, textHeight + yPad * 2);
+		if (text)
+			text.SetArea(body.x + xPad, body.y + yPad, body.width - xPad * 2, body.height - yPad * 2);
+	}
+
 	virtual void UpdateTooltip(MenuItemBase item)
 	{
 		string tooltip = item ? item.GetTooltip() : "";
@@ -328,12 +358,13 @@ class Menu : Object native ui version("2.4")
 		if (mCurrentTooltip.IsEmpty())
 			return;
 
-		int w = Screen.GetWidth();
-		int h = Screen.GetHeight();
-		BrokenLines bl = ConFont.BreakLines(StringTable.Localize(mCurrentTooltip), (w / CleanXFac) - 20);
-		if (bl.Count() > 2)
+		ScreenArea box, text;
+		GetTooltipArea(box, text);
+
+		BrokenLines bl = mTooltipFont.BreakLines(StringTable.Localize(mCurrentTooltip), text.width / CleanXFac);
+		if (bl.Count() > mTooltipLines)
 		{
-			int maxOffset = bl.Count() - 2;
+			int maxOffset = bl.Count() - mTooltipLines;
 			double delta = GetDeltaTime();
 			if (mTooltipScrollTimer <= 0.0)
 				mTooltipScrollOffset = Clamp(mTooltipScrollOffset + mTooltipScrollSpeed * delta, 0.0, maxOffset);
@@ -355,20 +386,17 @@ class Menu : Object native ui version("2.4")
 			}
 		}
 
-		int height = ConFont.GetHeight() * CleanYFac;
-		int xOfs = 10 * CleanXFac;
-		int yOfs = 5 * CleanYFac;
-
-		Screen.Dim(0u, 0.5, xOfs / 2, h - yOfs - height * 2 - yOfs / 2, w - xOfs, height * 2 + yOfs);
+		Screen.Dim(0u, 0.5, box.x, box.y, box.width, box.height);
 
 		let [cx, cy, cw, ch] = Screen.GetClipRect();
-		Screen.SetClipRect(xOfs, h - yOfs - height * 2, w - xOfs * 2, height * 2);
+		Screen.SetClipRect(text.x, text.y, text.width, text.height);
 
-		int curY = h - yOfs - int((mTooltipScrollOffset + 2.0) * height);
+		int height = mTooltipFont.GetHeight() * CleanYFac;
+		int curY = text.y - int(mTooltipScrollOffset * height);
 		for (int i; i < bl.Count(); ++i)
 		{
-			int xPos = xOfs + (w - bl.StringWidth(i) * CleanXFac) / 2;
-			Screen.DrawText(ConFont, Font.CR_UNTRANSLATED, xPos, curY, bl.StringAt(i), DTA_CleanNoMove, true);
+			int xPos = text.x + (text.width - bl.StringWidth(i) * CleanXFac) / 2;
+			Screen.DrawText(mTooltipFont, Font.CR_UNTRANSLATED, xPos, curY, bl.StringAt(i), DTA_CleanNoMove, true);
 			curY += height;
 		}
 

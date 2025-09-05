@@ -120,6 +120,8 @@ class OptionMenu : Menu
 		DontBlur = desc.mDontBlur;
 		AnimatedTransition = desc.mAnimatedTransition;
 		Animated = desc.mAnimated;
+		mTooltipFont = ConFont;
+		mTooltipLines = 3;
 		mCurrentTooltip = "";
 		mTooltipScrollTimer = SCROLL_DELAY;
 		mTooltipScrollSpeed = SCROLL_SPEED;
@@ -740,8 +742,10 @@ class OptionMenu : Menu
 
 		int indent = GetIndent();
 
+		ScreenArea box;
+		GetTooltipArea(box);
 		int ytop = y + mDesc.mScrollTop * 8 * CleanYfac_1;
-		LastRow = screen.GetHeight() - OptionHeight() * CleanYfac_1;
+		LastRow = box.y - OptionHeight() * CleanYfac_1;
 		int rowheight = OptionMenuSettings.mLinespacing * CleanYfac_1 + 1;
 		MaxItems = (LastRow - y) / rowheight + 1;
 
